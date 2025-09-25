@@ -72,7 +72,7 @@ export default function FluidSim() {
 
                 let gl = canvasEl.getContext('webgl2', params) as WebGL2RenderingContext | null;
                 const isWebGL2 = !!gl;
-                if (!isWebGL2){
+                if (!isWebGL2) {
                     // @ts-ignore
                     gl = (canvasEl.getContext('webgl', params) || canvasEl.getContext('experimental-webgl', params)) as WebGLRenderingContext | null;
                 }
@@ -207,28 +207,23 @@ export default function FluidSim() {
                 }
             }
 
-            function createProgram(vertexShader: any, fragmentShader: any) {
-                let program = gl.createProgram();
+            function createProgram(vertexShader: WebGLShader, fragmentShader: WebGLShader): WebGLProgram {
+                const program = gl.createProgram();
+                if (!program) {
+                    throw new Error("Failed to create WebGL program");
+                }
+
                 gl.attachShader(program, vertexShader);
                 gl.attachShader(program, fragmentShader);
                 gl.linkProgram(program);
 
-                if (!gl.getProgramParameter(program, gl.LINK_STATUS))
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
                     console.trace(gl.getProgramInfoLog(program));
+                }
 
                 return program;
             }
-
-            //   function getUniforms(program: any) {
-            //     let uniforms: any = [];
-            //     let uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-            //     for (let i = 0; i < uniformCount; i++) {
-            //       let uniformName = gl.getActiveUniform(program, i).name;
-            //       uniforms[uniformName] = gl.getUniformLocation(program, uniformName);
-            //     }
-            //     return uniforms;
-            //   }
-
+            
             function getUniforms(program: any) {
                 let uniforms: any = [];
                 let uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
