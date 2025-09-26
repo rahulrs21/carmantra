@@ -7,7 +7,9 @@ import { Navigation } from '@/components/Navigation';
 import { Suspense } from 'react';
 import Loading from './loading'; 
 import { ExcelForm } from '@/components/ExcelForm'; 
-import FluidSim from '@/components/FluidSim';
+// import FluidSim from '@/components/FluidSim'; 
+import './globals.css'
+import FluidSmoke from '@/components/FluidSmoke';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -32,11 +34,14 @@ export default function RootLayout({
 
         {/* <SmokeyCursor />  */}
 
-        <FluidSim />
-
-
 
         <Navigation />
+
+ 
+
+        {/* <FluidSim /> */}
+
+        <FluidSmoke />        
 
         {/* <ExcelForm />  */}
 

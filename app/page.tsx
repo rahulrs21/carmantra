@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import TrustIndicator from '@/components/TrustIndicator';
+import OurWorksSlider from '@/components/OurWorksSlider';
+import WelcomeBack from '@/components/WelcomeBack';
 
 export default function Home() {
   const services = [
@@ -123,7 +125,7 @@ export default function Home() {
   };
 
 
- 
+
   const testimonials = [
     {
       name: 'John Smith',
@@ -147,9 +149,23 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+
+
+
+      {/* Welcome Back Message! */}
+      <div className='relative z-500'>
+        <WelcomeBack />
+      </div>
+
+ 
+
+
+
+
+
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900  to-black overflow-hidden">
-        <div className="absolute inset-0 bg-black/20"></div>
+        {/* <div className="absolute inset-0 bg-black/20"></div> */}
 
         {/* <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30"
@@ -333,6 +349,11 @@ export default function Home() {
         </div>
       </section>
 
+      <section className='py-20 bg-white'>
+        <OurWorksSlider />
+      </section>
+
+
       {/* CTA Section */}
       <section id="contact_form" className="py-20 bg-blue-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -360,15 +381,15 @@ export default function Home() {
       </section>
 
 
-     <div className="fixed bottom-6 right-6 z-50">
-      <Button
-        onClick={handleWhatsAppClick}
-        className="w-14 h-14 rounded-full bg-green-500 hover:bg-green-600 shadow-2xl hover:scale-110 transition-all duration-300 animate-pulse"
-        size="icon"
-      >
-        <MessageCircle className="w-6 h-6 text-white" />
-      </Button>
-    </div>
+      <div className="fixed bottom-6 right-6 z-50">
+        <Button
+          onClick={handleWhatsAppClick}
+          className="w-14 h-14 rounded-full bg-green-500 hover:bg-green-600 shadow-2xl hover:scale-110 transition-all duration-300 animate-pulse"
+          size="icon"
+        >
+          <MessageCircle className="w-6 h-6 text-white" />
+        </Button>
+      </div>
 
 
 

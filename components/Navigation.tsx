@@ -1,11 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu, X, Phone, MessageCircle } from 'lucide-react';
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
+
+  const [isTop, setIsTop] = useState(true);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsTop(window.scrollY === 0);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const services = [
     { name: 'PPF & Wrapping', href: '/services/ppf-wrapping' },
@@ -20,7 +31,12 @@ export function Navigation() {
   ];
 
   return (
-    <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-sm border-b border-gray-200 z-40">
+    <nav 
+      className={`fixed top-0 w-full border-b z-50 transition-colors duration-300 ${
+        isTop
+          ? "bg-white/50 text-white border-gray-500"
+          : "bg-white/95 backdrop-blur-sm border-gray-200"
+      }`} >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="flex items-center space-x-2">

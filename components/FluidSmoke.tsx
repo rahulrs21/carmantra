@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-export default function FluidSim() {
+export default function FluidSmoke() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
 
@@ -30,12 +30,12 @@ export default function FluidSim() {
                 SIM_RESOLUTION: 128,
                 DYE_RESOLUTION: 1440,
                 CAPTURE_RESOLUTION: 512,
-                DENSITY_DISSIPATION: 3.5,
+                DENSITY_DISSIPATION: 5,  // I CHANGED THIS FROM 3.5 to 0.97
                 VELOCITY_DISSIPATION: 2,
                 PRESSURE: 0.1,
                 PRESSURE_ITERATIONS: 20,
                 CURL: 3,
-                SPLAT_RADIUS: 0.5,
+                SPLAT_RADIUS: 0.1,   // I CHANGED THIS FROM 0.5 to 0.1
                 SPLAT_FORCE: 6000,
                 SHADING: true,
                 COLOR_UPDATE_SPEED: 10,
@@ -223,7 +223,7 @@ export default function FluidSim() {
 
                 return program;
             }
-            
+
             function getUniforms(program: any) {
                 let uniforms: any = [];
                 let uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
@@ -405,7 +405,8 @@ export default function FluidSim() {
       varying vec2 vUv;
       uniform sampler2D uTarget;
       uniform float aspectRatio;
-      uniform vec3 color;
+      uniform vec3 color; 
+
       uniform vec2 point;
       uniform float radius;
 
@@ -942,6 +943,8 @@ export default function FluidSim() {
             }
 
             function splat(x: number, y: number, dx: number, dy: number, color: any) {
+                const alpha = 0.5; // lower = more transparent
+
                 splatProgram.bind();
                 gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read.attach(0));
                 gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
@@ -952,7 +955,12 @@ export default function FluidSim() {
                 velocity.swap();
 
                 gl.uniform1i(splatProgram.uniforms.uTarget, dye.read.attach(0));
-                gl.uniform3f(splatProgram.uniforms.color, color.r, color.g, color.b);
+
+
+                // gl.uniform3f(splatProgram.uniforms.color, color.r, color.g, color.b);
+                gl.uniform3f(splatProgram.uniforms.color, color.r * alpha, color.g * alpha, color.b * alpha);
+
+
                 blit(dye.write);
                 dye.swap();
             }
@@ -1082,14 +1090,39 @@ export default function FluidSim() {
                 return delta;
             }
 
+
+            // I CHANGED THIS FUNCTION
+
             // to generate multicolor
+            // function generateColor() {
+            //     let c = HSVtoRGB(Math.random(), 1.0, 1.0);
+            //     c.r *= 0.15;
+            //     c.g *= 0.15;
+            //     c.b *= 0.15;
+            //     return c;
+            // }
+
+            // function generateColor() {
+            //     const shades = [
+            //         { r: 1.0, g: 0.8, b: 0.0 }, // yellow
+            //         { r: 1.0, g: 0.6, b: 0.0 }, // orange
+            //     ];
+            //     return shades[Math.floor(Math.random() * shades.length)];
+            // }
+
             function generateColor() {
-                let c = HSVtoRGB(Math.random(), 1.0, 1.0);
-                c.r *= 0.15;
-                c.g *= 0.15;
-                c.b *= 0.15;
-                return c;
+                // Fire shades from white-hot center to darker orange
+                const shades = [
+                    { r: 1.0, g: 0.95, b: 0.8 },  // near-white (hot core)
+                    { r: 1.0, g: 0.9, b: 0.4 },  // soft yellow
+                    { r: 1.0, g: 0.7, b: 0.1 },  // orange-yellow
+                    { r: 1.0, g: 0.4, b: 0.0 },  // deep orange / red
+                ];
+                return shades[Math.floor(Math.random() * shades.length)];
             }
+
+
+
 
             function HSVtoRGB(h: number, s: number, v: number) {
                 let r: number, g: number, b: number, i: number, f: number, p: number, q: number, t: number;
@@ -1172,5 +1205,5 @@ export default function FluidSim() {
         };
     }, []);
 
-    return <canvas id="fluid" ref={canvasRef} className="pointer-events-none" style={{ width: '100%', height: '100%', position: 'fixed', zIndex: '500', inset: 0 }} />;
+    return <canvas id="fluid" ref={canvasRef} className="pointer-events-none opacity-25" style={{ width: '100%', height: '100%', position: 'fixed', zIndex: '40', inset: 0 }} />;
 }
