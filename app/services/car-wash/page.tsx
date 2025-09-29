@@ -5,8 +5,21 @@ import { Button } from '@/components/ui/button';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
 import { Droplets, Sparkles, CheckCircle, Star, Clock, ArrowRight, Zap, Car } from 'lucide-react';
+import { useState } from 'react';
+import ModalForm from '@/components/ModalForm';
 
 export default function CarWashPage() {
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedService, setSelectedService] = useState('');
+
+  const openModal = (service: string) => {
+    setSelectedService(service + " - Car Wash");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => setIsModalOpen(false);
+
   const packages = [
     {
       title: 'Express Wash',
@@ -94,8 +107,8 @@ export default function CarWashPage() {
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Our Car Care Services</h2>
-            <p className="text-lg text-gray-600">Professional cleaning solutions for every vehicle</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Our Car Care Services</h2>
+            <p className="text-lg text-gray-600 dark:text-white/80">Professional cleaning solutions for every vehicle</p>
           </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -133,7 +146,7 @@ export default function CarWashPage() {
                   )}
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{pkg.title}</h3>
                   <p className="text-gray-600 mb-4">{pkg.description}</p>
-                  <ul className="space-y-2 mb-6">
+                  <ul className="space-y-2 dark:text-gray-800 mb-6">
                     {pkg.features.map((feature, i) => (
                       <li key={i} className="flex items-center text-sm">
                         <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
@@ -148,7 +161,9 @@ export default function CarWashPage() {
                       {pkg.duration}
                     </div>
                   </div>
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700"
+                    onClick={() => openModal(pkg.title)}
+                  >
                     Choose Package
                     <ArrowRight size={16} className="ml-2" />
                   </Button>
@@ -164,15 +179,15 @@ export default function CarWashPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <AnimatedSection>
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">Our Detailed Process</h2>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Our Detailed Process</h2>
               <div className="space-y-6">
                 <div className="flex items-start space-x-4">
                   <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold">
                     1
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Pre-Wash Inspection</h3>
-                    <p className="text-gray-600">Vehicle assessment and custom service recommendation.</p>
+                    <h3 className="font-semibold text-gray-900 mb-2 dark:text-white">Pre-Wash Inspection</h3>
+                    <p className="text-gray-600 dark:text-white/80">Vehicle assessment and custom service recommendation.</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -180,8 +195,8 @@ export default function CarWashPage() {
                     2
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Exterior Cleaning</h3>
-                    <p className="text-gray-600">Hand wash with premium soaps and microfiber cloths.</p>
+                    <h3 className="font-semibold text-gray-900 mb-2 dark:text-white">Exterior Cleaning</h3>
+                    <p className="text-gray-600 dark:text-white/80">Hand wash with premium soaps and microfiber cloths.</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -189,8 +204,8 @@ export default function CarWashPage() {
                     3
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Interior Detailing</h3>
-                    <p className="text-gray-600">Vacuum, wipe down, and detailed cleaning of all surfaces.</p>
+                    <h3 className="font-semibold text-gray-900 mb-2 dark:text-white">Interior Detailing</h3>
+                    <p className="text-gray-600 dark:text-white/80">Vacuum, wipe down, and detailed cleaning of all surfaces.</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -198,8 +213,8 @@ export default function CarWashPage() {
                     4
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Final Protection</h3>
-                    <p className="text-gray-600">Wax application and tire shine for lasting results.</p>
+                    <h3 className="font-semibold text-gray-900 mb-2 dark:text-white">Final Protection</h3>
+                    <p className="text-gray-600 dark:text-white/80">Wax application and tire shine for lasting results.</p>
                   </div>
                 </div>
               </div>
@@ -285,7 +300,7 @@ export default function CarWashPage() {
               <p className="text-lg text-gray-700 mb-8">
                 Regular washing and detailing not only keeps your car looking amazing but also protects your investment and maintains its value. Book your service today!
               </p>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 dark:text-gray-800 gap-4 text-sm">
                 <div className="flex items-center">
                   <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
                   <span>Eco-friendly products</span>
@@ -311,6 +326,18 @@ export default function CarWashPage() {
           </div>
         </div>
       </section>
+
+
+
+      {/* Modal Form */}
+      {isModalOpen && (
+        <ModalForm
+          selectedService={selectedService}
+          onClose={closeModal}
+        />
+      )}
+
+
     </div>
   );
 }

@@ -22,8 +22,10 @@ export function ContactForm({ service }: ContactFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission here
-    console.log('Form submitted:', formData);
+    // Handle form submission here'
+    alert(
+      `Form Submitted!\nName: ${formData.name}\n  Email:${formData.email}\n  Phone: ${formData.phone}\nService: ${formData.service} \nMessage: ${formData.message} `
+    );
   };
 
   const handleWhatsApp = () => {
@@ -34,13 +36,13 @@ export function ContactForm({ service }: ContactFormProps) {
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
-      <h3 className="text-2xl font-bold text-gray-900 mb-6">Get a Quote</h3>
+      <h3 className="text-2xl font-bold text-gray-900 mb-6">Contact Us</h3>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <Label htmlFor="name" className='text-gray-800'>Name</Label>
           <Input
             id="name"
-            className='text-gray-800'
+            className='text-gray-800 bg-white'
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder='John Doe'
@@ -51,7 +53,7 @@ export function ContactForm({ service }: ContactFormProps) {
           <Label htmlFor="email" className='text-gray-800'>Email</Label>
           <Input
             id="email"
-            className='text-gray-800'
+            className='text-gray-800 bg-white'
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -64,7 +66,7 @@ export function ContactForm({ service }: ContactFormProps) {
           <Input
             id="phone"
             type="tel"
-            className='text-gray-800'
+            className='text-gray-800 bg-white'
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             placeholder='+1 234 567 890'
@@ -98,7 +100,7 @@ export function ContactForm({ service }: ContactFormProps) {
           <Label htmlFor="message" className='text-gray-800'>Message</Label>
           <Textarea
             id="message"
-            className='text-gray-800'
+            className='text-gray-800 bg-white'
             value={formData.message}
             onChange={(e) => setFormData({ ...formData, message: e.target.value })}
             rows={4}

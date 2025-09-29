@@ -5,8 +5,21 @@ import { Button } from '@/components/ui/button';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
 import { Car, Sparkles, CheckCircle, Star, Clock, ArrowRight, Zap } from 'lucide-react';
+import { useState } from 'react';
+import ModalForm from '@/components/ModalForm';
 
 export default function CarPolishingPage() {
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedService, setSelectedService] = useState('');
+
+  const openModal = (service: string) => {
+    setSelectedService(service + " - Car Polishing");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => setIsModalOpen(false);
+
   const services = [
     {
       title: 'Paint Correction',
@@ -90,8 +103,8 @@ export default function CarPolishingPage() {
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Our Polishing Services</h2>
-            <p className="text-lg text-gray-600">Professional paint correction solutions for every need</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Our Polishing Services</h2>
+            <p className="text-lg text-gray-600 dark:text-white/80">Professional paint correction solutions for every need</p>
           </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -100,7 +113,7 @@ export default function CarPolishingPage() {
                 <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{service.title}</h3>
                   <p className="text-gray-600 mb-4">{service.description}</p>
-                  <ul className="space-y-2 mb-6">
+                  <ul className="space-y-2 mb-6 text-gray-800">
                     {service.features.map((feature, i) => (
                       <li key={i} className="flex items-center text-sm">
                         <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
@@ -118,7 +131,8 @@ export default function CarPolishingPage() {
                       <span className="text-sm">{service.duration}</span>
                     </div>
                   </div>
-                  <Button className="w-full bg-amber-600 hover:bg-amber-700">
+                  <Button className="w-full bg-amber-600 hover:bg-amber-700"
+                    onClick={() => openModal(service.title)}>
                     Book Service
                     <ArrowRight size={16} className="ml-2" />
                   </Button>
@@ -235,6 +249,24 @@ export default function CarPolishingPage() {
           </div>
         </div>
       </section>
+
+
+
+
+
+      {/* Modal Form */}
+      {isModalOpen && (
+        <ModalForm
+          selectedService={selectedService}
+          onClose={closeModal}
+        />
+      )}
+
+
+
     </div>
+ 
+
+
   );
 }

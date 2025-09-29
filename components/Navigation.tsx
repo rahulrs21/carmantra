@@ -3,13 +3,31 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Menu, X, Phone, MessageCircle } from 'lucide-react';
+import { Menu, X, Phone, MessageCircle, Moon, Sun } from 'lucide-react';
 import { motion } from "framer-motion";
 
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const [isTop, setIsTop] = useState(true);
+
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    // Initialize theme from localStorage or default
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    if (savedTheme) {
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    localStorage.setItem('theme', newTheme);
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -99,11 +117,18 @@ export function Navigation() {
                 <MessageCircle size={16} />
                 <span>WhatsApp</span>
                 {/* ✨ Rays effect */}
-              <span className="absolute inset-0 w-full h-full  ">
-                <span className="absolute z-0 -inset-y-1 -inset-x-1 bg-gradient-to-r from-transparent via-white/80 to-transparent 
+                <span className="absolute inset-0 w-full h-full  ">
+                  <span className="absolute z-0 -inset-y-1 -inset-x-1 bg-gradient-to-r from-transparent via-white/80 to-transparent 
       translate-x-[-100%] animate-shine" />
-              </span>
+                </span>
               </a>
+
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+              >
+                {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 

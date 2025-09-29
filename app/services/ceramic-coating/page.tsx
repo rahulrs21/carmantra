@@ -5,8 +5,23 @@ import { Button } from '@/components/ui/button';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
 import { Sparkles, Droplets, Sun, Shield, CheckCircle, Star, Clock, ArrowRight } from 'lucide-react';
+import ModalForm from '@/components/ModalForm';
+import { useState } from 'react';
 
 export default function CeramicCoatingPage() {
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedService, setSelectedService] = useState('');
+
+  const openModal = (service: string) => {
+    setSelectedService(service + " - Ceramic Coating");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => setIsModalOpen(false);
+
+
+
   const benefits = [
     'Ultra-hydrophobic surface repels water and dirt',
     'UV protection prevents paint oxidation',
@@ -73,8 +88,8 @@ export default function CeramicCoatingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-20">
             <AnimatedSection>
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">Advanced Ceramic Protection</h2>
-              <p className="text-lg text-gray-700 mb-6">
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Advanced Ceramic Protection</h2>
+              <p className="text-lg text-gray-700 dark:text-white/80 mb-6">
                 Our ceramic coating creates a permanent bond with your vehicle's paint, forming a protective layer that's harder than steel and provides unmatched durability and shine.
               </p>
               <div className="grid grid-cols-2 gap-6 mb-8">
@@ -93,7 +108,7 @@ export default function CeramicCoatingPage() {
                 {benefits.map((benefit, index) => (
                   <div key={index} className="flex items-center space-x-3">
                     <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                    <span className="text-gray-700">{benefit}</span>
+                    <span className="text-gray-700 dark:text-white/80">{benefit}</span>
                   </div>
                 ))}
               </div>
@@ -115,7 +130,7 @@ export default function CeramicCoatingPage() {
 
           {/* Packages Section */}
           <AnimatedSection>
-            <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">Ceramic Coating Packages</h2>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white text-center mb-12">Ceramic Coating Packages</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {packages.map((pkg, index) => (
                 <AnimatedSection key={pkg.title} delay={index * 100}>
@@ -126,8 +141,8 @@ export default function CeramicCoatingPage() {
                       </div>
                     )}
                     <h3 className="text-xl font-bold text-gray-900 mb-3">{pkg.title}</h3>
-                    <p className="text-gray-600 mb-4">{pkg.description}</p>
-                    <ul className="space-y-2 mb-6">
+                    <p className="text-gray-600  mb-4">{pkg.description}</p>
+                    <ul className="space-y-2 mb-6 text-gray-800">
                       {pkg.features.map((feature, i) => (
                         <li key={i} className="flex items-center text-sm">
                           <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
@@ -138,7 +153,7 @@ export default function CeramicCoatingPage() {
                     <div className="space-y-2 mb-6">
                       <div className="flex justify-between items-center">
                         <span className="text-2xl font-bold text-blue-600">{pkg.price}</span>
-                        <div className="flex items-center text-gray-500 text-sm">
+                        <div className="flex items-center text-gray-500  text-sm">
                           <Clock className="h-4 w-4 mr-1" />
                           {pkg.duration}
                         </div>
@@ -148,7 +163,7 @@ export default function CeramicCoatingPage() {
                         {pkg.warranty} warranty
                       </div>
                     </div>
-                    <Button className="w-full">
+                    <Button className="w-full" onClick={() => openModal(pkg.title)}>
                       Choose Package
                       <ArrowRight size={16} className="ml-2" />
                     </Button>
@@ -240,6 +255,14 @@ export default function CeramicCoatingPage() {
           </div>
         </div>
       </section>
+
+      {/* Modal Form */}
+      {isModalOpen && (
+        <ModalForm
+          selectedService={selectedService}
+          onClose={closeModal}
+        />
+      )}
     </div>
   );
 }

@@ -5,8 +5,20 @@ import { Button } from '@/components/ui/button';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
 import { Palette, Sun, Shield, Eye, CheckCircle, Star, Clock, ArrowRight, Thermometer } from 'lucide-react';
+import { useState } from 'react';
+import ModalForm from '@/components/ModalForm';
 
 export default function CarTintingPage() {
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedService, setSelectedService] = useState('');
+  
+    const openModal = (service: string) => {
+      setSelectedService(service + " - Car Tinting");
+      setIsModalOpen(true);
+    };
+  
+    const closeModal = () => setIsModalOpen(false);
   const tintOptions = [
     {
       name: 'Ceramic Tint',
@@ -74,8 +86,8 @@ export default function CarTintingPage() {
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Why Choose Window Tinting?</h2>
-            <p className="text-lg text-gray-600">Experience the comfort and protection of professional window tinting</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Why Choose Window Tinting?</h2>
+            <p className="text-lg text-gray-600 dark:text-white/80">Experience the comfort and protection of professional window tinting</p>
           </AnimatedSection>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -116,7 +128,7 @@ export default function CarTintingPage() {
                     <span className="font-semibold">VLT Options: </span>
                     <span className="ml-1">{option.vlt}</span>
                   </div>
-                  <ul className="space-y-2 mb-6">
+                  <ul className="space-y-2 text-gray-800 mb-6">
                     {option.features.map((feature, i) => (
                       <li key={i} className="flex items-center text-sm">
                         <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
@@ -131,7 +143,7 @@ export default function CarTintingPage() {
                       2-3 hours
                     </div>
                   </div>
-                  <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                  <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => openModal(option.name)}>
                     Select This Option
                     <ArrowRight size={16} className="ml-2" />
                   </Button>
@@ -147,15 +159,15 @@ export default function CarTintingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <AnimatedSection>
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">Professional Installation Process</h2>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Professional Installation Process</h2>
               <div className="space-y-6">
                 <div className="flex items-start space-x-4">
                   <div className="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold">
                     1
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Window Preparation</h3>
-                    <p className="text-gray-600">Thorough cleaning and preparation of all window surfaces.</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white/90 mb-2">Window Preparation</h3>
+                    <p className="text-gray-600 dark:text-white/80">Thorough cleaning and preparation of all window surfaces.</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -163,8 +175,8 @@ export default function CarTintingPage() {
                     2
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Precise Cutting</h3>
-                    <p className="text-gray-600">Computer-cut templates ensure perfect fit for your vehicle.</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white/90 mb-2">Precise Cutting</h3>
+                    <p className="text-gray-600 dark:text-white/80">Computer-cut templates ensure perfect fit for your vehicle.</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -172,8 +184,8 @@ export default function CarTintingPage() {
                     3
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Expert Installation</h3>
-                    <p className="text-gray-600">Bubble-free application by certified professionals.</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white/90 mb-2">Expert Installation</h3>
+                    <p className="text-gray-600 dark:text-white/80">Bubble-free application by certified professionals.</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -181,8 +193,8 @@ export default function CarTintingPage() {
                     4
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Quality Inspection</h3>
-                    <p className="text-gray-600">Final inspection and customer walkthrough.</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white/90 mb-2">Quality Inspection</h3>
+                    <p className="text-gray-600 dark:text-white/80">Final inspection and customer walkthrough.</p>
                   </div>
                 </div>
               </div>
@@ -275,6 +287,16 @@ export default function CarTintingPage() {
           </div>
         </div>
       </section>
+
+
+            {/* Modal Form */}
+                  {isModalOpen && (
+                    <ModalForm
+                      selectedService={selectedService}
+                      onClose={closeModal}
+                    />
+                  )}
+
     </div>
   );
 }

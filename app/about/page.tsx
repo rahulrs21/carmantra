@@ -42,7 +42,7 @@ export default function AboutPage() {
       <div className="max-w-7xl mx-auto mt-20 grid grid-cols-1 md:grid-cols-2 gap-10">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md">
           <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-4">Our Mission</h2>
-          <p className="text-gray-800 leading-relaxed">
+          <p className="text-gray-800 dark:text-white leading-relaxed">
             To deliver impactful, innovative, and sustainable solutions that empower 
             businesses to achieve their goals and exceed expectations.
             Lorem ipsum dolor, sit amet consectetur adipisicing elit. Ducimus ullam voluptas eveniet dicta necessitatibus asperiores ipsam corrupti, sapiente facilis obcaecati.
@@ -51,7 +51,7 @@ export default function AboutPage() {
 
         <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-md">
           <h2 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mb-4">Our Vision</h2>
-          <p className="text-gray-800 leading-relaxed">
+          <p className="text-gray-800 dark:text-white leading-relaxed">
             To be recognized as a trusted global partner, known for transforming 
             businesses through creativity, technology, and unmatched expertise.
             Lorem ipsum dolor sit amet consectetur adipisicing elit. Quas vero veritatis ad eligendi quisquam consequuntur quo ullam sit mollitia qui!
