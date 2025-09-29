@@ -58,7 +58,7 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-16 px-6 md:px-12 lg:px-24">
+    <div className="min-h-screen  bg-gray-800  dark:bg-gray-900 py-16 px-6 md:px-12 lg:px-24">
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: -40 }}
