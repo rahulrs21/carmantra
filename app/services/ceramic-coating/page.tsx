@@ -44,7 +44,7 @@ export default function CeramicCoatingPage() {
   ];
 
   return (
-    <div className="min-h-screen pt-16">
+    <div className="min-h-screen pt-0">
       {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-blue-900 to-purple-800 text-white">
         <div className="absolute inset-0 opacity-20">

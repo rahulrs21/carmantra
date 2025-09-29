@@ -1,23 +1,21 @@
-
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { SmokeyCursor } from '@/components/SmokeyCursor';
 import { Navigation } from '@/components/Navigation';
 import { Suspense } from 'react';
-import Loading from './loading'; 
-import { ExcelForm } from '@/components/ExcelForm'; 
-// import FluidSim from '@/components/FluidSim'; 
-import './globals.css'
+import Loading from './loading';
 import FluidSmoke from '@/components/FluidSmoke';
+import { RouteLoader } from '@/components/RouteLoader';  // ✅ custom wrapper
+import Footer from '@/components/Footer';
+import Prefooter from '@/components/PreFooter';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Premier Car Services - Professional Auto Care',
-  description: 'Professional car services including PPF, ceramic coating, polishing, tinting, and more. Expert care for your vehicle.',
+  description:
+    'Professional car services including PPF, ceramic coating, polishing, tinting, and more. Expert care for your vehicle.',
 };
-
 
 export default function RootLayout({
   children,
@@ -26,35 +24,24 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth">
-
-
-
-      <body  >
- 
-
-        {/* <SmokeyCursor />  */}
-
-
+      <body>
+        {/* ✅ Top Navigation */}
         <Navigation />
 
- 
+        {/* ✅ Fluid background effect */}
+        <FluidSmoke />
 
-        {/* <FluidSim /> */}
-
-        <FluidSmoke />        
-
-        {/* <ExcelForm />  */}
-
-
+        {/* ✅ Wrap children with Suspense + RouteLoader */}
         <Suspense fallback={<Loading />}>
-          {children} 
+          <RouteLoader>{children}</RouteLoader>
         </Suspense>
 
 
- 
+        <Prefooter />
 
 
-
+        {/* Footer */}
+        <Footer />
       </body>
     </html>
   );

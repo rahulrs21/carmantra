@@ -66,7 +66,7 @@ export default function CarWashPage() {
   ];
 
   return (
-    <div className="min-h-screen pt-16">
+    <div className="min-h-screen pt-0">
       {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-blue-600 via-cyan-600 to-teal-600 text-white">
         <div className="absolute inset-0 opacity-20">

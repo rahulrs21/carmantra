@@ -2,7 +2,7 @@ import React from 'react'
 
 function InstantHelp() {
   return (
-    <div className='min-h-screen pt-16'>InstantHelp</div>
+    <div className='min-h-screen pt-0'>InstantHelp</div>
   )
 }
 

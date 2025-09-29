@@ -1,12 +1,14 @@
+
 'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Menu, X, Phone, MessageCircle } from 'lucide-react';
+import { motion } from "framer-motion";
+
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
-
   const [isTop, setIsTop] = useState(true);
 
   useEffect(() => {
@@ -30,38 +32,43 @@ export function Navigation() {
     { name: 'Car Insurance', href: '/services/car-insurance' },
   ];
 
+  const backgroundColor = "transparent";
+
   return (
-    <nav 
-      className={`fixed top-0 w-full border-b z-50 transition-colors duration-300 ${
-        isTop
-          ? "bg-transparent text-white border-transparent"
-          : "bg-blue-950 backdrop-blur-sm border-gray-200"
-      }`} >
+    <nav
+      className={`fixed top-0 w-full border-b z-50 transition-colors duration-300
+        ${isTop
+          ? backgroundColor === "transparent"
+            ? "text-white md:bg-transparent bg-blue-900 border-transparent"
+            : "text-black md:bg-transparent bg-blue-900 border-transparent"
+          : "md:bg-white md:text-gray-900 bg-blue-900 text-white border-gray-200"
+        }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">CM</span>
             </div>
-            <span className='font-bold text-xl text-white'>Car Mantra</span>
+            <span className='font-bold text-xl'>Car Mantra</span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <Link href="/" className="text-gray-100 hover:text-blue-600 transition-colors">
+            <Link href="/" className="hover:text-blue-600 transition-colors">
               Home
             </Link>
             <div className="relative group">
-              <button className="text-gray-100 hover:text-blue-600 transition-colors">
+              <button className="hover:text-blue-600 transition-colors">
                 Services
               </button>
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white text-gray-900 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                 <div className="py-2">
                   {services.map((service) => (
                     <Link
                       key={service.href}
                       href={service.href}
-                      className="block px-4 py-2 text-sm text-gray-100 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                      className="block px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-600 transition-colors"
                     >
                       {service.name}
                     </Link>
@@ -69,16 +76,16 @@ export function Navigation() {
                 </div>
               </div>
             </div>
-            <Link href="/about" className="text-gray-100 hover:text-blue-600 transition-colors">
+            <Link href="/about" className="hover:text-blue-600 transition-colors">
               About
             </Link>
-            <Link href="/contact" className="text-gray-100 hover:text-blue-600 transition-colors">
+            <Link href="/contact" className="hover:text-blue-600 transition-colors">
               Contact
             </Link>
             <div className="flex items-center space-x-4">
               <a
                 href="tel:+1234567890"
-                className="flex items-center px-3 py-1 rounded-full bg-white space-x-1 text-blue-600 hover:text-blue-800 transition-colors"
+                className="flex items-center px-3 py-1 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               >
                 <Phone size={16} />
                 <span className="text-sm">(123) 456-7890</span>
@@ -87,10 +94,15 @@ export function Navigation() {
                 href="https://wa.me/1234567890"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full hover:bg-green-600 transition-colors text-sm"
+                className="flex relative overflow-hidden items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full hover:bg-green-600 transition-colors text-sm"
               >
                 <MessageCircle size={16} />
                 <span>WhatsApp</span>
+                {/* ✨ Rays effect */}
+              <span className="absolute inset-0 w-full h-full  ">
+                <span className="absolute z-0 -inset-y-1 -inset-x-1 bg-gradient-to-r from-transparent via-white/80 to-transparent 
+      translate-x-[-100%] animate-shine" />
+              </span>
               </a>
             </div>
           </div>
@@ -106,35 +118,64 @@ export function Navigation() {
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div className="md:hidden py-4 ">
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
+            className="md:hidden py-4 overflow-hidden"
+          >
             <div className="flex flex-col space-y-4">
-              <Link href="/" className="text-gray-100 hover:text-blue-600 transition-colors">
+              <Link
+                href="/"
+                onClick={() => setIsOpen(false)}
+                className="hover:text-blue-400 transition-colors"
+              >
                 Home
               </Link>
+
               <div className="space-y-2">
-                <span className="font-semibold text-gray-900">Services</span>
+                <span className="font-semibold">Services</span>
                 <div className="ml-4 space-y-2">
                   {services.map((service) => (
-                    <Link
+                    <motion.div
                       key={service.href}
-                      href={service.href}
-                      className="block text-gray-600 hover:text-blue-600 transition-colors text-sm"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, ease: "easeOut" }}
                     >
-                      {service.name}
-                    </Link>
+                      <Link
+                        href={service.href}
+                        onClick={() => setIsOpen(false)}
+                        className="block hover:text-blue-400 transition-colors text-sm"
+                      >
+                        {service.name}
+                      </Link>
+                    </motion.div>
                   ))}
                 </div>
               </div>
-              <Link href="/about" className="text-gray-100 hover:text-blue-600 transition-colors">
+
+              <Link
+                href="/about"
+                onClick={() => setIsOpen(false)}
+                className="hover:text-blue-400 transition-colors"
+              >
                 About
               </Link>
-              <Link href="/contact" className="text-gray-100 hover:text-blue-600 transition-colors">
+
+              <Link
+                href="/contact"
+                onClick={() => setIsOpen(false)}
+                className="hover:text-blue-400 transition-colors"
+              >
                 Contact
               </Link>
+
               <div className="flex items-center space-x-4 pt-4">
                 <a
                   href="tel:+1234567890"
-                  className="flex items-center space-x-1 text-blue-600"
+                  className="flex items-center space-x-1 text-blue-400"
                 >
                   <Phone size={16} />
                   <span className="text-sm">(123) 456-7890</span>
@@ -150,8 +191,9 @@ export function Navigation() {
                 </a>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
+
       </div>
     </nav>
   );

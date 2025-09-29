@@ -46,7 +46,7 @@ export default function CarTintingPage() {
   ];
 
   return (
-    <div className="min-h-screen pt-16">
+    <div className="min-h-screen pt-0">
       {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-800 text-white">
         <div className="absolute inset-0 opacity-20">

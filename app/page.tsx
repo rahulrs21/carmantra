@@ -157,14 +157,14 @@ export default function Home() {
         <WelcomeBack />
       </div>
 
- 
+
 
 
 
 
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900  to-black overflow-hidden">
+      <section className="relative pt-3 md:pt-0 min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900  to-black overflow-hidden">
         {/* <div className="absolute inset-0 bg-black/20"></div> */}
 
         {/* <div 
@@ -193,11 +193,11 @@ export default function Home() {
           Your browser does not support the video tag.
         </video>
 
-        <AnimatedSection className="relative z-10 text-center text-white max-w-4xl mx-auto px-4">
-          <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+        <AnimatedSection className="relative z-10 text-center text-white max-w-5xl mx-auto px-4">
+          <h1 className="text-5xl mt-14 md:mt-0 md:text-7xl font-bold mb-5 md:mb-10 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
             Premier Car Services
           </h1>
-          <p className="text-xl md:text-2xl mb-8 text-blue-100">
+          <p className="text-lg md:text-2xl mb-6 md:mb-10  text-blue-100">
             Professional automotive care with cutting-edge technology and unmatched expertise
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -210,18 +210,28 @@ export default function Home() {
               Explore Services
               <ArrowRight size={20} className="ml-2" />
             </Button>
-            <Button size="lg" variant="outline" className="border-white text-blue-900 hover:bg-white hover:text-blue-900 text-lg px-8 py-3"
+            <Button size="lg" variant="outline" className="relative border-white bg-blue-900 text-white hover:bg-white hover:text-blue-900 text-lg px-8 py-3"
               onClick={() => {
                 const section = document.getElementById("contact_form");
                 if (section) section.scrollIntoView({ behavior: "smooth" });
               }}
             >
               <ArrowRightCircle size={20} className="mr-2" />
-              Get Quote
+              <p className='relative z-99'>Get Quote</p>
+
+
+              {/* ✨ Rays effect */}
+              <span className="absolute inset-0 w-full h-full overflow-hidden">
+                <span className="absolute z-0 -inset-y-1 -inset-x-1 bg-gradient-to-r from-transparent via-white/40 to-transparent 
+      translate-x-[-100%] animate-shine" />
+              </span>
+
+
+
             </Button>
           </div>
 
-          <div className="mt-16">
+          <div className="mt-12">
             <TrustIndicator />
           </div>
         </AnimatedSection>

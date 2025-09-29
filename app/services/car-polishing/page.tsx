@@ -62,7 +62,7 @@ export default function CarPolishingPage() {
   ];
 
   return (
-    <div className="min-h-screen pt-16">
+    <div className="min-h-screen ">
       {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-amber-600 via-orange-600 to-red-600 text-white">
         <div className="absolute inset-0 opacity-20">
