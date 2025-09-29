@@ -66,10 +66,10 @@ export default function ContactPage() {
         transition={{ duration: 0.8 }}
         className="text-center mb-12"
       >
-        <h1 className="text-4xl pt-12 md:text-5xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-4xl pt-12 md:text-5xl font-bold text-white dark:text-white">
           Get in Touch
         </h1>
-        <p className="mt-4 text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+        <p className="mt-4 text-gray-300 dark:text-gray-300 max-w-2xl mx-auto">
           Fill out the form and we’ll get back to you soon.
         </p>
       </motion.div>
