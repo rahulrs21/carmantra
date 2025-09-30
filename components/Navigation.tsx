@@ -1,11 +1,9 @@
-
 'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Menu, X, Phone, MessageCircle, Moon, Sun } from 'lucide-react';
 import { motion } from "framer-motion";
-
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,7 +12,6 @@ export function Navigation() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    // Initialize theme from localStorage or default
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
     if (savedTheme) {
       setTheme(savedTheme);
@@ -33,7 +30,6 @@ export function Navigation() {
     const handleScroll = () => {
       setIsTop(window.scrollY === 0);
     };
-
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -116,13 +112,12 @@ export function Navigation() {
               >
                 <MessageCircle size={16} />
                 <span>WhatsApp</span>
-                {/* ✨ Rays effect */}
-                <span className="absolute inset-0 w-full h-full  ">
-                  <span className="absolute z-0 -inset-y-1 -inset-x-1 bg-gradient-to-r from-transparent via-white/80 to-transparent 
-      translate-x-[-100%] animate-shine" />
+                <span className="absolute inset-0 w-full h-full">
+                  <span className="absolute z-0 -inset-y-1 -inset-x-1 bg-gradient-to-r from-transparent via-white/80 to-transparent translate-x-[-100%] animate-shine" />
                 </span>
               </a>
 
+              {/* Dark/Light Toggle (Desktop) */}
               <button
                 onClick={toggleTheme}
                 className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600 transition"
@@ -151,11 +146,7 @@ export function Navigation() {
             className="md:hidden py-4 overflow-hidden"
           >
             <div className="flex flex-col space-y-4">
-              <Link
-                href="/"
-                onClick={() => setIsOpen(false)}
-                className="hover:text-blue-400 transition-colors"
-              >
+              <Link href="/" onClick={() => setIsOpen(false)} className="hover:text-blue-400 transition-colors">
                 Home
               </Link>
 
@@ -181,27 +172,16 @@ export function Navigation() {
                 </div>
               </div>
 
-              <Link
-                href="/about"
-                onClick={() => setIsOpen(false)}
-                className="hover:text-blue-400 transition-colors"
-              >
+              <Link href="/about" onClick={() => setIsOpen(false)} className="hover:text-blue-400 transition-colors">
                 About
               </Link>
 
-              <Link
-                href="/contact"
-                onClick={() => setIsOpen(false)}
-                className="hover:text-blue-400 transition-colors"
-              >
+              <Link href="/contact" onClick={() => setIsOpen(false)} className="hover:text-blue-400 transition-colors">
                 Contact
               </Link>
 
               <div className="flex items-center space-x-4 pt-4">
-                <a
-                  href="tel:+1234567890"
-                  className="flex items-center space-x-1 text-blue-400"
-                >
+                <a href="tel:+1234567890" className="flex items-center space-x-1 text-blue-400">
                   <Phone size={16} />
                   <span className="text-sm">(123) 456-7890</span>
                 </a>
@@ -214,11 +194,17 @@ export function Navigation() {
                   <MessageCircle size={16} />
                   <span>WhatsApp</span>
                 </a>
+                {/* Dark/Light Toggle (Mobile) */}
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                >
+                  {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                </button>
               </div>
             </div>
           </motion.div>
         )}
-
       </div>
     </nav>
   );

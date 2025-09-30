@@ -12,7 +12,7 @@ const TrustIndicator = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="flex items-center  justify-center space-x-3 animate-float">
                 <div className="w-12 h-12 bg-white dark:bg-black dark:border-white rounded-full flex items-center justify-center">
-                    <Shield className="w-6 h-6  text-black dark:text-white dark:border border-white" />
+                    <Shield className="w-6 h-6  text-black dark:text-white  " />
                 </div>
                 <div className="text-left">
                     <div className="text-lg text-white font-semibold text-primary-foreground">5+ Years</div>

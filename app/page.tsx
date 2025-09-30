@@ -26,10 +26,13 @@ import TrustIndicator from '@/components/TrustIndicator';
 import OurWorksSlider from '@/components/OurWorksSlider';
 import WelcomeBack from '@/components/WelcomeBack';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Autoplay, Navigation } from "swiper/modules";
+import { Autoplay, Navigation, Pagination } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/autoplay";
 import "swiper/css/navigation";
+
+import { useMediaQuery } from "react-responsive";
+
 
 
 export default function Home() {
@@ -153,6 +156,36 @@ export default function Home() {
     },
   ];
 
+
+  const isMobile = useMediaQuery({ maxWidth: 768 });
+
+  const features = [
+    {
+      title: "Expert Technicians",
+      description: "Certified professionals with years of experience",
+      icon: CheckCircle,
+    },
+    {
+      title: "Premium Materials",
+      description: "Only the highest quality products and materials",
+      icon: Star,
+    },
+    {
+      title: "Satisfaction Guarantee",
+      description: "100% satisfaction guarantee on all services",
+      icon: Shield,
+    },
+    {
+      title: "Quick Turnaround",
+      description: "Efficient service without compromising quality",
+      icon: CheckCircle,
+    },
+  ];
+
+
+
+  
+
   return (
     <div className="min-h-screen">
 
@@ -207,7 +240,7 @@ export default function Home() {
             Professional automotive care with cutting-edge technology and unmatched expertise
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="bg-white   text-blue-900 hover:bg-blue-50 text-lg px-8 py-3"
+            <Button size="lg" className="bg-white dark:bg-white dark:text-black  text-blue-900 hover:bg-blue-50 text-lg px-8 py-3"
               onClick={() => {
                 const section = document.getElementById("service_main");
                 if (section) section.scrollIntoView({ behavior: "smooth" });
@@ -246,17 +279,24 @@ export default function Home() {
 
       </section>
 
+
+
+
+
       {/* Services Section */}
       <section id="service_main" className="py-20 bg-gray-100 dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-black dark:text-white mb-4">Our Premium Services</h2>
-            <p className="text-xl  text-black dark:text-white max-w-3xl mx-auto">
+            <h2 className="text-2xl md:text-4xl font-bold text-black dark:text-white mb-4">
+              Our Premium Services
+            </h2>
+            <p className="text-lg md:text-xl text-black dark:text-white max-w-3xl mx-auto">
               Comprehensive automotive care solutions designed to keep your vehicle in pristine condition
             </p>
           </AnimatedSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {/* Desktop / Tablet View (Grid) */}
+          <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {services.map((service, index) => (
               <AnimatedSection key={service.href} delay={index * 100}>
                 <Link href={service.href} className="group">
@@ -288,35 +328,151 @@ export default function Home() {
               </AnimatedSection>
             ))}
           </div>
+
+          {/* Mobile View (Swiper Carousel) */}
+          <div className="md:hidden">
+            <Swiper
+              modules={[Navigation, Pagination]}
+              spaceBetween={20}
+              slidesPerView={1.1}
+              navigation={{
+                nextEl: ".swiper-button-next1",
+                prevEl: ".swiper-button-prev1",
+              }}
+              pagination={{ clickable: true, dynamicBullets: true }}
+              className="pb-12"
+            >
+              {services.map((service, index) => (
+                <SwiperSlide key={service.href}>
+                  <Link href={service.href} className="group block">
+                    <div className="bg-white text-black dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300">
+                      <div className="relative h-48 overflow-hidden">
+                        <Image
+                          src={service.image}
+                          alt={service.title}
+                          fill
+                          className="object-cover group-hover:scale-110 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                        <div className="absolute bottom-4 left-4">
+                          <service.icon className="h-8 w-8 text-white" />
+                        </div>
+                      </div>
+                      <div className="p-6">
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-400 transition-colors">
+                          {service.title}
+                        </h3>
+                        <p className="text-gray-900 dark:text-white mb-4">{service.description}</p>
+                        <div className="flex items-center text-blue-400 font-semibold group-hover:text-blue-500">
+                          Learn More
+                          <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                </SwiperSlide>
+              ))}
+
+              {/* Modern navigation buttons */}
+              <div className='absolute bottom-0 right-2 transform   flex gap-4 z-10'>
+                <div className="swiper-button-prev1 w-12 h-12 flex justify-center items-center !bg-blue-500 !text-white !rounded-full !p-3 shadow-lg hover:!bg-blue-600 transition">❮</div>
+                <div className="swiper-button-next1 w-12 h-12 flex justify-center items-center !bg-blue-500 !text-white !rounded-full !p-3 shadow-lg hover:!bg-blue-600 transition">❯</div>
+              </div>
+            </Swiper>
+          </div>
         </div>
       </section>
+
+
+
 
       {/* Why Choose Us Section */}
       <section className="py-20 bg-white dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-black dark:text-white mb-4">Why Choose Premier Car Services?</h2>
-            <p className="text-xl text-gray-900 dark:text-white">Experience the difference of professional automotive care</p>
+            <h2 className="text-2xl md:text-4xl font-bold text-black dark:text-white mb-4">
+              Why Choose Premier Car Services?
+            </h2>
+            <p className="text-lg md:text-xl text-gray-900 dark:text-white">
+              Experience the difference of professional automotive care
+            </p>
           </AnimatedSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { title: 'Expert Technicians', description: 'Certified professionals with years of experience', icon: CheckCircle },
-              { title: 'Premium Materials', description: 'Only the highest quality products and materials', icon: Star },
-              { title: 'Satisfaction Guarantee', description: '100% satisfaction guarantee on all services', icon: Shield },
-              { title: 'Quick Turnaround', description: 'Efficient service without compromising quality', icon: CheckCircle },
-            ].map((feature, index) => (
-              <AnimatedSection key={feature.title} delay={index * 100}>
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <feature.icon className="h-8 w-8 text-blue-400" />
-                  </div>
-                  <h3 className="text-xl font-bold text-black dark:text-white mb-2">{feature.title}</h3>
-                  <p className="text-gray-900 dark:text-white">{feature.description}</p>
-                </div>
-              </AnimatedSection>
-            ))}
+
+
+          <div className="relative"> 
+
+            {/* Mobile → Carousel | Desktop → Grid */}
+            {isMobile ? (
+
+              <div className="relative">
+                <Swiper
+                  spaceBetween={16}
+                  loop={true} // ✅ makes it infinite
+
+                  modules={[Autoplay, Navigation]}
+                  slidesPerView={1}
+                  navigation={{
+                    nextEl: ".swiper-button-next3",
+                    prevEl: ".swiper-button-prev3",
+                  }}
+                  pagination={{ clickable: true }}
+                  grabCursor
+
+
+                >
+                  {features.map((feature, index) => (
+                    <SwiperSlide key={feature.title}>
+                      <AnimatedSection delay={index * 100}>
+                        <div className="text-center border border-gray-200 dark:border-gray-700 p-6 rounded-lg hover:shadow-lg transition-shadow h-full flex flex-col items-center">
+                          <div className="w-16 h-16 bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <feature.icon className="h-8 w-8 text-blue-400" />
+                          </div>
+                          <h3 className="text-xl font-bold text-black dark:text-white mb-2">
+                            {feature.title}
+                          </h3>
+                          <p className="text-gray-900 dark:text-white">
+                            {feature.description}
+                          </p>
+                        </div>
+                      </AnimatedSection>
+                    </SwiperSlide>
+                  ))}
+                </Swiper>
+
+                {/* Custom Navigation Buttons */}
+                <button className="swiper-button-prev3 swiper-but-prev absolute left-0 top-1/3 w-12  bg-blue-900/70 text-white p-3 rounded-lg hover:bg-gray-900 transition z-10">
+                  ❮
+                </button>
+                <button className="swiper-button-next3 swiper-but-next absolute right-0 top-1/3  w-12 bg-blue-900/70 text-white p-3 rounded-lg hover:bg-gray-900 transition z-10">
+                  ❯
+                </button>
+
+              </div>
+
+
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                {features.map((feature, index) => (
+                  <AnimatedSection key={feature.title} delay={index * 100}>
+                    <div className="text-center border border-gray-200 dark:border-gray-700 p-6 rounded-lg hover:shadow-lg transition-shadow h-full flex flex-col items-center">
+                      <div className="w-16 h-16 bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <feature.icon className="h-8 w-8 text-blue-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-black dark:text-white mb-2">
+                        {feature.title}
+                      </h3>
+                      <p className="text-gray-900 dark:text-white">
+                        {feature.description}
+                      </p>
+                    </div>
+                  </AnimatedSection>
+                ))}
+              </div>
+            )}
+
           </div>
+
         </div>
       </section>
 
@@ -325,8 +481,8 @@ export default function Home() {
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <h2 className="text-4xl font-bold dark:text-white mb-4">What Our Customers Say</h2>
-            <p className="text-xl text-gray-900 dark:text-white">Trusted by thousands of satisfied customers</p>
+            <h2 className="text-2xl md:text-4xl font-bold dark:text-white mb-4">What Our Customers Say</h2>
+            <p className="text-lg md:text-xl text-gray-900 dark:text-white">Trusted by thousands of satisfied customers</p>
           </AnimatedSection>
 
           {/* Desktop View */}
@@ -366,7 +522,7 @@ export default function Home() {
               pagination={{ clickable: true }}
               grabCursor
               breakpoints={{
-                640: { slidesPerView: 1.2 }, //2.2
+                640: { slidesPerView: 1.1 }, //2.2
                 1024: { slidesPerView: 3.2 }, //3.2
               }}
 
@@ -427,8 +583,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <AnimatedSection>
-              <h2 className="text-4xl font-bold mb-6">Ready to Transform Your Vehicle?</h2>
-              <p className="text-xl text-blue-100 mb-8">
+              <h2 className="text-2xl md:text-4xl font-bold mb-6">Ready to Transform Your Vehicle?</h2>
+              <p className="text-lg md:text-xl text-blue-100 mb-8">
                 Get a personalized quote for your vehicle today. Our experts are ready to help you choose the perfect service package.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { X, Check } from 'lucide-react';
+import { set } from 'date-fns';
 
 interface ModalFormProps {
   selectedService: string;
@@ -18,34 +19,74 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
     message: '',
   });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     nameRef.current?.focus();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.phone || !formData.service) {
-      alert('Please fill all required fields!');
-      return;
+  // const handleSubmit = (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   if (!formData.name || !formData.phone || !formData.service) {
+  //     alert('Please fill all required fields!');
+  //     return;
+  //   }
+
+  //   // Trigger submission animation
+  //   setSubmitted(true);
+
+  //   console.log('Form Data:', formData);
+  //   // Here you can handle the form submission, e.g., send data to an API endpoint  
+
+
+
+  //   // Auto-close after 2 seconds
+  //   setTimeout(() => {
+  //     setSubmitted(false);
+  //     setFormData({ name: '', phone: '', service: '', message: '' });
+  //     onClose();
+  //   }, 2000);
+  // };
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!formData.name || !formData.phone || !formData.service) {
+    alert('Please fill all required fields!');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const response = await fetch(
+      "https://script.google.com/macros/s/AKfycbzWI83WWovIhSx07VUqA_x1K0RpfU9bfGjE44iYZtgRfhLoWrWO8fW8RuoAEMcfaer2/exec", // <-- Replace with your deployed Web App URL
+      {
+        method: "POST",
+        body: new URLSearchParams(formData), // Sends form data as POST
+      }
+    );
+
+    const result = await response.json();
+    setLoading(false);
+    console.log(result);
+
+    if (result.status === "success") {
+      setSubmitted(true);
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormData({ name: '', phone: '', service: '', message: '' });
+        onClose();
+      }, 2000);
+    } else {
+      alert("Failed to submit. Please try again.");
     }
+  } catch (error) {
+    console.error("Error submitting form:", error);
+    alert("An error occurred. Please try again.");
+  }
+};
 
-    // Trigger submission animation
-    setSubmitted(true);
-
-    console.log('Form Data:', formData);
-    // Here you can handle the form submission, e.g., send data to an API endpoint  
-
-
-
-    // Auto-close after 2 seconds
-    setTimeout(() => {
-      setSubmitted(false);
-      setFormData({ name: '', phone: '', service: '', message: '' });
-      onClose();
-    }, 2000);
-  };
 
   return (
     <AnimatePresence>
@@ -114,7 +155,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                   />
                 </div>
                 <Button type="submit" className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900">
-                  Submit
+                  {loading ? 'Submitting...' : 'Submit' }
                 </Button>
               </form>
             </>
