@@ -26,66 +26,54 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
     nameRef.current?.focus();
   }, []);
 
-  // const handleSubmit = (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   if (!formData.name || !formData.phone || !formData.service) {
-  //     alert('Please fill all required fields!');
-  //     return;
-  //   }
-
-  //   // Trigger submission animation
-  //   setSubmitted(true);
-
-  //   console.log('Form Data:', formData);
-  //   // Here you can handle the form submission, e.g., send data to an API endpoint  
-
-
-
-  //   // Auto-close after 2 seconds
-  //   setTimeout(() => {
-  //     setSubmitted(false);
-  //     setFormData({ name: '', phone: '', service: '', message: '' });
-  //     onClose();
-  //   }, 2000);
-  // };
+  const validatePhone = (phone: string) => {
+    const regex = /^\+?[0-9\s-]{7,15}$/;
+    return regex.test(phone);
+  };
 
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!formData.name || !formData.phone || !formData.service) {
-    alert('Please fill all required fields!');
-    return;
-  }
+    e.preventDefault();
 
-  try {
-    setLoading(true);
-    const response = await fetch(
-      "https://script.google.com/macros/s/AKfycbzWI83WWovIhSx07VUqA_x1K0RpfU9bfGjE44iYZtgRfhLoWrWO8fW8RuoAEMcfaer2/exec", // <-- Replace with your deployed Web App URL
-      {
-        method: "POST",
-        body: new URLSearchParams(formData), // Sends form data as POST
-      }
-    );
 
-    const result = await response.json();
-    setLoading(false);
-    console.log(result);
-
-    if (result.status === "success") {
-      setSubmitted(true);
-      setTimeout(() => {
-        setSubmitted(false);
-        setFormData({ name: '', phone: '', service: '', message: '' });
-        onClose();
-      }, 2000);
-    } else {
-      alert("Failed to submit. Please try again.");
+    if (!formData.name || !formData.phone || !formData.service) {
+      alert("Please fill all required fields!");
+      return;
     }
-  } catch (error) {
-    console.error("Error submitting form:", error);
-    alert("An error occurred. Please try again.");
-  }
-};
+
+    if (!validatePhone(formData.phone)) {
+      alert("Please enter a valid phone number!");
+      return;
+    }
+    try {
+      setLoading(true);
+      const response = await fetch(
+        "https://script.google.com/macros/s/AKfycbzWI83WWovIhSx07VUqA_x1K0RpfU9bfGjE44iYZtgRfhLoWrWO8fW8RuoAEMcfaer2/exec", // <-- Replace with your deployed Web App URL
+        {
+          method: "POST",
+          body: new URLSearchParams(formData), // Sends form data as POST
+        }
+      );
+
+      const result = await response.json();
+      setLoading(false);
+      console.log(result);
+
+      if (result.status === "success") {
+        setSubmitted(true);
+        setTimeout(() => {
+          setSubmitted(false);
+          setFormData({ name: '', phone: '', service: '', message: '' });
+          onClose();
+        }, 2000);
+      } else {
+        alert("Failed to submit. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      alert("An error occurred. Please try again.");
+    }
+  };
 
 
   return (
@@ -155,7 +143,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                   />
                 </div>
                 <Button type="submit" className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900">
-                  {loading ? 'Submitting...' : 'Submit' }
+                  {loading ? 'Submitting...' : 'Submit'}
                 </Button>
               </form>
             </>
