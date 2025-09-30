@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { X, Check } from 'lucide-react';
+import { X, Check, LoaderIcon } from 'lucide-react';
 import { set } from 'date-fns';
+import Invoice from './Invoice';
 
 interface ModalFormProps {
   selectedService: string;
@@ -35,6 +36,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    setLoading(true);
 
     if (!formData.name || !formData.phone || !formData.service) {
       alert("Please fill all required fields!");
@@ -45,15 +47,12 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
       alert("Please enter a valid phone number!");
       return;
     }
+
     try {
-      setLoading(true);
-      const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbzWI83WWovIhSx07VUqA_x1K0RpfU9bfGjE44iYZtgRfhLoWrWO8fW8RuoAEMcfaer2/exec", // <-- Replace with your deployed Web App URL
-        {
-          method: "POST",
-          body: new URLSearchParams(formData), // Sends form data as POST
-        }
-      );
+      const response = await fetch("https://script.google.com/macros/s/AKfycbzq1lxyqEwByR9WABy8e05c2Gdn-vW1ZLPqbnQGo0CxpxjhZXD7mqWEJY05z0KllI03/exec", {
+        method: "POST",
+        body: new URLSearchParams(formData),
+      });
 
       const result = await response.json();
       setLoading(false);
@@ -61,11 +60,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
 
       if (result.status === "success") {
         setSubmitted(true);
-        setTimeout(() => {
-          setSubmitted(false);
-          setFormData({ name: '', phone: '', service: '', message: '' });
-          onClose();
-        }, 2000);
+        setFormData(prev => ({ ...prev, invoiceNumber: result.invoiceNumber })); // add invoice number
       } else {
         alert("Failed to submit. Please try again.");
       }
@@ -74,6 +69,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
       alert("An error occurred. Please try again.");
     }
   };
+
 
 
   return (
@@ -143,7 +139,8 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                   />
                 </div>
                 <Button type="submit" className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900">
-                  {loading ? 'Submitting...' : 'Submit'}
+                  {loading ? `Submitting` : 'Submit'}
+                  <LoaderIcon className={`ml-2 ${loading ? 'inline-block animate-spin' : 'hidden'}`} />
                 </Button>
               </form>
             </>
@@ -152,13 +149,34 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0 }}
-              className="flex flex-col items-center justify-center py-10"
+              className="flex flex-col items-center relative justify-center py-10"
             >
-              <Check className="h-16 w-16 text-green-500 mb-4 animate-bounce" />
+
+              <Check className="h-16 w-16 text-green-500 mb-4 animate-bounce p-3   bg-green-300  rounded-full" />
+              <button
+                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+                onClick={onClose}
+              >
+                <X size={24} />
+              </button>
               <h3 className="text-xl font-bold text-gray-900">Form Submitted!</h3>
               <p className="text-gray-700 mt-2 text-center">
                 Thank you! We will contact you shortly.
               </p>
+
+              <p className='text-lg text-center'>Download your Invoice</p>
+              <Invoice
+                data={formData}
+                onClose={() => {
+                  setSubmitted(false);
+                  setFormData({ name: "", phone: "", service: "", message: "" });
+                  onClose();
+                }}
+              />
+
+              <button className="mt-6 px-4 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition">
+                WhatsApp us: <a className="text-green-600 font-bold" href="https://wa.me/1234567890" target="_blank" rel="noopener noreferrer">+1 234 567 890</a>
+              </button>
             </motion.div>
           )}
         </motion.div>
