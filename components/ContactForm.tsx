@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Check, LoaderIcon, MessageCircle, Send, X } from 'lucide-react'; 
+import { Check, LoaderIcon, MessageCircle, Send, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 
@@ -84,10 +84,11 @@ export function ContactForm({ service }: ContactFormProps) {
 
     try {
       const res = await fetch('/api/send-email', {
-        method: 'POST',
+        method: 'POST',       // MUST be POST
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       }).then(r => r.json());
+
 
       if (res.success) {
         setSubmitted(true);
