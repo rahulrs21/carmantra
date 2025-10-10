@@ -18,20 +18,22 @@ export default function Prefooter() {
         {/* Logo */}
         <div className="flex items-start space-x-3">
 
-            <div className="flex flex-col gap-4 mr-8">
+          <div className="flex flex-col gap-4 mr-8">
 
-                <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
+              <Link href="/" className="flex items-center space-x-2">
 
-                    <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-bold text-lg">CM</span>
-                    </div>
-                    <span className="font-bold text-xl">Car Mantra</span>
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">CM</span>
                 </div>
-
-                <p className="max-w-xs text-sm text-gray-300">
-                Premier Car Services - Expert care for your vehicle with PPF, ceramic coating, polishing, tinting, and more.
-                </p>
+                <span className="font-bold text-xl">Car Mantra</span>
+              </Link>
             </div>
+
+            <p className="max-w-xs text-sm text-gray-300">
+              Premier Car Services - Expert care for your vehicle with PPF, ceramic coating, polishing, tinting, and more.
+            </p>
+          </div>
         </div>
 
         {/* Useful Links */}

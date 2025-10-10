@@ -16,6 +16,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    email: '',
     service: selectedService,
     message: '',
   });
@@ -49,7 +50,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
     }
 
     try {
-      const response = await fetch("https://script.google.com/macros/s/AKfycbzq1lxyqEwByR9WABy8e05c2Gdn-vW1ZLPqbnQGo0CxpxjhZXD7mqWEJY05z0KllI03/exec", {
+      const response = await fetch("https://script.google.com/macros/s/AKfycbylKfJQ4kVmg0_t0rRiZO10ff6H2lO1H7euC2ULTvEFppF1QC55J0toQZcI2H3VID7R/exec", {
         method: "POST",
         body: new URLSearchParams(formData),
       });
@@ -105,6 +106,8 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full p-3 border rounded-lg dark:text-black"
                     placeholder="Enter your name"
+                    autoComplete="name"   // ✅ enables browser autofill
+
                     required
                   />
                 </div>
@@ -116,9 +119,25 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full p-3 border rounded-lg dark:text-black"
                     placeholder="Enter your phone number"
+                    autoComplete="tel"   // ✅ enables browser autofill
+
                     required
                   />
                 </div>
+                <div>
+                  <label className="block font-semibold mb-1 dark:text-black">Email </label>
+                  <input
+                    type="email"  // changed to email type for validation   
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full p-3 border rounded-lg dark:text-black"
+                    placeholder="Enter your email"
+                    autoComplete="email"   // ✅ enables browser autofill 
+                    required
+
+                  />
+                </div>
+
                 <div>
                   <label className="block font-semibold mb-1 dark:text-black">Selected Service *</label>
                   <input
@@ -126,6 +145,8 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                     value={formData.service}
                     readOnly
                     className="w-full p-3 border rounded-lg bg-gray-100 dark:text-black"
+
+                    autoComplete="off"   // 🚫 turn off autofill since it's read-only
                     required
                   />
                 </div>
@@ -136,6 +157,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     className="w-full p-3 border rounded-lg dark:text-black"
                     placeholder="Your message..."
+                    autoComplete="on"   // ✅ allows general suggestions
                   />
                 </div>
                 <Button type="submit" className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900">
@@ -164,18 +186,18 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
                 Thank you! We will contact you shortly.
               </p>
 
-              <p className='text-lg text-center'>Download your Invoice</p>
-              <Invoice
-                data={formData}
+              <p className='text-md text-center text-black'>Thank you for choosing <strong>Car Mantra</strong>!</p>
+              {/* <Invoice
+                data={formData} 
                 onClose={() => {
                   setSubmitted(false);
                   setFormData({ name: "", phone: "", service: "", message: "" });
                   onClose();
                 }}
-              />
+              /> */}
 
               <button className="mt-6 px-4 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition">
-                WhatsApp us: <a className="text-green-600 font-bold" href="https://wa.me/1234567890" target="_blank" rel="noopener noreferrer">+1 234 567 890</a>
+                WhatsApp us: <a className="text-green-600 font-bold" href="https://wa.me/+971503324868" target="_blank" rel="noopener noreferrer">+971 50 332 4868</a>
               </button>
             </motion.div>
           )}
