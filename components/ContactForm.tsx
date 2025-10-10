@@ -37,7 +37,7 @@ export function ContactForm({ service }: ContactFormProps) {
     name: '',
     email: '',
     phone: '',
-    service: service, // keeps prop value if exists, undefined otherwise
+    service: service || '', // fallback// keeps prop value if exists, undefined otherwise
     message: '',
   });
 
@@ -59,7 +59,7 @@ export function ContactForm({ service }: ContactFormProps) {
           name: '',
           email: '',
           phone: '',
-          service: service, // keep prop value; undefined if not passed
+          service: service || '', // fallback, // keep prop value; undefined if not passed
           message: '',
         });
       } else {
