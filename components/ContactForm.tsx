@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Check, LoaderIcon, MessageCircle, Send, X } from 'lucide-react';
-import { sendEmail } from '@/lib/resend'; // Import server action
+import { sendEmail } from '@/app/resend'; // Import server action
 import { motion, AnimatePresence } from 'framer-motion';
 
 
