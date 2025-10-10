@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Check, LoaderIcon, MessageCircle, Send, X } from 'lucide-react';
-import { sendEmail } from '@/app/resend'; // Import server action
+import { Check, LoaderIcon, MessageCircle, Send, X } from 'lucide-react'; 
 import { motion, AnimatePresence } from 'framer-motion';
 
 
@@ -42,43 +41,74 @@ export function ContactForm({ service }: ContactFormProps) {
   });
 
 
+  // const handleSubmit = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setLoading(true);
+
+  //   try {
+
+  //     const res = await sendEmail(formData);
+
+  //     if (res.success) {
+  //       setSubmitted(true); // show success message
+
+
+  //       setFormData({
+  //         name: '',
+  //         email: '',
+  //         phone: '',
+  //         service: service || '', // fallback, // keep prop value; undefined if not passed
+  //         message: '',
+  //       });
+  //     } else {
+  //       alert('❌ Something went wrong. Please try again later.');
+  //     }
+
+  //     await new Promise((resolve) => setTimeout(resolve, 1500)); // simulate delay
+
+  //     setSubmitted(true); // show success message
+  //   } catch (error) {
+  //     console.error(error);
+  //     alert('Something went wrong. Please try again.');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+
+  // };
+
+  // Close success message and reset form for new submission
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Send formData to API / Resend
-      // await sendEmail(formData);
-      const res = await sendEmail(formData);
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      }).then(r => r.json());
 
       if (res.success) {
-        setSubmitted(true); // show success message
-
-        // Reset form but keep service if prop exists
+        setSubmitted(true);
         setFormData({
           name: '',
           email: '',
           phone: '',
-          service: service || '', // fallback, // keep prop value; undefined if not passed
+          service: service || '',
           message: '',
         });
       } else {
         alert('❌ Something went wrong. Please try again later.');
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 1500)); // simulate delay
-
-      setSubmitted(true); // show success message
-    } catch (error) {
-      console.error(error);
-      alert('Something went wrong. Please try again.');
+    } catch (err) {
+      console.error(err);
+      alert('❌ Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
-
   };
 
-  // Close success message and reset form for new submission
   const handleCloseSuccess = () => {
     setSubmitted(false); // hide success div
     setFormData({
