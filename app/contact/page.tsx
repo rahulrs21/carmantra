@@ -146,7 +146,7 @@ export default function ContactPage() {
                   focus:ring-2 focus:ring-blue-500 transition-all"
                 />
               </div>
-              
+
 
               <div>
                 <label className="block text-gray-700 dark:text-gray-300 mb-2">
@@ -163,16 +163,16 @@ export default function ContactPage() {
                 />
               </div>
 
-               {/* Submit Button */}
-          <Button
-            type="submit"
-            className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900"
-          >
-            {loading ? 'Submitting' : 'Submit'}
-            <LoaderIcon
-              className={`ml-2 ${loading ? 'inline-block animate-spin' : 'hidden'}`}
-            />
-          </Button>
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900"
+              >
+                {loading ? 'Submitting' : 'Submit'}
+                <LoaderIcon
+                  className={`ml-2 ${loading ? 'inline-block animate-spin' : 'hidden'}`}
+                />
+              </Button>
             </form>
           ) : (
             <motion.div
@@ -195,6 +195,19 @@ export default function ContactPage() {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="flex flex-col justify-center bg-gray-100 dark:bg-gray-800 p-8 rounded-2xl shadow-lg"
         >
+
+          <div className="w-full h-96 rounded-xl overflow-hidden shadow-lg border border-gray-200">
+            <iframe
+              src="https://www.google.com/maps?q=Faza+Home+Dubai,+UAE&output=embed"
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            ></iframe>
+          </div>
+
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
             Contact Information
           </h2>

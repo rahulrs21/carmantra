@@ -205,3 +205,34 @@ html {
   animation-delay: 1s; /* optional delay */
 }
  
+
+@keyframes scroll-x {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-33.33%); } /* Adjust based on number of images */
+}
+
+.animate-scroll-x {
+  animation: scroll-x 60s linear infinite;
+}
+
+
+/* Add this in globals.css or a CSS module */
+::-webkit-scrollbar {
+  width: 12px; /* Width of vertical scrollbar */
+  height: 12px; /* Height of horizontal scrollbar */
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937; /* Track color (dark gray) */
+  /* border-radius: 9999px; */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b82f6; /* Blue thumb */
+  border-radius: 9999px;
+  border: 4px solid #1f2937; /* Optional: space around thumb */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #60a5fa; /* Lighter blue on hover */
+}

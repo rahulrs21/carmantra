@@ -10,10 +10,11 @@ export default function WelcomeBack() {
 
     if (visited) {
       setShow(true); // Returning visitor
+      setTimeout(() => setShow(false), 3000); // Auto-hide after 3 seconds
     } else {
       localStorage.setItem("visitedBefore", "true"); // First visit
     }
-  }, []);
+  }, [5000]);
 
   if (!show) return null;
 

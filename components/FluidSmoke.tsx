@@ -1205,5 +1205,5 @@ export default function FluidSmoke() {
         };
     }, []);
 
-    return <canvas id="fluid" ref={canvasRef} className="pointer-events-none opacity-25" style={{ width: '100%', height: '100%', position: 'fixed', zIndex: '40', inset: 0 }} />;
+    return <canvas id="fluid" ref={canvasRef} className="pointer-events-none opacity-30" style={{ width: '100%', height: '100%', position: 'fixed', zIndex: '40', inset: 0 }} />;
 }

@@ -32,6 +32,7 @@ import "swiper/css/autoplay";
 import "swiper/css/navigation";
 
 import { useMediaQuery } from "react-responsive";
+import BeforeAfterSlider from '@/components/BeforeAfterSlider';
 
 
 
@@ -184,7 +185,7 @@ export default function Home() {
 
 
 
-  
+
 
   return (
     <div className="min-h-screen">
@@ -280,108 +281,236 @@ export default function Home() {
       </section>
 
 
+      {/* Before After Section */}
+      <section className="relative py-14 bg-gradient-to-b from-gray-900 via-black to-gray-950 text-white overflow-hidden">
+        {/* Subtle glow overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.05),_transparent_70%)] pointer-events-none"></div>
+
+        <div className="relative max-w-full pb-3 mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <AnimatedSection>
+            {/* Accent line */}
+            <div className="flex justify-center mb-6">
+              <span className="h-1 w-20 bg-blue-500 rounded-full"></span>
+            </div>
+
+            {/* Elegant heading */}
+            <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-white to-blue-400">
+              See the Premier Difference
+            </h2>
+
+            {/* Refined description */}
+            <p className="text-base md:text-lg text-gray-300 max-w-2xl mx-auto leading-relaxed mb-12">
+              Experience the transformation — witness how our professional care restores brilliance, precision,
+              and a mirror-perfect finish to every surface we touch.
+            </p>
+
+            {/* Before/After Slider */}
+            <div className="mt-10">
+              <BeforeAfterSlider
+                beforeImage="https://images.pexels.com/photos/3784424/pexels-photo-3784424.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
+                afterImage="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
+              />
+            </div>
+          </AnimatedSection>
+        </div>
 
 
 
-      {/* Services Section */}
-      <section id="service_main" className="py-20 bg-gray-100 dark:bg-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <AnimatedSection className="text-center mb-16">
-            <h2 className="text-2xl md:text-4xl font-bold text-black dark:text-white mb-4">
+         
+
+
+      </section>
+
+
+
+      {/* Premium Services Section */}
+      <section
+        id="service_main"
+        className="relative py-14 bg-gradient-to-b from-gray-950 via-black to-gray-900 text-white overflow-hidden"
+      >
+        {/* Subtle glowing background accent */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.08),_transparent_70%)] pointer-events-none"></div>
+
+        <div className="relative max-w-full  mx-auto px-4 sm:px-6 lg:px-8 mb-10">
+          {/* Header */}
+          <AnimatedSection className="max-w-7xl mx-auto text-center mb-4">
+            <div className="flex justify-center mb-8">
+              <span className="h-1 w-24 bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full"></span>
+            </div>
+
+            <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-white to-blue-400">
               Our Premium Services
             </h2>
-            <p className="text-lg md:text-xl text-black dark:text-white max-w-3xl mx-auto">
-              Comprehensive automotive care solutions designed to keep your vehicle in pristine condition
+
+            <p className="text-base md:text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+              Drive with confidence — explore our advanced automotive care and detailing services designed
+              to enhance, protect, and transform your vehicle inside and out.
             </p>
           </AnimatedSection>
 
-          {/* Desktop / Tablet View (Grid) */}
-          <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {services.map((service, index) => (
-              <AnimatedSection key={service.href} delay={index * 100}>
-                <Link href={service.href} className="group">
-                  <div className="bg-white text-black dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
-                    <div className="relative h-48 overflow-hidden">
-                      <Image
-                        src={service.image}
-                        alt={service.title}
-                        fill
-                        className="object-cover group-hover:scale-110 transition-transform duration-300"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                      <div className="absolute bottom-4 left-4">
-                        <service.icon className="h-8 w-8 text-white" />
-                      </div>
-                    </div>
-                    <div className="p-6">
-                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-400 transition-colors">
-                        {service.title}
-                      </h3>
-                      <p className="text-gray-900 dark:text-white mb-4">{service.description}</p>
-                      <div className="flex items-center text-blue-400 font-semibold group-hover:text-blue-500">
-                        Learn More
-                        <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </AnimatedSection>
-            ))}
-          </div>
-
-          {/* Mobile View (Swiper Carousel) */}
-          <div className="md:hidden">
+          {/* Swiper Slider for All Devices */}
+          <div className="overflow-visible px-10 rounded-2xl py-10"> {/* 👈 Added extra breathing room */}
             <Swiper
               modules={[Navigation, Pagination]}
-              spaceBetween={20}
+              spaceBetween={40}
               slidesPerView={1.1}
+              breakpoints={{
+                640: { slidesPerView: 1 },
+                1024: { slidesPerView: 2.5 },
+                1440: { slidesPerView: 4 },
+              }}
               navigation={{
                 nextEl: ".swiper-button-next1",
                 prevEl: ".swiper-button-prev1",
               }}
               pagination={{ clickable: true, dynamicBullets: true }}
-              className="pb-12"
+              className="pb-20 relative z-10"
+
             >
               {services.map((service, index) => (
                 <SwiperSlide key={service.href}>
-                  <Link href={service.href} className="group block">
-                    <div className="bg-white text-black dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300">
-                      <div className="relative h-48 overflow-hidden">
-                        <Image
-                          src={service.image}
-                          alt={service.title}
-                          fill
-                          className="object-cover group-hover:scale-110 transition-transform duration-300"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                        <div className="absolute bottom-4 left-4">
-                          <service.icon className="h-8 w-8 text-white" />
+                  <AnimatedSection delay={index * 100}>
+                    <Link href={service.href} className="group block">
+                      <div className="relative bg-gray-900/70 backdrop-blur-xl rounded-2xl overflow-auto shadow-[0_0_25px_rgba(0,0,0,0.5)] hover:shadow-[0_0_35px_rgba(59,130,246,0.4)] transition-all duration-500 transform hover:-translate-y-2">
+                        {/* Image Section */}
+                        <div className="relative h-60 overflow-hidden">
+                          <Image
+                            src={service.image}
+                            alt={service.title}
+                            fill
+                            className="object-cover group-hover:scale-110 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                          <div className="absolute bottom-4 left-4 flex items-center gap-2">
+                            <service.icon className="h-8 w-8 text-blue-400 drop-shadow-lg" />
+                            <span className="text-white font-semibold text-lg">{service.title}</span>
+                          </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-8">
+                          <p className="text-gray-300 mb-5 text-sm md:text-base leading-relaxed group-hover:text-gray-200 transition-colors">
+                            {service.description}
+                          </p>
+                          <div className="flex items-center text-blue-400 font-semibold group-hover:text-cyan-400 transition-all">
+                            Learn More
+                            <ArrowRight
+                              size={18}
+                              className="ml-2 group-hover:translate-x-1 transition-transform"
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div className="p-6">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-400 transition-colors">
-                          {service.title}
-                        </h3>
-                        <p className="text-gray-900 dark:text-white mb-4">{service.description}</p>
-                        <div className="flex items-center text-blue-400 font-semibold group-hover:text-blue-500">
-                          Learn More
-                          <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
+                    </Link>
+                  </AnimatedSection>
                 </SwiperSlide>
               ))}
 
-              {/* Modern navigation buttons */}
-              <div className='absolute bottom-0 right-2 transform   flex gap-4 z-10'>
-                <div className="swiper-button-prev1 w-12 h-12 flex justify-center items-center !bg-blue-500 !text-white !rounded-full !p-3 shadow-lg hover:!bg-blue-600 transition">❮</div>
-                <div className="swiper-button-next1 w-12 h-12 flex justify-center items-center !bg-blue-500 !text-white !rounded-full !p-3 shadow-lg hover:!bg-blue-600 transition">❯</div>
-              </div>
             </Swiper>
+            {/* Modern Navigation Buttons */}
+            <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4 z-10 ">
+              <div className="swiper-button-prev1 w-12 h-12 flex justify-center items-center bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-full shadow-lg hover:scale-110 transition">
+                ❮
+              </div>
+              <div className="swiper-button-next1 w-12 h-12 flex justify-center items-center bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-full shadow-lg hover:scale-110 transition">
+                ❯
+              </div>
+            </div>
           </div>
+
+        </div>
+
+
+      </section>
+
+
+
+      {/* Auto-Playing Image Showcase Section */}
+      <section
+        id="showcase"
+        className="relative py-28 bg-gradient-to-b from-black via-gray-950 to-black text-white overflow-hidden"
+      >
+        {/* Glow Overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1),_transparent_70%)] pointer-events-none"></div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          {/* Heading */}
+          <AnimatedSection className="mb-16">
+            <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-white to-cyan-400">
+              Experience the Art of Perfection
+            </h2>
+            <p className="text-base md:text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+              A visual journey through our finest detailing, ceramic coating, and PPF transformations.
+            </p>
+          </AnimatedSection>
+
+          {/* Swiper Image Slider */}
+          <Swiper
+            modules={[Autoplay, Pagination]}
+            spaceBetween={30}
+            slidesPerView={1.2}
+            breakpoints={{
+              640: { slidesPerView: 1.5 },
+              1024: { slidesPerView: 2.5 },
+              1440: { slidesPerView: 3 },
+            }}
+            autoplay={{
+              delay: 1000,
+              disableOnInteraction: false,
+            }}
+            loop={true}
+            speed={1500}
+            pagination={{ clickable: true, dynamicBullets: true }}
+            className="pb-16"
+          >
+            {[
+              {
+                src: "https://images.pexels.com/photos/4489724/pexels-photo-4489724.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                alt: "Ceramic Coating Process",
+              },
+              {
+                src: "https://images.pexels.com/photos/97075/pexels-photo-97075.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                alt: "Car Detailing Shine",
+              },
+              {
+                src: "https://images.pexels.com/photos/4489719/pexels-photo-4489719.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                alt: "PPF Installation",
+              },
+              {
+                src: "https://images.pexels.com/photos/193021/pexels-photo-193021.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                alt: "Luxury Sports Car Detail",
+              },
+              {
+                src: "https://images.pexels.com/photos/120049/pexels-photo-120049.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                alt: "Car Wash Detailing",
+              },
+              {
+                src: "https://images.pexels.com/photos/6878150/pexels-photo-6878150.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                alt: "Gloss Finish After PPF",
+              },
+            ].map((item, index) => (
+              <SwiperSlide key={index}>
+                <div className="relative rounded-2xl overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.6)] hover:shadow-[0_0_40px_rgba(59,130,246,0.4)] transition-all duration-700 transform hover:-translate-y-2">
+                  <Image
+                    src={item.src}
+                    alt={item.alt}
+                    width={1920}
+                    height={1080}
+                    className="object-cover w-full h-[400px] md:h-[500px] lg:h-[550px] transition-transform duration-700 hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+                  <div className="absolute bottom-6 left-6 text-left">
+                    <h3 className="text-lg md:text-2xl font-semibold text-white drop-shadow-lg">
+                      {item.alt}
+                    </h3>
+                  </div>
+                </div>
+              </SwiperSlide>
+            ))}
+          </Swiper>
         </div>
       </section>
+
 
 
 
@@ -400,7 +529,7 @@ export default function Home() {
 
 
 
-          <div className="relative"> 
+          <div className="relative">
 
             {/* Mobile → Carousel | Desktop → Grid */}
             {isMobile ? (
@@ -485,25 +614,7 @@ export default function Home() {
             <p className="text-lg md:text-xl text-gray-900 dark:text-white">Trusted by thousands of satisfied customers</p>
           </AnimatedSection>
 
-          {/* Desktop View */}
-          {/* <div className="hidden  md:grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <AnimatedSection key={testimonial.name} delay={index * 100}>
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-                  <div className="flex items-center mb-4">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-gray-900 dark:text-white mb-4 italic">"{testimonial.comment}"</p>
-                  <div>
-                    <p className="font-semibold dark:text-white">{testimonial.name}</p>
-                    <p className="text-sm text-gray-900 dark:text-white">{testimonial.service}</p>
-                  </div>
-                </div>
-              </AnimatedSection>
-            ))}
-          </div> */}
+         
 
 
 
@@ -559,23 +670,14 @@ export default function Home() {
               ❯
             </button>
           </div>
-
-
-
-        </div>
-
-
-
-
-
-
+        </div> 
 
       </section>
 
 
-      <section className='py-20 bg-white text-black dark:text-white dark:bg-gray-800'>
+      {/* <section className='py-20 bg-white text-black dark:text-white dark:bg-gray-800'>
         <OurWorksSlider />
-      </section>
+      </section> */}
 
 
       {/* CTA Section */}
