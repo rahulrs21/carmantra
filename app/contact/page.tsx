@@ -1,61 +1,74 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
-import { Mail, Phone, MapPin, Send } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Mail, Phone, MapPin, Send, LoaderIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function ContactPage() {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    message: "",
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  const [loading, setLoading] = useState<boolean>(false);
+  const [submitted, setSubmitted] = useState<boolean>(false);
+
+  const [formData, setFormData] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    service?: string;
+    message: string;
+  }>({
+    name: '',
+    email: '',
+    phone: '',
+    message: '',
   });
-  const [submitted, setSubmitted] = useState(false);
 
-  const GOOGLE_SCRIPT_URL =
-    "https://script.google.com/macros/s/AKfycbxxxx/exec"; // replace with your Web App URL
 
-  // Load saved data from localStorage
-  useEffect(() => {
-    const savedData = localStorage.getItem("contactForm");
-    if (savedData) {
-      setFormData(JSON.parse(savedData));
-    }
-  }, []);
 
-  // Handle input change
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const updatedData = { ...formData, [e.target.name]: e.target.value };
-    setFormData(updatedData);
-
-    // Save to localStorage
-    localStorage.setItem("contactForm", JSON.stringify(updatedData));
-  };
-
-  // Handle form submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
 
     try {
-      const response = await fetch(GOOGLE_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors", // important for Google Apps Script
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/send-email', {
+        method: 'POST',       // MUST be POST
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
-      });
+      }).then(r => r.json());
 
-      console.log("Submitted:", formData);
-      setSubmitted(true);
 
-      // Clear message only (keep name/email/phone)
-      setFormData({ ...formData, message: "" });
-    } catch (error) {
-      console.error("Error submitting form:", error);
+      if (res.success) {
+        setSubmitted(true);
+        alert('✅ Your message has been sent successfully!');
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          message: '',
+        });
+      } else {
+        alert('❌ Something went wrong. Please try again later.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('❌ Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleCloseSuccess = () => {
+    setSubmitted(false); // hide success div
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      message: '',
+    });
+  };
+
+
 
   return (
     <div className="min-h-screen  bg-gray-800  dark:bg-gray-900 py-16 px-6 md:px-12 lg:px-24">
@@ -94,9 +107,9 @@ export default function ContactPage() {
                 </label>
                 <input
                   type="text"
-                  name="name"
+                  ref={nameRef}
                   value={formData.name}
-                  onChange={handleChange}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                   className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-700 
                   bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white 
@@ -110,9 +123,8 @@ export default function ContactPage() {
                 </label>
                 <input
                   type="email"
-                  name="email"
                   value={formData.email}
-                  onChange={handleChange}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                   className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-700 
                   bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white 
@@ -125,16 +137,16 @@ export default function ContactPage() {
                   Phone
                 </label>
                 <input
-                  type="tel"
-                  name="phone"
+                  type="text"
                   value={formData.phone}
-                  onChange={handleChange}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   required
                   className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-700 
                   bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white 
                   focus:ring-2 focus:ring-blue-500 transition-all"
                 />
               </div>
+              
 
               <div>
                 <label className="block text-gray-700 dark:text-gray-300 mb-2">
@@ -144,20 +156,23 @@ export default function ContactPage() {
                   name="message"
                   rows={4}
                   value={formData.message}
-                  onChange={handleChange}
+                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                   className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-700 
                   bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white 
                   focus:ring-2 focus:ring-blue-500 transition-all"
                 />
               </div>
 
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 
-                text-white py-3 px-6 rounded-lg shadow-lg transition-all"
-              >
-                <Send size={18} /> Send Message
-              </button>
+               {/* Submit Button */}
+          <Button
+            type="submit"
+            className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900"
+          >
+            {loading ? 'Submitting' : 'Submit'}
+            <LoaderIcon
+              className={`ml-2 ${loading ? 'inline-block animate-spin' : 'hidden'}`}
+            />
+          </Button>
             </form>
           ) : (
             <motion.div
@@ -183,7 +198,7 @@ export default function ContactPage() {
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
             Contact Information
           </h2>
-          
+
           <div className="space-y-5 text-gray-700 dark:text-gray-300">
             <p className="flex items-center gap-3">
               <Mail className="text-blue-600" /> contact@rahuldxb.com

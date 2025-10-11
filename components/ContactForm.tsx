@@ -40,44 +40,7 @@ export function ContactForm({ service }: ContactFormProps) {
     message: '',
   });
 
-
-  // const handleSubmit = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setLoading(true);
-
-  //   try {
-
-  //     const res = await sendEmail(formData);
-
-  //     if (res.success) {
-  //       setSubmitted(true); // show success message
-
-
-  //       setFormData({
-  //         name: '',
-  //         email: '',
-  //         phone: '',
-  //         service: service || '', // fallback, // keep prop value; undefined if not passed
-  //         message: '',
-  //       });
-  //     } else {
-  //       alert('❌ Something went wrong. Please try again later.');
-  //     }
-
-  //     await new Promise((resolve) => setTimeout(resolve, 1500)); // simulate delay
-
-  //     setSubmitted(true); // show success message
-  //   } catch (error) {
-  //     console.error(error);
-  //     alert('Something went wrong. Please try again.');
-  //   } finally {
-  //     setLoading(false);
-  //   }
-
-  // };
-
-  // Close success message and reset form for new submission
-
+ 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);

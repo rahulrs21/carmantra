@@ -24,27 +24,45 @@ export default function PPFWrappingPage() {
 
   const services = [
     {
-      title: 'Full Vehicle PPF',
+      title: 'Elite Wrap – Matte',
       description: 'Complete paint protection film coverage for maximum protection',
-      price: 'From $2,500',
+      price: 'From AED 7,000',
+      warranty: '10 Years Warranty',
       duration: '2-3 days'
     },
     {
-      title: 'Partial PPF Coverage',
+      title: 'Elite Wrap – Glossy',
       description: 'Strategic protection for high-impact areas',
-      price: 'From $800',
-      duration: '1 day'
+      price: 'From AED 6,000',
+      warranty: '10 Years Warranty',
+      duration: '2-3 days'
     },
     {
-      title: 'Color Change Wrap',
+      title: 'Basic Wrap – Matte',
       description: 'Transform your vehicle\'s appearance with premium vinyl',
-      price: 'From $3,200',
-      duration: '3-4 days'
+      price: 'From AED 4,000',
+      warranty: '5 Years Warranty',
+      duration: '2-3 days'
     },
     {
-      title: 'Commercial Vehicle Wrapping',
+      title: 'Basic Wrap – Glossy',
       description: 'Professional branding and advertising solutions',
-      price: 'From $1,500',
+      price: 'From AED 3,000',
+      warranty: '5 Years Warranty',
+      duration: '2-3 days'
+    },
+    {
+      title: 'Standard Color PPF – Matte',
+      description: 'Transform your vehicle\'s appearance with premium vinyl',
+      price: 'From AED 7,000',
+      warranty: '5 Years Warranty',
+      duration: '2-3 days'
+    },
+    {
+      title: 'Standard Color PPF – Glossy',
+      description: 'Professional branding and advertising solutions',
+      price: 'From AED 6,000',
+      warranty: '5 Years Warranty',
       duration: '2-3 days'
     }
   ];
@@ -103,7 +121,8 @@ export default function PPFWrappingPage() {
             <AnimatedSection delay={200}>
               <div className="relative">
                 <Image
-                  src="https://images.pexels.com/photos/3806288/pexels-photo-3806288.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  // src="https://images.pexels.com/photos/3806288/pexels-photo-3806288.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  src="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
                   alt="PPF Application Process"
                   width={800}
                   height={600}
@@ -127,6 +146,10 @@ export default function PPFWrappingPage() {
                       <div className="flex items-center text-blue-600">
                         <Star className="h-4 w-4 mr-1" />
                         <span className="font-semibold">{service.price}</span>
+                      </div>
+                      <div className="flex items-center text-gray-500">
+                        <Shield className="h-4 w-4  mr-2" />
+                        <span className="text-sm" >{service.warranty}</span>
                       </div>
                       <div className="flex items-center text-gray-500">
                         <Clock className="h-4 w-4 mr-1" />
