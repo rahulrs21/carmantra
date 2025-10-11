@@ -142,18 +142,17 @@ export default function PPFWrappingPage() {
                   <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
                     <h3 className="text-xl font-bold text-gray-900 mb-3">{service.title}</h3>
                     <p className="text-gray-600  mb-4">{service.description}</p>
-                    <div className="flex justify-between items-center mb-4">
-                      <div className="flex items-center text-blue-600">
-                        <Star className="h-4 w-4 mr-1" />
-                        <span className="font-semibold">{service.price}</span>
+                    <div className="space-y-2 mb-6">
+                      <div className="flex justify-between items-center">
+                        <span className="text-2xl font-bold text-blue-600">{service.price}</span>
+                        <div className="flex items-center text-gray-500  text-sm">
+                          <Clock className="h-4 w-4 mr-1" />
+                          {service.duration}
+                        </div>
                       </div>
-                      <div className="flex items-center text-gray-500">
-                        <Shield className="h-4 w-4  mr-2" />
-                        <span className="text-sm" >{service.warranty}</span>
-                      </div>
-                      <div className="flex items-center text-gray-500">
-                        <Clock className="h-4 w-4 mr-1" />
-                        <span className="text-sm">{service.duration}</span>
+                      <div className="flex items-center text-green-600 text-sm">
+                        <Shield className="h-4 w-4 mr-1" />
+                        {service.warranty} warranty
                       </div>
                     </div>
                     <Button className="w-full" onClick={() => openModal(service.title)}>
