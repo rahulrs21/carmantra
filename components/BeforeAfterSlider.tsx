@@ -20,25 +20,29 @@ export default function BeforeAfter({ beforeImage, afterImage }: BeforeAfterProp
         <div className="absolute top-0 right-0 w-24 h-full bg-gradient-to-l from-black/70 via-transparent to-transparent"></div>
       </div>
 
-      <div className="max-w-[80%] mx-auto rounded-2xl overflow-hidden">
+      <div className="max-w-full md:max-w-[80%] mx-auto rounded-2xl overflow-hidden">
         <ReactCompareImage
           leftImage={beforeImage}
           rightImage={afterImage}
           sliderLineColor="rgba(255,255,255,0.4)"
           handle={
-            <div className="relative flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-b from-gray-800 to-gray-900 border border-gray-500/40 shadow-lg hover:scale-110 transition-transform duration-300">
+            <div className="relative flex items-center justify-center 
+                      w-10 h-10 z-10 md:w-12 md:h-12 
+                      rounded-full bg-gradient-to-b from-gray-800 to-gray-900 
+                      border border-gray-500/40 shadow-lg 
+                      hover:scale-110 transition-transform duration-300">
               {/* Glowing pulse ring */}
               <div className="absolute inset-0 rounded-full bg-blue-500/90 blur-md animate-pulse-slow"></div>
 
-              <ChevronLeft className="w-4 h-4 text-white" />
-              <ChevronRight className="w-4 h-4 text-white -ml-1" />
+              <ChevronLeft className="w-3 h-3 md:w-4 md:h-4 text-white" />
+              <ChevronRight className="w-3 h-3 md:w-4 md:h-4 text-white -ml-1" />
             </div>
           }
         />
       </div>
 
 
- 
+
 
     </div>
   );

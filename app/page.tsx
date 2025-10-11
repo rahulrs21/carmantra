@@ -349,13 +349,13 @@ export default function Home() {
           </AnimatedSection>
 
           {/* Swiper Slider for All Devices */}
-          <div className="overflow-visible px-10 rounded-2xl py-10"> {/* 👈 Added extra breathing room */}
+          <div className="overflow-visible px-2 md:px-10 rounded-2xl py-10"> {/* 👈 Added extra breathing room */}
             <Swiper
               modules={[Navigation, Pagination]}
               spaceBetween={40}
-              slidesPerView={1.1}
+              slidesPerView={1}
               breakpoints={{
-                640: { slidesPerView: 1 },
+                640: { slidesPerView: 1.5 },
                 1024: { slidesPerView: 2.5 },
                 1440: { slidesPerView: 4 },
               }}
@@ -436,6 +436,10 @@ export default function Home() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           {/* Heading */}
           <AnimatedSection className="mb-16">
+            <div className="flex justify-center mb-8">
+              <span className="h-1 w-24 bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full"></span>
+            </div>
+
             <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-white to-cyan-400">
               Experience the Art of Perfection
             </h2>
@@ -517,8 +521,16 @@ export default function Home() {
 
       {/* Why Choose Us Section */}
       <section className="py-20 bg-white dark:bg-gray-800">
+
+        {/* Subtle glowing background accent */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.08),_transparent_70%)] pointer-events-none"></div>
+
+        
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
+          <div className="flex justify-center mb-8">
+              <span className="h-1 w-24 bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full"></span>
+            </div>
             <h2 className="text-2xl md:text-4xl font-bold text-black dark:text-white mb-4">
               Why Choose Premier Car Services?
             </h2>
@@ -710,7 +722,7 @@ export default function Home() {
       <div className="fixed bottom-6 right-6 z-50">
         <Button
           onClick={handleWhatsAppClick}
-          className="w-14 h-14 rounded-full bg-green-500 hover:bg-green-600 shadow-2xl hover:scale-110 transition-all duration-300 animate-pulse"
+          className="w-14 h-14 rounded-full dark:bg-blue-900 bg-green-500 hover:bg-green-600 shadow-2xl hover:scale-110 transition-all duration-300 animate-pulse-slow"
           size="icon"
         >
           <MessageCircle className="w-6 h-6 text-white" />
