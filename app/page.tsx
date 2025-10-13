@@ -128,8 +128,8 @@ export default function Home() {
 
   const handleWhatsAppClick = () => {
     // Replace with your actual WhatsApp number
-    const phoneNumber = "971503324868";
-    const message = "Hi! I'm interested in your car services. Can you help me?";
+    const phoneNumber = "971562523632";
+    const message = "Hi! I'm interested in your car services. Can you help me?(ref: GoogleAds)";
     const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
   };
