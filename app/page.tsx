@@ -57,21 +57,21 @@ export default function Home() {
       description: 'Professional polishing services to restore your vehicle\'s original luster.',
       icon: Car,
       href: '/services/car-polishing',
-      image: '/images/CarPolishing.jpg'
+      image: '/images/carPolishing.jpg'
     },
     {
       title: 'Car Tinting',
       description: 'High-quality window tinting for privacy, UV protection, and enhanced aesthetics.',
       icon: Palette,
       href: '/services/car-tinting',
-      image: '/images/CarTint.jpg'
+      image: '/images/carTint.jpg'
     },
     {
       title: 'Car Wash',
       description: 'Comprehensive car washing services from basic wash to premium detailing.',
       icon: Droplets,
       href: '/services/car-wash',
-      image: '/images/CarWash.jpg'
+      image: '/images/carWash.jpg'
     },
     {
       title: 'Instant Help',
