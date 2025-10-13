@@ -75,14 +75,14 @@ export default function Prefooter() {
         <div className="flex flex-col gap-2">
           <h3 className="font-semibold mb-4 underline">Contact</h3>
           <a
-            href="tel:+1234567890"
+            href="tel:+971562523632"
             className="flex items-center space-x-2 hover:text-blue-400 transition-colors"
           >
             <Phone size={16} />
-            <span>+971 50 332 4868</span>
+            <span>+971 56 252 3632</span>
           </a>
           <a
-            href="https://wa.me/971503324868"
+            href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-2 hover:text-green-400 transition-colors"

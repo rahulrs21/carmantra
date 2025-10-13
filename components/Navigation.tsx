@@ -98,14 +98,14 @@ export function Navigation() {
             </Link>
             <div className="flex items-center space-x-4">
               <a
-                href="tel:+1234567890"
+                href="tel:+971562523632"
                 className="flex items-center px-3 py-1 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               >
                 <Phone size={16} />
-                <span className="text-sm">+971 50 332 4868</span>
+                <span className="text-sm">+971 56 252 3632</span>
               </a>
               <a
-                href="https://wa.me/971503324868"
+                href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex relative overflow-hidden items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full hover:bg-green-600 transition-colors text-sm"
@@ -181,12 +181,12 @@ export function Navigation() {
               </Link>
 
               <div className="flex items-center space-x-4 pt-4">
-                <a href="tel:+1234567890" className="flex items-center space-x-1 text-blue-400">
+                <a href="tel:+971562523632" className="flex items-center space-x-1 text-blue-400">
                   <Phone size={16} />
-                  <span className="text-sm">+971 50 332 4868</span>
+                  <span className="text-sm">+971 56 252 3632</span>
                 </a>
                 <a
-                  href="https://wa.me/971503324868"
+                  href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full text-sm"
