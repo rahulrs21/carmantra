@@ -25,7 +25,7 @@ export default function CarWashPage() {
       title: 'Express Wash',
       description: 'Quick and efficient exterior wash',
       features: ['Exterior wash', 'Wheel cleaning', 'Basic dry'],
-      price: '$15',
+      price: 'AED 15',
       duration: '15 min',
       popular: false
     },
@@ -33,7 +33,7 @@ export default function CarWashPage() {
       title: 'Full Service Wash',
       description: 'Complete interior and exterior cleaning',
       features: ['Exterior wash & wax', 'Interior vacuum', 'Window cleaning', 'Tire shine'],
-      price: '$35',
+      price: 'AED 35',
       duration: '45 min',
       popular: true
     },
@@ -41,7 +41,7 @@ export default function CarWashPage() {
       title: 'Premium Detail',
       description: 'Comprehensive detailing service',
       features: ['Full service wash', 'Interior detailing', 'Paint protection', 'Ceramic coating application'],
-      price: '$85',
+      price: 'AED 85',
       duration: '2 hours',
       popular: false
     },
@@ -49,7 +49,7 @@ export default function CarWashPage() {
       title: 'Ultimate Detail',
       description: 'Complete transformation package',
       features: ['Everything in Premium', 'Engine bay cleaning', 'Headlight restoration', 'Leather conditioning'],
-      price: '$150',
+      price: 'AED 150',
       duration: '4 hours',
       popular: false
     }

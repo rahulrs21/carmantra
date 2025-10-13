@@ -36,7 +36,7 @@ export default function CeramicCoatingPage() {
       title: 'Bronze Package',
       description: '1-layer ceramic coating with 2-year warranty',
       features: ['1 layer of ceramic coating', 'Paint decontamination', 'Basic paint correction'],
-      price: 'From $599',
+      price: 'From AED 599',
       duration: '1 day',
       warranty: '2 years'
     },
@@ -44,7 +44,7 @@ export default function CeramicCoatingPage() {
       title: 'Silver Package',
       description: '2-layer ceramic coating with enhanced protection',
       features: ['2 layers of ceramic coating', 'Complete paint correction', 'Wheel coating included'],
-      price: 'From $999',
+      price: 'From AED 999',
       duration: '2 days',
       warranty: '3 years'
     },
@@ -52,7 +52,7 @@ export default function CeramicCoatingPage() {
       title: 'Gold Package',
       description: 'Premium 3-layer system with maximum protection',
       features: ['3 layers of ceramic coating', 'Full paint correction', 'Wheels, glass & trim coating'],
-      price: 'From $1,499',
+      price: 'From AED 1,499',
       duration: '3 days',
       warranty: '5 years'
     }

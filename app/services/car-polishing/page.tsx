@@ -25,28 +25,28 @@ export default function CarPolishingPage() {
       title: 'Paint Correction',
       description: 'Remove swirl marks, scratches, and paint defects',
       features: ['Multi-stage polishing', 'Scratch removal', 'Swirl mark elimination'],
-      price: 'From $299',
+      price: 'From AED 299',
       duration: '4-6 hours'
     },
     {
       title: 'Show Car Polish',
       description: 'Competition-grade finish for car shows and special events',
       features: ['Mirror finish', 'Paint depth enhancement', 'Competition ready'],
-      price: 'From $499',
+      price: 'From AED 499',
       duration: '8-10 hours'
     },
     {
       title: 'Maintenance Polish',
       description: 'Regular polishing to maintain paint condition',
       features: ['Light polishing', 'Gloss enhancement', 'Minor imperfection removal'],
-      price: 'From $149',
+      price: 'From AED 149',
       duration: '2-3 hours'
     },
     {
       title: 'Headlight Restoration',
       description: 'Restore cloudy and yellowed headlights',
       features: ['UV damage removal', 'Clarity restoration', 'Protective coating'],
-      price: 'From $89',
+      price: 'From AED 89',
       duration: '1-2 hours'
     }
   ];

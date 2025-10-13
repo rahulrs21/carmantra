@@ -24,28 +24,28 @@ export default function CarTintingPage() {
       name: 'Ceramic Tint',
       vlt: '15%, 35%, 50%, 70%',
       features: ['Superior heat rejection', 'No signal interference', 'Color stable', 'Lifetime warranty'],
-      price: 'From $299',
+      price: 'From AED 299',
       popular: true
     },
     {
       name: 'Carbon Tint',
       vlt: '20%, 35%, 50%',
       features: ['Good heat rejection', 'Matte finish', 'Fade resistant', '5-year warranty'],
-      price: 'From $199',
+      price: 'From AED 199',
       popular: false
     },
     {
       name: 'Crystalline Tint',
       vlt: '40%, 70%, 90%',
       features: ['Maximum clarity', 'Excellent heat rejection', 'Nearly invisible', 'Premium option'],
-      price: 'From $499',
+      price: 'From AED 499',
       popular: false
     },
     {
       name: 'Dyed Tint',
       vlt: '15%, 35%, 50%',
       features: ['Budget friendly', 'Basic UV protection', 'Good privacy', '3-year warranty'],
-      price: 'From $99',
+      price: 'From AED 99',
       popular: false
     }
   ];
