@@ -325,11 +325,11 @@ export function ContactForm({ service }: ContactFormProps) {
             WhatsApp us:{' '}
             <a
               className="text-green-600 font-bold"
-              href="https://wa.me/+971503324868"
+              href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
               target="_blank"
               rel="noopener noreferrer"
             >
-              +971 50 332 4868
+              +971 56 252 3632
             </a>
           </button>
         </motion.div>
