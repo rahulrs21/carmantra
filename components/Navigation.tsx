@@ -102,10 +102,10 @@ export function Navigation() {
                 className="flex items-center px-3 py-1 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               >
                 <Phone size={16} />
-                <span className="text-sm">(123) 456-7890</span>
+                <span className="text-sm">+971 50 332 4868</span>
               </a>
               <a
-                href="https://wa.me/1234567890"
+                href="https://wa.me/971503324868"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex relative overflow-hidden items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full hover:bg-green-600 transition-colors text-sm"
@@ -183,10 +183,10 @@ export function Navigation() {
               <div className="flex items-center space-x-4 pt-4">
                 <a href="tel:+1234567890" className="flex items-center space-x-1 text-blue-400">
                   <Phone size={16} />
-                  <span className="text-sm">(123) 456-7890</span>
+                  <span className="text-sm">+971 50 332 4868</span>
                 </a>
                 <a
-                  href="https://wa.me/1234567890"
+                  href="https://wa.me/971503324868"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full text-sm"

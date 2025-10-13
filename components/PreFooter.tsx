@@ -79,10 +79,10 @@ export default function Prefooter() {
             className="flex items-center space-x-2 hover:text-blue-400 transition-colors"
           >
             <Phone size={16} />
-            <span>(123) 456-7890</span>
+            <span>+971 50 332 4868</span>
           </a>
           <a
-            href="https://wa.me/1234567890"
+            href="https://wa.me/971503324868"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-2 hover:text-green-400 transition-colors"

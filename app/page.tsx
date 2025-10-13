@@ -128,7 +128,7 @@ export default function Home() {
 
   const handleWhatsAppClick = () => {
     // Replace with your actual WhatsApp number
-    const phoneNumber = "1234567890";
+    const phoneNumber = "971503324868";
     const message = "Hi! I'm interested in your car services. Can you help me?";
     const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
@@ -310,7 +310,7 @@ export default function Home() {
                 // beforeImage="https://images.pexels.com/photos/3784424/pexels-photo-3784424.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
                 // afterImage="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
 
-                beforeImage='/images/Before.jpg'
+                beforeImage='/images/Before1.jpg'
                 afterImage='/images/After.jpg'
               />
             </div>
@@ -355,7 +355,7 @@ export default function Home() {
           <div className="overflow-visible px-2 md:px-10 rounded-2xl py-10"> {/* 👈 Added extra breathing room */}
             <Swiper
               modules={[Navigation, Pagination]}
-              spaceBetween={40}
+              spaceBetween={30}
               slidesPerView={1}
               breakpoints={{
                 640: { slidesPerView: 1.5 },
@@ -391,7 +391,7 @@ export default function Home() {
                         </div>
 
                         {/* Content */}
-                        <div className="p-8">
+                        <div className="p-8 relative overflow-hidden">
                           <p className="text-gray-300 mb-5 text-sm md:text-base leading-relaxed group-hover:text-gray-200 transition-colors">
                             {service.description}
                           </p>
@@ -401,6 +401,10 @@ export default function Home() {
                               size={18}
                               className="ml-2 group-hover:translate-x-1 transition-transform"
                             />
+                          </div>
+
+                          <div className='absolute -top-[6rem] md:-top-[8rem] right-0 opacity-5'>
+                            <span className=' font-extrabold  text-[16rem]'>{index + 1 }</span>
                           </div>
                         </div>
                       </div>
@@ -706,10 +710,10 @@ export default function Home() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button size="lg" className="bg-white dark:bg-gray-800 dark:text-white text-gray-900 hover:bg-blue-50">
-                  Call Now: (123) 456-7890
+                  Call Now: +971 50 332 4868
                 </Button>
                 <Button size="lg" variant="outline" className="border-white text-gray-900 dark:text-white hover:bg-white dark:bg-gray-800 hover:text-blue-900">
-                  Schedule Online
+                  Get a Free Quote
                 </Button>
               </div>
             </AnimatedSection>

@@ -168,17 +168,7 @@ export default function PPFWrappingPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      {/* <section className="py-20 bg-blue-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center text-center">
-            <h2 className="text-3xl font-bold mb-6">Protect Your Investment Today</h2>
-            <p className="text-lg text-blue-100 mb-8">
-              Don't wait until damage occurs. Protect your vehicle's paint with our premium PPF solutions and maintain its pristine condition for years to come.
-            </p>
-          </div>
-        </div>
-      </section> */}
+       
 
 
       {/* CTA Section */}
