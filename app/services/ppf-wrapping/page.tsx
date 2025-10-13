@@ -122,7 +122,8 @@ export default function PPFWrappingPage() {
               <div className="relative">
                 <Image
                   // src="https://images.pexels.com/photos/3806288/pexels-photo-3806288.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
-                  src="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  // src="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  src="/images/carppf.jpeg"
                   alt="PPF Application Process"
                   width={800}
                   height={600}

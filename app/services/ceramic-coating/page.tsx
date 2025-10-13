@@ -117,7 +117,7 @@ export default function CeramicCoatingPage() {
             <AnimatedSection delay={200}>
               <div className="relative">
                 <Image
-                  src="https://images.pexels.com/photos/5835359/pexels-photo-5835359.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  src="/images/CarCeramicCoat.jpg"
                   alt="Ceramic Coating Process"
                   width={800}
                   height={600}

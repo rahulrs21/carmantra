@@ -198,7 +198,7 @@ export default function ContactPage() {
 
           <div className="w-full h-96 rounded-xl overflow-hidden shadow-lg border border-gray-200">
             <iframe
-              src="https://www.google.com/maps?q=Faza+Home+Dubai,+UAE&output=embed"
+              src="https://www.google.com/maps?q=Car+Mantra+Auto+LLC+Dubai,+UAE&output=embed"
               width="100%"
               height="100%"
               style={{ border: 0 }}
@@ -214,7 +214,7 @@ export default function ContactPage() {
 
           <div className="space-y-5 text-gray-700 dark:text-gray-300">
             <p className="flex items-center gap-3">
-              <Mail className="text-blue-600" /> contact@rahuldxb.com
+              <Mail className="text-blue-600" /> contact@carmantra.ae
             </p>
             <p className="flex items-center gap-3">
               <Phone className="text-blue-600" /> +971 55 123 4567

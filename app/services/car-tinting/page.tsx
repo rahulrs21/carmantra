@@ -208,7 +208,7 @@ export default function CarTintingPage() {
             <AnimatedSection delay={200}>
               <div className="relative">
                 <Image
-                  src="https://images.pexels.com/photos/3760767/pexels-photo-3760767.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  src="/images/carTint.jpg"
                   alt="Window Tinting Installation"
                   width={800}
                   height={600}

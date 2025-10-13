@@ -43,63 +43,63 @@ export default function Home() {
       description: 'Premium paint protection film and vinyl wrapping for ultimate vehicle protection and style.',
       icon: Shield,
       href: '/services/ppf-wrapping',
-      image: 'https://images.pexels.com/photos/3784424/pexels-photo-3784424.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/carppf.jpeg'
     },
     {
       title: 'Ceramic Coating',
       description: 'Advanced ceramic coating technology for long-lasting protection and brilliant shine.',
       icon: Sparkles,
       href: '/services/ceramic-coating',
-      image: 'https://images.pexels.com/photos/3806288/pexels-photo-3806288.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/CarCeramicCoat.jpg'
     },
     {
       title: 'Car Polishing',
       description: 'Professional polishing services to restore your vehicle\'s original luster.',
       icon: Car,
       href: '/services/car-polishing',
-      image: 'https://images.pexels.com/photos/5835359/pexels-photo-5835359.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/CarPolishing.jpg'
     },
     {
       title: 'Car Tinting',
       description: 'High-quality window tinting for privacy, UV protection, and enhanced aesthetics.',
       icon: Palette,
       href: '/services/car-tinting',
-      image: 'https://images.pexels.com/photos/1592384/pexels-photo-1592384.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/CarTint.jpg'
     },
     {
       title: 'Car Wash',
       description: 'Comprehensive car washing services from basic wash to premium detailing.',
       icon: Droplets,
       href: '/services/car-wash',
-      image: 'https://images.pexels.com/photos/5835411/pexels-photo-5835411.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/CarWash.jpg'
     },
     {
       title: 'Instant Help',
       description: '24/7 roadside assistance and emergency car services when you need them most.',
       icon: Wrench,
       href: '/services/instant-help',
-      image: 'https://images.pexels.com/photos/4488662/pexels-photo-4488662.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/carInstantHelp.jpg'
     },
     {
       title: 'Pre-Purchase Inspection',
       description: 'Thorough vehicle inspection before purchase to ensure you make the right decision.',
       icon: SearchCheck,
       href: '/services/pre-purchase-inspection',
-      image: 'https://images.pexels.com/photos/5835411/pexels-photo-5835411.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/carInspection.jpg'
     },
     {
       title: 'Car Passing',
       description: 'Help with vehicle registration, inspection, and passing requirements.',
       icon: FileCheck,
       href: '/services/car-passing',
-      image: 'https://images.pexels.com/photos/3760767/pexels-photo-3760767.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/carPassing.jpg'
     },
     {
       title: 'Car Insurance',
       description: 'Comprehensive car insurance solutions tailored to your needs and budget.',
       icon: CarIcon,
       href: '/services/car-insurance',
-      image: 'https://images.pexels.com/photos/5384445/pexels-photo-5384445.jpeg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop'
+      image: '/images/carInsurance.jpg'
     },
   ];
 
@@ -307,8 +307,11 @@ export default function Home() {
             {/* Before/After Slider */}
             <div className="mt-10">
               <BeforeAfterSlider
-                beforeImage="https://images.pexels.com/photos/3784424/pexels-photo-3784424.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
-                afterImage="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
+                // beforeImage="https://images.pexels.com/photos/3784424/pexels-photo-3784424.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
+                // afterImage="https://wrapsters.ae/wp-content/uploads/2025/01/Paint-Protention-Film-PPF-1.jpg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop"
+
+                beforeImage='/images/Before.jpg'
+                afterImage='/images/After.jpg'
               />
             </div>
           </AnimatedSection>
@@ -469,15 +472,15 @@ export default function Home() {
           >
             {[
               {
-                src: "https://images.pexels.com/photos/4489724/pexels-photo-4489724.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                src: "/images/clips/car1.jpg",
                 alt: "Ceramic Coating Process",
               },
               {
-                src: "https://images.pexels.com/photos/97075/pexels-photo-97075.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                src: "/images/clips/car2.jpg",
                 alt: "Car Detailing Shine",
               },
               {
-                src: "https://images.pexels.com/photos/4489719/pexels-photo-4489719.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                src: "/images/clips/car4.jpg",
                 alt: "PPF Installation",
               },
               {
@@ -489,7 +492,7 @@ export default function Home() {
                 alt: "Car Wash Detailing",
               },
               {
-                src: "https://images.pexels.com/photos/6878150/pexels-photo-6878150.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080",
+                src: "/images/clips/car3.jpg",
                 alt: "Gloss Finish After PPF",
               },
             ].map((item, index) => (

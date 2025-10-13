@@ -183,7 +183,7 @@ export default function CarPolishingPage() {
             <AnimatedSection delay={200}>
               <div className="relative">
                 <Image
-                  src="https://images.pexels.com/photos/3806288/pexels-photo-3806288.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  src="/images/carPolishing.jpg"
                   alt="Before and After Polishing"
                   width={800}
                   height={600}

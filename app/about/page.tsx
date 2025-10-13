@@ -134,7 +134,7 @@ export default function SchedulePage(): JSX.Element {
 
       {/* Date time Picker */}
 
-      <div className="flex items-center justify-center py-12 bg-gray-50 px-4">
+      {/* <div className="flex items-center justify-center py-12 bg-gray-50 px-4">
         <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md">
           <h1 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
             Book Your Appointment
@@ -265,7 +265,7 @@ export default function SchedulePage(): JSX.Element {
             border-top-right-radius: 0.75rem;
           }
         `}</style>
-      </div>
+      </div> */}
     </div>
   );
 }

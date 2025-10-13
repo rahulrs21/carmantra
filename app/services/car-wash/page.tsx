@@ -223,7 +223,7 @@ export default function CarWashPage() {
             <AnimatedSection delay={200}>
               <div className="relative">
                 <Image
-                  src="https://images.pexels.com/photos/3784424/pexels-photo-3784424.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
+                  src="/images/carWash.jpg"
                   alt="Car Wash Process"
                   width={800}
                   height={600}
