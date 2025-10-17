@@ -15,6 +15,23 @@ export const metadata: Metadata = {
   title: 'Premier Car Services - Professional Auto Care',
   description:
     'Professional car services including PPF, ceramic coating, polishing, tinting, and more. Expert care for your vehicle.',
+  icons: {
+    icon: '/images/CarMantraLogoIcon.png',       // Default icon
+    shortcut: '/images/CarMantraLogoIcon.png',         
+    apple: '/images/CarMantraLogoIcon.png',
+  },
+  keywords: [
+    'car services',
+    'auto care',
+    'PPF',
+    'ceramic coating',
+    'car polishing',
+    'window tinting',
+    'vehicle detailing',
+    'paint protection film',
+    'automotive services',
+    'car maintenance',
+  ],
 };
 
 export default function RootLayout({

@@ -33,6 +33,7 @@ import "swiper/css/navigation";
 
 import { useMediaQuery } from "react-responsive";
 import BeforeAfterSlider from '@/components/BeforeAfterSlider';
+import GoogleReviewBadge from '@/components/GoogleReviewBadge';
 
 
 
@@ -250,6 +251,8 @@ export default function Home() {
               Explore Services
               <ArrowRight size={20} className="ml-2" />
             </Button>
+
+
             <Button size="lg" variant="outline" className="relative border-white bg-blue-900 text-white hover:bg-white   hover:text-blue-900 text-lg px-8 py-3"
               onClick={() => {
                 const section = document.getElementById("contact_form");
@@ -274,9 +277,23 @@ export default function Home() {
           <div className="mt-12 text-white">
             <TrustIndicator />
           </div>
+
+
+
+
+
+          <div className='flex flex-col'>
+            <GoogleReviewBadge />
+          </div>
         </AnimatedSection>
 
-        {/* Floating particles animation */}
+
+
+
+
+
+         
+
 
       </section>
 
@@ -319,7 +336,7 @@ export default function Home() {
 
 
 
-         
+
 
 
       </section>
@@ -404,7 +421,7 @@ export default function Home() {
                           </div>
 
                           <div className='absolute -top-[6rem] md:-top-[8rem] right-0 opacity-5'>
-                            <span className=' font-extrabold  text-[16rem]'>{index + 1 }</span>
+                            <span className=' font-extrabold  text-[16rem]'>{index + 1}</span>
                           </div>
                         </div>
                       </div>
@@ -532,10 +549,10 @@ export default function Home() {
         {/* Subtle glowing background accent */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.08),_transparent_70%)] pointer-events-none"></div>
 
-        
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-          <div className="flex justify-center mb-8">
+            <div className="flex justify-center mb-8">
               <span className="h-1 w-24 bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full"></span>
             </div>
             <h2 className="text-2xl md:text-4xl font-bold text-black dark:text-white mb-4">
@@ -633,7 +650,7 @@ export default function Home() {
             <p className="text-lg md:text-xl text-gray-900 dark:text-white">Trusted by thousands of satisfied customers</p>
           </AnimatedSection>
 
-         
+
 
 
 
@@ -689,7 +706,7 @@ export default function Home() {
               ❯
             </button>
           </div>
-        </div> 
+        </div>
 
       </section>
 
@@ -709,12 +726,21 @@ export default function Home() {
                 Get a personalized quote for your vehicle today. Our experts are ready to help you choose the perfect service package.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" className="bg-white dark:bg-gray-800 dark:text-white text-gray-900 hover:bg-blue-50">
-                  Call Now: +971 50 332 4868
-                </Button>
-                <Button size="lg" variant="outline" className="border-white text-gray-900 dark:text-white hover:bg-white dark:bg-gray-800 hover:text-blue-900">
-                  Get a Free Quote
-                </Button>
+
+                <Link href="tel:+971562523632" className="">
+
+                  <Button size="lg" className="bg-white dark:bg-gray-800 dark:text-white text-gray-900 hover:bg-blue-50" >
+                    Call Now: +971 56 252 3632
+                  </Button>
+                </Link>
+                 
+
+                 <Link href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)" target='_blank' className="">
+                  <Button size="lg" variant="outline" className="border-white text-gray-900 dark:text-white hover:bg-white dark:bg-gray-800 hover:text-blue-900">
+                    Get a Free Quote
+                  </Button>
+                 </Link>
+
               </div>
             </AnimatedSection>
 
