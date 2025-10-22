@@ -109,14 +109,14 @@ export function Navigation() {
             </Link>
             <div className="flex items-center space-x-4">
               <a
-                href="tel:+971562523632"
+                href="tel:+971561093021"
                 className="flex items-center px-3 py-1 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               >
                 <Phone size={16} />
-                <span className="text-sm">+971 56 252 3632</span>
+                <span className="text-sm">+971 56 109 3021</span>
               </a>
               <a
-                href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
+                href="https://wa.me/971561093021?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex relative overflow-hidden items-center space-x-1 bg-green-500 text-white px-3 py-1 rounded-full hover:bg-green-600 transition-colors text-sm"
