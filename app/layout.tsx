@@ -8,6 +8,7 @@ import FluidSmoke from '@/components/FluidSmoke';
 import { RouteLoader } from '@/components/RouteLoader';  // ✅ custom wrapper
 import Footer from '@/components/Footer';
 import Prefooter from '@/components/PreFooter';
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -41,6 +42,24 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth">
+
+
+      {/* ✅ Google Tag (gtag.js) */}
+      <Script
+        async
+        src="https://www.googletagmanager.com/gtag/js?id=AW-17505469023"
+      />
+      <Script id="google-ads-tag">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'AW-17505469023');
+        `}
+      </Script>
+
+
+
       <body>
         {/* ✅ Top Navigation */}
         <Navigation />
