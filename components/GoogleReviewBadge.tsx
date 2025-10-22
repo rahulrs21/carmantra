@@ -17,7 +17,7 @@ export default function GoogleReviewBadge() {
                 href="https://g.page/r/CQjSKNsh2jUlEAI/review" // 🔗 replace with your Google Reviews link
                 target="_blank"
                 rel="noopener noreferrer"
-                className="relative flex items-center bg-white/80 hover:bg-white shadow-xl rounded-full px-4 py-2 border border-gray-200 hover:scale-105 hover:shadow-2xl transition-transform duration-300"
+                className="relative flex items-center bg-white hover:bg-white/95 shadow-xl rounded-full px-4 py-2 border border-gray-200 hover:scale-105 hover:shadow-2xl transition-transform duration-300"
             >
 
                 <Image
