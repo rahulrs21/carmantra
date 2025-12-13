@@ -92,6 +92,7 @@ export default function AdminDashboard() {
             <p><strong>Phone:</strong> {lead.phone}</p>
             <p><strong>Email:</strong> {lead.email}</p>
             <p><strong>Service:</strong> {lead.service}</p>
+            <p><strong>Message:</strong> {lead.message}</p>
             <p className="text-sm text-gray-500">
               {new Date(lead.createdAt.seconds * 1000).toLocaleString()}
             </p>
