@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ success: true });
     } catch (err: any) {
-        console.error(err);
+        try { console.error(err); } catch(e) { /* swallow */ }
         return NextResponse.json({ success: false, error: err.message || 'Unknown error' });
     }
 }

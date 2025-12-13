@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function Footer() {
+  const pathname = usePathname();
+  // Hide footer on admin routes
+  if (pathname && pathname.startsWith('/admin')) return null;
+
   const currentYear = new Date().getFullYear();
 
   return (

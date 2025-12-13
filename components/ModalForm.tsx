@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { X, Check, LoaderIcon } from 'lucide-react';
 import { set } from 'date-fns';
 import Invoice from './Invoice';
+import { db } from "@/lib/firebase";
+import { collection, addDoc } from "firebase/firestore";
+import { safeConsoleLog, safeConsoleError } from '@/lib/safeConsole';
 
 interface ModalFormProps {
   selectedService: string;
@@ -55,9 +58,28 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
         body: new URLSearchParams(formData),
       });
 
+
+      // SAVE TO FIREBASE
+      try {
+        await addDoc(collection(db, "crm-leads"), {
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          service: formData.service,
+          message: formData.message,
+          createdAt: new Date(),
+        });
+
+        safeConsoleLog("🔥 Lead saved to Firebase!");
+      } catch (error) {
+        try { safeConsoleError("❌ Firebase Error:", error); } catch(e) { /* swallow */ }
+      }
+
+
+
       const result = await response.json();
       setLoading(false);
-      console.log(result);
+      safeConsoleLog(result);
 
       if (result.status === "success") {
         setSubmitted(true);
@@ -66,7 +88,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
         alert("Failed to submit. Please try again.");
       }
     } catch (error) {
-      console.error("Error submitting form:", error);
+      try { console.error("Error submitting form:", error); } catch(e) { /* swallow */ }
       alert("An error occurred. Please try again.");
     }
   };
@@ -197,8 +219,8 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
               /> */}
 
               <button className="mt-6 px-4 py-2 bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition">
-                WhatsApp us: <a className="text-green-600 font-bold" href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)" 
-                target="_blank" rel="noopener noreferrer">+971 56 252 3632</a>
+                WhatsApp us: <a className="text-green-600 font-bold" href="https://wa.me/971562523632?text=Hi%2C%20I%27m%20interested%20in%20Car%20Service!%20Can%20I%20get%20more%20Info%3F(Ref%3AGoogleAd)"
+                  target="_blank" rel="noopener noreferrer">+971 56 252 3632</a>
               </button>
             </motion.div>
           )}

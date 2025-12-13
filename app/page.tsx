@@ -124,7 +124,7 @@ export default function Home() {
   }, []);
 
 
-  console.log('AAA', [Math.floor(Math.random() * 10)])
+  // removed debug log
 
 
   const handleWhatsAppClick = () => {

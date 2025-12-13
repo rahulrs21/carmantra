@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { Phone, MessageCircle } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 export default function Prefooter() {
+  const pathname = usePathname();
+  // Hide prefooter on admin routes
+  if (pathname && pathname.startsWith('/admin')) return null;
   const services = [
     { name: "PPF & Wrapping", href: "/services/ppf-wrapping" },
     { name: "Ceramic Coating", href: "/services/ceramic-coating" },

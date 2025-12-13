@@ -60,7 +60,7 @@ export default function RootLayout({
 
 
 
-      <body>
+      <body suppressHydrationWarning={true}>
         {/* ✅ Top Navigation */}
         <Navigation />
 

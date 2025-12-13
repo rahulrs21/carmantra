@@ -66,7 +66,7 @@ export function ContactForm({ service }: ContactFormProps) {
         alert('❌ Something went wrong. Please try again later.');
       }
     } catch (err) {
-      console.error(err);
+      try { console.error(err); } catch(e) { /* swallow */ }
       alert('❌ Something went wrong. Please try again.');
     } finally {
       setLoading(false);

@@ -1,5 +1,6 @@
 
 "use client"
+import { safeConsoleError } from '@/lib/safeConsole';
 
 function SubmitDataSheet() {
 
@@ -12,7 +13,7 @@ function SubmitDataSheet() {
       body:(`Name=${e.target.name.value}&Email=${e.target.email.value}`)
     }).then(res=>res.text()).then(data=>{
       alert(data)
-    }).catch(error=>console.log(error))
+    }).catch(error=>safeConsoleError(error))
   }
 
 

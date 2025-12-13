@@ -2,11 +2,15 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Menu, X, Phone, MessageCircle, Moon, Sun } from 'lucide-react';
 import { motion } from "framer-motion";
 import Image from 'next/image';
 
 export function Navigation() {
+  const pathname = usePathname();
+  // Hide navbar on admin routes
+  if (pathname && pathname.startsWith('/admin')) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [isTop, setIsTop] = useState(true);
 

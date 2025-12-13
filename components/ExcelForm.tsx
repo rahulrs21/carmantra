@@ -26,7 +26,7 @@ export const ExcelForm = () => {
       }
     } catch (err) {
       setMessage('Error saving data');
-      console.error(err);
+      try { console.error(err); } catch(e) { /* swallow */ }
     }
   };
 
