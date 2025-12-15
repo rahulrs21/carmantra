@@ -8,13 +8,13 @@ export async function POST(req: NextRequest) {
         const data = await req.json();
         const { name, email, phone, service, message } = data;
 
-        await resend.emails.send({
+        // Support optional attachment (base64 encoded) in the request body
+        const attachment = data?.attachment;
+
+        const emailPayload: any = {
             from: 'Car Mantra <onboarding@resend.dev>',
             to: 'rahulrs2448@gmail.com',
             subject: `New Quote Request: ${service}`,
-
-           
-
             html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eaeaea; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.08);">
                 <div style="background: linear-gradient(90deg, #1e3a8a, #2563eb); color: white; padding: 20px; text-align: center;">
@@ -47,9 +47,14 @@ export async function POST(req: NextRequest) {
                 <div style="background-color: #f3f4f6; text-align: center; padding: 15px; font-size: 12px; color: #6b7280;">
                 © ${new Date().getFullYear()} Car Mantra. All rights reserved.
                 </div>
-            </div>`,
+            </div>`
+        };
 
-        });
+        if (attachment && attachment.name && attachment.data) {
+            emailPayload.attachments = [{ name: attachment.name, data: attachment.data, type: attachment.type || 'application/octet-stream' }];
+        }
+
+        await resend.emails.send(emailPayload);
 
         return NextResponse.json({ success: true });
     } catch (err: any) {

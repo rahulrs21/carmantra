@@ -2,13 +2,49 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Public website leads
+    match /crm-leads/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // User roles (self-read only)
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
 
-    match /leads/{leadId} {
-      allow read, write: if request.auth != null;
+    // Optional legacy support
+    match /user/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Helper: is this user an admin according to users/{uid}.role
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Quotations: allow admin OR the document owner (ownerId field) to read.
+    // Allow create if authenticated and ownerId in the incoming resource matches.
+    // Allow update/delete to admin or document owner.
+    match /quotations/{docId} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.ownerId == request.auth.uid);
+      allow create: if request.auth != null && (isAdmin() || request.auth.uid == request.resource.data.ownerId);
+      allow update, delete: if isAdmin() || (request.auth != null && resource.data.ownerId == request.auth.uid);
+    }
+
+    // Invoices: similar owner/admin model
+    match /invoices/{docId} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.ownerId == request.auth.uid);
+      allow create: if request.auth != null && (isAdmin() || request.auth.uid == request.resource.data.ownerId);
+      allow update, delete: if isAdmin() || (request.auth != null && resource.data.ownerId == request.auth.uid);
+    }
+
+    // Sent forms: admin-only for now
+    match /sentForms/{docId} {
+      allow read, write: if isAdmin();
     }
   }
 }
