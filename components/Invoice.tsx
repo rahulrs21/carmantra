@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import jsPDF from "jspdf";
+import { formatDate as formatDateUtil } from '@/lib/utils';
 
 interface InvoiceProps {
     data: {
@@ -55,7 +56,7 @@ export default function Invoice({ data, onClose }: InvoiceProps) {
         //  // Date
         doc.setFontSize(12);
         doc.setTextColor(...textColor);
-        doc.text(`Date: ${formatDate(new Date())}`, 160, 30);
+        doc.text(`Date: ${formatDateUtil(new Date())}`, 160, 30);
 
 
 
@@ -67,7 +68,7 @@ export default function Invoice({ data, onClose }: InvoiceProps) {
         if (data.message) {
             doc.text(`Message: ${data.message}`, 20, 80);
         }
-        doc.text(`Date: ${formatDate(new Date())}`, 20, 90);
+        doc.text(`Date: ${formatDateUtil(new Date())}`, 20, 90);
 
         // Table header
         doc.setDrawColor(...lightGray);
@@ -99,13 +100,6 @@ export default function Invoice({ data, onClose }: InvoiceProps) {
         doc.save(`${data.invoiceNumber || "Invoice"}.pdf`);
     };
 
-    const formatDate = (date: Date) => {
-        const day = String(date.getDate()).padStart(2, "0");
-        const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-based
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-    };
-
     return (
         <div className="bg-white shadow-lg rounded-lg p-6 w-full max-w-lg mx-auto">
             <h2 className="text-2xl font-bold mb-4 text-center">Invoice Preview</h2>
@@ -114,7 +108,7 @@ export default function Invoice({ data, onClose }: InvoiceProps) {
             <p><strong>Phone:</strong> {data.phone}</p>
             <p><strong>Service:</strong> {data.service}</p>
             {data.message && <p><strong>Message:</strong> {data.message}</p>}
-            <p><strong>Date:</strong> {formatDate(new Date())}</p>
+            <p><strong>Date:</strong> {formatDateUtil(new Date())}</p>
 
             <p className="text-right font-semibold mt-4">
                 Amount Due: <span className="text-blue-600">$100</span>

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, Timestamp, addDoc, collection } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { formatDateTime } from '@/lib/utils';
 
 export default function BookServiceDetails() {
   const params = useParams();
@@ -18,6 +19,29 @@ export default function BookServiceDetails() {
   const [rescheduling, setRescheduling] = useState(false);
   const [newScheduleDate, setNewScheduleDate] = useState<string>('');
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
+  const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
+  const [billingItems, setBillingItems] = useState([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
+  const [laborCharges, setLaborCharges] = useState(0);
+  const [discount, setDiscount] = useState(0);
+  const [paymentTerms, setPaymentTerms] = useState('cash');
+  const [paymentTermsOther, setPaymentTermsOther] = useState('');
+  const [editForm, setEditForm] = useState({
+    firstName: '',
+    lastName: '',
+    mobileNo: '',
+    email: '',
+    country: '',
+    state: '',
+    city: '',
+    address: '',
+    vehicleType: '',
+    vehicleBrand: '',
+    modelName: '',
+    numberPlate: '',
+    fuelType: '',
+  });
 
   // Helper functions
   function getMinDateTime(): string {
@@ -102,6 +126,22 @@ export default function BookServiceDetails() {
           const date = data.scheduledDate.toDate ? data.scheduledDate.toDate() : new Date(data.scheduledDate);
           setNewScheduleDate(date.toISOString().slice(0, 16));
         }
+        // pre-fill edit form
+        setEditForm({
+          firstName: data.firstName || '',
+          lastName: data.lastName || '',
+          mobileNo: data.mobileNo || '',
+          email: data.email || '',
+          country: data.country || '',
+          state: data.state || '',
+          city: data.city || '',
+          address: data.address || '',
+          vehicleType: data.vehicleType || '',
+          vehicleBrand: data.vehicleBrand || '',
+          modelName: data.modelName || '',
+          numberPlate: data.numberPlate || '',
+          fuelType: data.fuelType || '',
+        });
       } catch (err: any) {
         safeConsoleError('Book service fetch error', err);
       } finally {
@@ -168,17 +208,124 @@ export default function BookServiceDetails() {
     }
   }
 
-  async function markComplete() {
-    setStatus('Marking as complete...');
+  function markComplete() {
+    // Initialize billing items with service category
+    setBillingItems([{ 
+      description: service.category || 'Service', 
+      quantity: 1, 
+      rate: 0, 
+      amount: 0 
+    }]);
+    setLaborCharges(0);
+    setDiscount(0);
+    setPaymentTerms('cash');
+    setPaymentTermsOther('');
+    setShowBilling(true);
+  }
+
+  function addBillingItem() {
+    setBillingItems([...billingItems, { description: '', quantity: 1, rate: 0, amount: 0 }]);
+  }
+
+  function removeBillingItem(index: number) {
+    if (billingItems.length > 1) {
+      setBillingItems(billingItems.filter((_, i) => i !== index));
+    }
+  }
+
+  function updateBillingItem(index: number, field: string, value: any) {
+    const updated = [...billingItems];
+    updated[index] = { ...updated[index], [field]: value };
+    
+    // Auto-calculate amount
+    if (field === 'quantity' || field === 'rate') {
+      updated[index].amount = updated[index].quantity * updated[index].rate;
+    }
+    
+    setBillingItems(updated);
+  }
+
+  function calculateBillingTotal() {
+    const itemsTotal = billingItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const subtotal = itemsTotal + laborCharges;
+    const tax = subtotal * 0.05; // 5% VAT
+    const grandTotal = subtotal + tax - discount;
+    
+    return {
+      itemsTotal,
+      subtotal,
+      tax,
+      grandTotal: Math.max(0, grandTotal)
+    };
+  }
+
+  async function handleBillingSave() {
+    const totals = calculateBillingTotal();
+    
+    // Validate
+    if (totals.grandTotal === 0) {
+      setStatus('Please add service charges');
+      return;
+    }
+    
+    const hasEmptyItems = billingItems.some(item => !item.description || item.rate === 0);
+    if (hasEmptyItems) {
+      setStatus('Please fill all service items');
+      return;
+    }
+    
+    setStatus('Creating invoice...');
+    
     try {
+      // Generate invoice number
+      const invoiceNumber = `INV-${Date.now()}`;
+      
+      // Create invoice document
+      const invoiceData = {
+        invoiceNumber,
+        serviceBookingId: id,
+        jobCardNo: service.jobCardNo || '',
+        customerName: `${service.firstName} ${service.lastName}`,
+        customerEmail: service.email || '',
+        customerMobile: service.mobileNo || '',
+        vehicleDetails: {
+          type: service.vehicleType || '',
+          brand: service.vehicleBrand || '',
+          model: service.modelName || '',
+          plate: service.numberPlate || '',
+        },
+        serviceCategory: service.category || '',
+        items: billingItems,
+        laborCharges,
+        itemsTotal: totals.itemsTotal,
+        subtotal: totals.subtotal,
+        taxRate: 5,
+        taxAmount: totals.tax,
+        discount,
+        total: totals.grandTotal,
+        paymentStatus: 'unpaid',
+        paymentTerms,
+        paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+      
+      const docRef = await addDoc(collection(db, 'invoices'), invoiceData);
+      
+      // Mark service as completed
       await updateDoc(doc(db, 'bookedServices', id!), {
         status: 'completed',
+        invoiceId: docRef.id,
+        completedAt: Timestamp.now(),
       });
-      setService({ ...service, status: 'completed' });
-      setStatus('Service marked as completed');
+      
+      setService({ ...service, status: 'completed', invoiceId: docRef.id });
+      setCreatedInvoiceId(docRef.id);
+      setStatus('✓ Invoice created and service marked as completed!');
+      setShowBilling(false);
     } catch (err: any) {
-      safeConsoleError('Mark complete error', err);
-      setStatus('Failed to mark service as completed');
+      safeConsoleError('Billing save error', err);
+      setStatus('Failed to create invoice: ' + err.message);
     }
   }
 
@@ -198,12 +345,55 @@ export default function BookServiceDetails() {
     }
   }
 
+  async function handleUpdate() {
+    setStatus('Updating...');
+    try {
+      await updateDoc(doc(db, 'bookedServices', id!), {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        mobileNo: editForm.mobileNo,
+        email: editForm.email,
+        country: editForm.country,
+        state: editForm.state,
+        city: editForm.city,
+        address: editForm.address,
+        vehicleType: editForm.vehicleType,
+        vehicleBrand: editForm.vehicleBrand,
+        modelName: editForm.modelName,
+        numberPlate: editForm.numberPlate,
+        fuelType: editForm.fuelType,
+      });
+      setService({ ...service, ...editForm });
+      setStatus('✓ Details updated successfully');
+      setEditing(false);
+      setTimeout(() => setStatus(null), 3000);
+    } catch (err: any) {
+      safeConsoleError('Update error', err);
+      setStatus('Failed to update details');
+    }
+  }
+
+  function cancelEdit() {
+    setEditForm({
+      firstName: service.firstName || '',
+      lastName: service.lastName || '',
+      mobileNo: service.mobileNo || '',
+      email: service.email || '',
+      country: service.country || '',
+      state: service.state || '',
+      city: service.city || '',
+      address: service.address || '',
+      vehicleType: service.vehicleType || '',
+      vehicleBrand: service.vehicleBrand || '',
+      modelName: service.modelName || '',
+      numberPlate: service.numberPlate || '',
+      fuelType: service.fuelType || '',
+    });
+    setEditing(false);
+  }
+
   if (loading) return <div className="p-6 text-center">Loading...</div>;
   if (!service) return <div className="p-6 text-center text-red-600">Service not found</div>;
-
-  const scheduledDate = service.scheduledDate?.toDate
-    ? service.scheduledDate.toDate().toLocaleString()
-    : new Date(service.scheduledDate).toLocaleString();
 
   return (
     <div className="space-y-6">
@@ -238,7 +428,7 @@ export default function BookServiceDetails() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Scheduled Date:</span>
-                <span className="font-medium">{scheduledDate}</span>
+                <span className="font-medium">{formatDateTime(service.scheduledDate)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Status:</span>
@@ -251,36 +441,129 @@ export default function BookServiceDetails() {
 
           {/* Customer Details */}
           <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Customer Details</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Customer Details</h2>
+              {!editing && service.status !== 'cancelled' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditing(true)}
+                  className="text-xs"
+                >
+                  ✏️ Edit
+                </Button>
+              )}
+            </div>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Name:</span>
-                <span className="font-medium">{service.firstName} {service.lastName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Mobile:</span>
-                <span className="font-medium">{service.mobileNo}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Email:</span>
-                <span className="font-medium">{service.email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Country:</span>
-                <span className="font-medium">{service.country}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">State:</span>
-                <span className="font-medium">{service.state || '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">City:</span>
-                <span className="font-medium">{service.city || '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Address:</span>
-                <span className="font-medium">{service.address}</span>
-              </div>
+              {editing ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">First Name</label>
+                      <input
+                        type="text"
+                        value={editForm.firstName}
+                        onChange={(e) => setEditForm({...editForm, firstName: e.target.value})}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Last Name</label>
+                      <input
+                        type="text"
+                        value={editForm.lastName}
+                        onChange={(e) => setEditForm({...editForm, lastName: e.target.value})}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Mobile</label>
+                    <input
+                      type="text"
+                      value={editForm.mobileNo}
+                      onChange={(e) => setEditForm({...editForm, mobileNo: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Country</label>
+                    <input
+                      type="text"
+                      value={editForm.country}
+                      onChange={(e) => setEditForm({...editForm, country: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">State</label>
+                    <input
+                      type="text"
+                      value={editForm.state}
+                      onChange={(e) => setEditForm({...editForm, state: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={editForm.city}
+                      onChange={(e) => setEditForm({...editForm, city: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Address</label>
+                    <input
+                      type="text"
+                      value={editForm.address}
+                      onChange={(e) => setEditForm({...editForm, address: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Name:</span>
+                    <span className="font-medium">{service.firstName} {service.lastName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Mobile:</span>
+                    <span className="font-medium">{service.mobileNo}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Email:</span>
+                    <span className="font-medium">{service.email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Country:</span>
+                    <span className="font-medium">{service.country}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">State:</span>
+                    <span className="font-medium">{service.state || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">City:</span>
+                    <span className="font-medium">{service.city || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Address:</span>
+                    <span className="font-medium">{service.address}</span>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
 
@@ -288,26 +571,106 @@ export default function BookServiceDetails() {
           <Card className="p-6">
             <h2 className="text-xl font-semibold mb-4">Vehicle Details</h2>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Type:</span>
-                <span className="font-medium">{service.vehicleType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Brand:</span>
-                <span className="font-medium">{service.vehicleBrand}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Model:</span>
-                <span className="font-medium">{service.modelName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Number Plate:</span>
-                <span className="font-medium">{service.numberPlate}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Fuel Type:</span>
-                <span className="font-medium">{service.fuelType}</span>
-              </div>
+              {editing ? (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
+                    <select
+                      value={editForm.vehicleType}
+                      onChange={(e) => setEditForm({...editForm, vehicleType: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">Select Type</option>
+                      <option value="sedan">Sedan</option>
+                      <option value="suv">SUV</option>
+                      <option value="hatchback">Hatchback</option>
+                      <option value="coupe">Coupe</option>
+                      <option value="truck">Truck</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Brand</label>
+                    <input
+                      type="text"
+                      value={editForm.vehicleBrand}
+                      onChange={(e) => setEditForm({...editForm, vehicleBrand: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Model</label>
+                    <input
+                      type="text"
+                      value={editForm.modelName}
+                      onChange={(e) => setEditForm({...editForm, modelName: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Number Plate</label>
+                    <input
+                      type="text"
+                      value={editForm.numberPlate}
+                      onChange={(e) => setEditForm({...editForm, numberPlate: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
+                    <select
+                      value={editForm.fuelType}
+                      onChange={(e) => setEditForm({...editForm, fuelType: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">Select Fuel</option>
+                      <option value="petrol">Petrol</option>
+                      <option value="diesel">Diesel</option>
+                      <option value="electric">Electric</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2 pt-3">
+                    <Button
+                      size="sm"
+                      onClick={handleUpdate}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      💾 Save Changes
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelEdit}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Type:</span>
+                    <span className="font-medium">{service.vehicleType}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Brand:</span>
+                    <span className="font-medium">{service.vehicleBrand}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Model:</span>
+                    <span className="font-medium">{service.modelName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Number Plate:</span>
+                    <span className="font-medium">{service.numberPlate}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Fuel Type:</span>
+                    <span className="font-medium">{service.fuelType}</span>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
 
@@ -472,6 +835,43 @@ export default function BookServiceDetails() {
             </div>
           </Card>
 
+          {/* Invoice Section */}
+          {service.invoiceId && (
+            <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 className="font-semibold text-gray-900">Invoice Generated</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                An invoice has been created for this service.
+              </p>
+              <div className="space-y-2">
+                <Button
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => router.push(`/admin/invoice/${service.invoiceId}`)}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  View Invoice
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full border-green-300 text-green-700 hover:bg-green-100"
+                  onClick={() => router.push(`/admin/invoice/${service.invoiceId}`)}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download PDF
+                </Button>
+              </div>
+            </Card>
+          )}
+
           {/* Reschedule Form */}
           {rescheduling && service.status !== 'completed' && service.status !== 'cancelled' && (
             <Card className="p-6 bg-blue-50">
@@ -557,6 +957,308 @@ export default function BookServiceDetails() {
                 Open original
               </a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Billing Modal */}
+      {showBilling && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60" onClick={() => setShowBilling(false)} />
+          <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full z-10 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Create Invoice & Complete Service</h2>
+              <button 
+                className="text-gray-500 hover:text-gray-700" 
+                onClick={() => setShowBilling(false)}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 grid md:grid-cols-3 gap-6">
+              {/* Left Column - Billing Form */}
+              <div className="md:col-span-2 space-y-6">
+                {/* Customer & Vehicle Summary */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-900 mb-3">Customer & Vehicle Details</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">Customer:</span>
+                      <p className="font-medium">{service.firstName} {service.lastName}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Job Card:</span>
+                      <p className="font-medium">{service.jobCardNo || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Vehicle:</span>
+                      <p className="font-medium">{service.vehicleBrand} {service.modelName}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Plate:</span>
+                      <p className="font-medium">{service.numberPlate}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Service:</span>
+                      <p className="font-medium">{service.category}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Mobile:</span>
+                      <p className="font-medium">{service.mobileNo}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Service Items */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-900">Service Items</h3>
+                    <button
+                      onClick={addBillingItem}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      + Add Item
+                    </button>
+                  </div>
+                  
+                  {/* Column Headers */}
+                  <div className="grid grid-cols-12 gap-2 mb-2 px-3">
+                    <div className="col-span-5 text-xs font-semibold text-gray-600 uppercase">Description</div>
+                    <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Quantity</div>
+                    <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Rate</div>
+                    <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Amount</div>
+                    <div className="col-span-1"></div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {billingItems.map((item, index) => (
+                      <div key={index} className="grid grid-cols-12 gap-2 items-start bg-gray-50 p-3 rounded">
+                        <div className="col-span-5">
+                          <input
+                            type="text"
+                            placeholder="Service/Part description"
+                            value={item.description}
+                            onChange={(e) => updateBillingItem(index, 'description', e.target.value)}
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input
+                            type="number"
+                            placeholder="Qty"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateBillingItem(index, 'quantity', parseFloat(e.target.value) || 1)}
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input
+                            type="number"
+                            placeholder="Rate"
+                            min="0"
+                            step="0.01"
+                            value={item.rate}
+                            onChange={(e) => updateBillingItem(index, 'rate', parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input
+                            type="number"
+                            value={item.amount.toFixed(2)}
+                            readOnly
+                            className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm bg-white font-medium"
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-center">
+                          {billingItems.length > 1 && (
+                            <button
+                              onClick={() => removeBillingItem(index)}
+                              className="text-red-500 hover:text-red-700"
+                              title="Remove item"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Labor Charges */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Labor Charges
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter labor charges"
+                    min="0"
+                    step="0.01"
+                    value={laborCharges}
+                    onChange={(e) => setLaborCharges(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                  />
+                </div>
+
+                {/* Discount */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Discount
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter discount amount"
+                    min="0"
+                    step="0.01"
+                    value={discount}
+                    onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                  />
+                </div>
+
+                {/* Payment Terms */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Terms
+                  </label>
+                  <select
+                    value={paymentTerms}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setPaymentTerms(value);
+                      // This is for billing modal - payment status is always 'unpaid' initially
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                  >
+                    <option value="card">Credit/Debit Card</option>
+                    <option value="cash">Cash on Delivery</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="tabby">Tabby/Tamara</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {paymentTerms === 'other' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Specify Payment Method
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter custom payment method"
+                      value={paymentTermsOther}
+                      onChange={(e) => setPaymentTermsOther(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column - Summary */}
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-gray-900 mb-4">Invoice Summary</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Items Total:</span>
+                      <span className="font-medium">AED {calculateBillingTotal().itemsTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Labor Charges:</span>
+                      <span className="font-medium">AED {laborCharges.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm pt-2 border-t">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">AED {calculateBillingTotal().subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Tax (5% VAT):</span>
+                      <span className="font-medium text-blue-600">AED {calculateBillingTotal().tax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Discount:</span>
+                      <span className="font-medium text-red-600">- AED {discount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-blue-300">
+                      <span className="text-gray-900">Grand Total:</span>
+                      <span className="text-blue-600">AED {calculateBillingTotal().grandTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {status && (
+                  <div className={`p-3 rounded text-sm ${
+                    status.includes('Failed') || status.includes('Please') 
+                      ? 'bg-red-50 text-red-700 border border-red-200' 
+                      : 'bg-green-50 text-green-700 border border-green-200'
+                  }`}>
+                    {status}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleBillingSave}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                >
+                  Save Invoice & Mark Complete
+                </button>
+
+                <button
+                  onClick={() => setShowBilling(false)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Actions - View Invoice & Download PDF */}
+      {createdInvoiceId && (
+        <div className="fixed bottom-6 right-6 z-50 bg-white rounded-lg shadow-2xl p-4 border-2 border-green-500">
+          <div className="flex items-start gap-3">
+            <div className="bg-green-100 p-2 rounded-full">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 mb-2">Invoice Created Successfully!</h4>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => router.push(`/admin/invoice/${createdInvoiceId}`)}
+                  className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  View Invoice
+                </button>
+                <button
+                  onClick={() => {
+                    router.push(`/admin/invoice/${createdInvoiceId}`);
+                  }}
+                  className="text-sm bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded font-medium transition-colors"
+                >
+                  Download PDF
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setCreatedInvoiceId(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

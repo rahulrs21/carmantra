@@ -625,7 +625,7 @@ export default function FluidSmoke() {
             let divergence: any;
             let curl: any;
             let pressure: any;
-            let ditheringTexture = createTextureAsync('../app/themes/flipp/dist/images/LDR_LLL1_0.png');
+            // let ditheringTexture = createTextureAsync('../app/themes/flipp/dist/images/LDR_LLL1_0.png');
 
             const blurProgram = new Program(blurVertexShader, blurShader);
             const copyProgram = new Program(baseVertexShader, copyShader);

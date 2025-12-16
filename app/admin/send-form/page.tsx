@@ -5,6 +5,7 @@ import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import SendFormForm from '@/components/admin/SendFormForm';
+import { formatDateTime } from '@/lib/utils';
 
 export default function SendFormPage() {
   const [sentForms, setSentForms] = useState<any[]>([]);
@@ -47,7 +48,7 @@ export default function SendFormPage() {
                   <td className="px-4 py-3">{s.name}</td>
                   <td className="px-4 py-3">{s.service}</td>
                   <td className="px-4 py-3">{s.email}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{s.createdAt?.toDate ? s.createdAt.toDate().toLocaleString() : ''}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{formatDateTime(s.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

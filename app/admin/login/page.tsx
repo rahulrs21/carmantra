@@ -64,8 +64,35 @@ export default function AdminLogin() {
     } catch (err: any) {
       // Show specific Firebase auth error codes for debugging (better UX than generic message)
       safeConsoleError('Login error', err);
-      const msg = err?.code ? `${err.code.replace('auth/', '').replace(/-/g, ' ')}` : 'invalid email or password';
-      setError(msg.charAt(0).toUpperCase() + msg.slice(1));
+      
+      // Provide user-friendly error messages
+      let msg = 'Invalid email or password';
+      if (err?.code) {
+        switch (err.code) {
+          case 'auth/invalid-credential':
+            msg = 'Invalid email or password. Please check your credentials.';
+            break;
+          case 'auth/user-not-found':
+            msg = 'No account found with this email.';
+            break;
+          case 'auth/wrong-password':
+            msg = 'Incorrect password. Please try again.';
+            break;
+          case 'auth/invalid-email':
+            msg = 'Please enter a valid email address.';
+            break;
+          case 'auth/user-disabled':
+            msg = 'This account has been disabled.';
+            break;
+          case 'auth/too-many-requests':
+            msg = 'Too many failed login attempts. Please try again later or reset your password.';
+            break;
+          default:
+            msg = err.code.replace('auth/', '').replace(/-/g, ' ');
+            msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+        }
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }

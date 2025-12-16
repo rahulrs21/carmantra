@@ -6,6 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
+import { findOrCreateCustomer } from '@/lib/firestore/customers';
 
 export default function BookServiceForm({
     onSuccess,
@@ -263,6 +264,19 @@ export default function BookServiceForm({
             }
 
             const scheduledDateObj = formData.scheduledDate ? new Date(formData.scheduledDate) : new Date();
+
+            // Auto-sync customer to Customer module
+            setStatus('Syncing customer...');
+            await findOrCreateCustomer({
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                mobile: formData.mobileNo,
+                address: formData.address,
+                city: formData.city,
+                country: formData.country,
+                state: formData.state,
+            });
 
             const docRef = await addDoc(collection(db, 'bookedServices'), {
                 jobCardNo: formData.jobCardNo,

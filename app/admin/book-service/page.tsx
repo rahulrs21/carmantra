@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { findOrCreateCustomer } from '@/lib/firestore/customers';
+import { formatDateTime } from '@/lib/utils';
 
 export default function BookServiceList() {
     const router = useRouter();
@@ -260,6 +262,18 @@ export default function BookServiceList() {
                 preInspectionData.images = uploaded.uploadedImages;
                 preInspectionData.videos = uploaded.uploadedVideos;
             }
+
+            // Auto-sync customer to Customer module
+            await findOrCreateCustomer({
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                mobile: formData.mobileNo,
+                address: formData.address,
+                city: formData.city,
+                country: formData.country,
+                state: formData.state,
+            });
 
             await addDoc(collection(db, 'bookedServices'), {
                 ...formData,
@@ -688,9 +702,7 @@ export default function BookServiceList() {
                                             <td className="px-6 py-4 text-sm">{service.firstName} {service.lastName}</td>
                                             <td className="px-6 py-4 text-sm">{service.category}</td>
                                             <td className="px-6 py-4 text-sm">
-                                                {service.scheduledDate?.toDate
-                                                    ? service.scheduledDate.toDate().toLocaleString()
-                                                    : new Date(service.scheduledDate).toLocaleString()}
+                                                {formatDateTime(service.scheduledDate)}
                                             </td>
                                             <td className="px-6 py-4 text-sm">
                                                 <span className={`px-2 py-1 rounded text-xs font-medium ${service.status === 'completed'
