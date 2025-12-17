@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import QuotationForm from '@/components/admin/QuotationForm';
 import { formatDateTime } from '@/lib/utils';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 export default function QuotationsPage() {
   const [quotations, setQuotations] = useState<any[]>([]);
@@ -137,15 +138,18 @@ export default function QuotationsPage() {
   }
 
   return (
+    <ModuleAccess module="quotations">
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Quotations</h1>
           <p className="text-sm text-gray-500">Manage customer quotations and estimates</p>
         </div>
-        <button className="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700" onClick={() => setShowCreate(true)}>
-          Create new quotation
-        </button>
+        <PermissionGate module="quotations" action="create">
+          <button className="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700" onClick={() => setShowCreate(true)}>
+            Create new quotation
+          </button>
+        </PermissionGate>
       </div>
 
       {/* Filters */}
@@ -241,18 +245,22 @@ export default function QuotationsPage() {
                       >
                         View
                       </button>
-                      <button
-                        className="text-sm text-blue-600 hover:underline"
-                        onClick={() => handleEdit(qt)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-sm text-red-600 hover:underline"
-                        onClick={() => handleDelete(qt.id)}
-                      >
-                        Delete
-                      </button>
+                      <PermissionGate module="quotations" action="edit">
+                        <button
+                          className="text-sm text-blue-600 hover:underline"
+                          onClick={() => handleEdit(qt)}
+                        >
+                          Edit
+                        </button>
+                      </PermissionGate>
+                      <PermissionGate module="quotations" action="delete">
+                        <button
+                          className="text-sm text-red-600 hover:underline"
+                          onClick={() => handleDelete(qt.id)}
+                        >
+                          Delete
+                        </button>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>
@@ -368,5 +376,6 @@ export default function QuotationsPage() {
         </div>
       )}
     </div>
+    </ModuleAccess>
   );
 }

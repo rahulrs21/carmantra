@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import InvoiceForm from '@/components/admin/InvoiceForm';
 import { formatDateTime } from '@/lib/utils';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -137,15 +138,18 @@ export default function InvoicesPage() {
   }
 
   return (
+    <ModuleAccess module="invoices">
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Invoices</h1>
           <p className="text-sm text-gray-500">Manage customer invoices and payments</p>
         </div>
-        <button className="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700" onClick={() => setShowCreate(true)}>
-          Create new invoice
-        </button>
+        <PermissionGate module="invoices" action="create">
+          <button className="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700" onClick={() => setShowCreate(true)}>
+            Create new invoice
+          </button>
+        </PermissionGate>
       </div>
 
       {/* Filters */}
@@ -238,18 +242,22 @@ export default function InvoicesPage() {
                       >
                         View
                       </button>
-                      <button
-                        className="text-sm text-blue-600 hover:underline"
-                        onClick={() => handleEdit(inv)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-sm text-red-600 hover:underline"
-                        onClick={() => handleDelete(inv.id, inv.customerName)}
-                      >
-                        Delete
-                      </button>
+                      <PermissionGate module="invoices" action="edit">
+                        <button
+                          className="text-sm text-blue-600 hover:underline"
+                          onClick={() => handleEdit(inv)}
+                        >
+                          Edit
+                        </button>
+                      </PermissionGate>
+                      <PermissionGate module="invoices" action="delete">
+                        <button
+                          className="text-sm text-red-600 hover:underline"
+                          onClick={() => handleDelete(inv.id, inv.customerName)}
+                        >
+                          Delete
+                        </button>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>
@@ -362,5 +370,6 @@ export default function InvoicesPage() {
         </div>
       )}
     </div>
+    </ModuleAccess>
   );
 }

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import CustomerForm from '@/components/admin/customers/CustomerForm';
 import { useRouter } from 'next/navigation';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -66,6 +67,7 @@ export default function CustomersPage() {
   }
 
   return (
+    <ModuleAccess module="customers">
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -73,10 +75,14 @@ export default function CustomersPage() {
           <p className="text-sm text-gray-500">Manage your CRM customers</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleSyncExisting} disabled={syncing}>
-            {syncing ? 'Syncing...' : 'Sync All Modules'}
-          </Button>
-          <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => setShowCreate(true)}>New Customer</Button>
+          <PermissionGate module="customers" action="create">
+            <Button variant="outline" onClick={handleSyncExisting} disabled={syncing}>
+              {syncing ? 'Syncing...' : 'Sync All Modules'}
+            </Button>
+          </PermissionGate>
+          <PermissionGate module="customers" action="create">
+            <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => setShowCreate(true)}>New Customer</Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -125,7 +131,9 @@ export default function CustomersPage() {
                   <td className="px-4 py-3 text-sm">
                     <div className="flex gap-2">
                       <button className="px-2 py-1 border rounded" onClick={() => router.push(`/admin/customers/${c.id}`)}>View</button>
-                      <button className="px-2 py-1 border rounded text-red-600" onClick={() => remove(c.id)}>Delete</button>
+                      <PermissionGate module="customers" action="delete">
+                        <button className="px-2 py-1 border rounded text-red-600" onClick={() => remove(c.id)}>Delete</button>
+                      </PermissionGate>
                     </div>
                   </td>
                 </tr>
@@ -234,5 +242,6 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
+    </ModuleAccess>
   );
 }

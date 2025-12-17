@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   LineChart,
   Line,
@@ -23,6 +24,8 @@ import { Calendar } from '@/components/ui/calendar';
 import MetricCard from '@/components/admin/MetricCard';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { formatDateTime, formatDate } from '@/lib/utils';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { useUser } from '@/lib/userContext';
 
 interface Lead {
   id: string;
@@ -42,6 +45,15 @@ export default function AdminDashboard() {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Check authentication state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setIsLoggedIn(!!user);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, "crm-leads"), orderBy("createdAt", "desc"));
@@ -290,23 +302,24 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-8">
+    <ModuleAccess module="dashboard">
+      <div className={`space-y-8 ${!isLoggedIn ? 'blur-sm pointer-events-none select-none' : ''}`}>
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Overview of recent leads and activity</p>
+          <h1 className="text-3xl font-extrabold dark:text-white">Dashboard</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Overview of recent leads and activity</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <div className="text-xs text-gray-400">Updated</div>
-            <div className="text-sm text-gray-700">{formatDateTime(new Date())}</div>
+            <div className="text-xs text-gray-400 dark:text-gray-500">Updated</div>
+            <div className="text-sm text-gray-700 dark:text-gray-300">{formatDateTime(new Date())}</div>
           </div>
         </div>
       </header>
 
       {/* Module Overview Section */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/book-service'}>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/book-service'}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 mb-1">Total Services</p>
@@ -333,12 +346,12 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/customers'}>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/customers'}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500 mb-1">Total Customers</p>
-              <h3 className="text-3xl font-bold text-green-600">{customers.length}</h3>
-              <p className="text-xs text-gray-400 mt-2">Registered customers</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Customers</p>
+              <h3 className="text-3xl font-bold text-green-600 dark:text-green-500">{customers.length}</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Registered</p>
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
               <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -348,10 +361,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/invoice'}>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/invoice'}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500 mb-1">Total Invoices</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Revenue</p>
               <h3 className="text-3xl font-bold text-purple-600">{invoices.length}</h3>
               <p className="text-xs text-gray-400 mt-2">Generated invoices</p>
             </div>
@@ -371,12 +384,12 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/quotation'}>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/quotation'}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500 mb-1">Total Quotations</p>
-              <h3 className="text-3xl font-bold text-orange-600">{quotations.length}</h3>
-              <p className="text-xs text-gray-400 mt-2">Generated quotes</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Quotations</p>
+              <h3 className="text-3xl font-bold text-purple-600 dark:text-purple-500">{quotations.length}</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Sent</p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
               <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -482,8 +495,8 @@ export default function AdminDashboard() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white relative rounded-lg shadow p-4 lg:col-span-2">
-            <h3 className="text-sm text-gray-600 mb-10">Leads ({rangeLabel})</h3>
+          <div className="bg-white dark:bg-gray-800 relative rounded-lg shadow dark:shadow-gray-700 p-4 lg:col-span-2">
+            <h3 className="text-sm text-gray-600 dark:text-gray-300 mb-10">Leads ({rangeLabel})</h3>
             <ChartContainer config={{ count: { label: 'Leads', color: '#4f46e5' } }} className="h-72 aspect-auto">
               {analytics.series.length === 0 ? (
                 <div className="h-64 flex items-center justify-center text-sm text-gray-400">No data for selected range</div>
@@ -519,8 +532,8 @@ export default function AdminDashboard() {
             </ChartContainer>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm text-gray-600 mb-2">Services breakdown</h3>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-4">
+            <h3 className="text-sm text-gray-600 dark:text-gray-400 mb-2">Services breakdown</h3>
             <div className="h-48">
               <ChartContainer
                 config={analytics.serviceBreakdown.reduce((acc, s, i) => ({ ...acc, [s.name]: { label: s.name, color: COLORS[i % COLORS.length] } }), {} as any)}
@@ -577,58 +590,58 @@ export default function AdminDashboard() {
           <div className="text-sm text-gray-500">Showing recent 50 leads</div>
         </div>
 
-        <div className="mt-4 bg-white rounded-lg shadow overflow-hidden">
+        <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 overflow-hidden">
           {filterService && (
-            <div className="p-3 border-b flex items-center justify-between">
-              <div className="text-sm text-gray-700">Filtered by service: <span className="font-medium">{filterService}</span></div>
+            <div className="p-3 border-b dark:border-gray-700 flex items-center justify-between">
+              <div className="text-sm text-gray-700 dark:text-gray-300">Filtered by service: <span className="font-medium">{filterService}</span></div>
               <div className="flex items-center gap-2">
-                <button className="text-sm text-indigo-600 hover:underline" onClick={() => setFilterService(null)}>Clear filter</button>
-                <button className="text-sm text-indigo-600 hover:underline" onClick={exportLeadsCSV}>Export filtered leads</button>
+                <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setFilterService(null)}>Clear filter</button>
+                <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline" onClick={exportLeadsCSV}>Export filtered leads</button>
               </div>
             </div>
           )}
           {loading ? (
             <div className="p-6 space-y-4">
-              <div className="h-6 bg-gray-100 rounded w-1/3 animate-pulse" />
-              <div className="h-4 bg-gray-100 rounded w-full animate-pulse" />
-              <div className="h-4 bg-gray-100 rounded w-full animate-pulse" />
+              <div className="h-6 bg-gray-100 dark:bg-gray-700 rounded w-1/3 animate-pulse" />
+              <div className="h-4 bg-gray-100 dark:bg-gray-700 rounded w-full animate-pulse" />
+              <div className="h-4 bg-gray-100 dark:bg-gray-700 rounded w-full animate-pulse" />
             </div>
           ) : (
             <table className="w-full table-auto min-w-[600px] text-left">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th className="px-4 py-3 text-sm text-gray-600">Name</th>
-                  <th className="px-4 py-3 text-sm text-gray-600">Service</th>
-                  <th className="px-4 py-3 text-sm text-gray-600">Phone</th>
-                  <th className="px-4 py-3 text-sm text-gray-600">Email</th>
-                  <th className="px-4 py-3 text-sm text-gray-600">Date</th>
-                  <th className="px-4 py-3 text-sm text-gray-600">Actions</th>
+                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Name</th>
+                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Service</th>
+                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Phone</th>
+                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Email</th>
+                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Date</th>
+                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredLeads.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No leads</td>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No leads</td>
                   </tr>
                 )}
                 {filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="border-t last:border-b">
+                  <tr key={lead.id} className="border-t dark:border-gray-700 last:border-b dark:last:border-gray-700">
                     <td className="px-4 py-3 align-top">
-                      <div className="font-medium">{lead.name || '—'}</div>
+                      <div className="font-medium dark:text-white">{lead.name || '—'}</div>
                       <div className="text-xs text-gray-400">{lead.message ? `${lead.message.slice(0, 60)}${lead.message.length>60? '…': ''}` : ''}</div>
                     </td>
-                    <td className="px-4 py-3 align-top">{lead.service || '—'}</td>
-                    <td className="px-4 py-3 align-top">{lead.phone || '—'}</td>
+                    <td className="px-4 py-3 align-top dark:text-gray-300">{lead.service || '—'}</td>
+                    <td className="px-4 py-3 align-top dark:text-gray-300">{lead.phone || '—'}</td>
                     <td className="px-4 py-3 align-top">
-                      <div className="text-sm">{lead.email || '—'}</div>
+                      <div className="text-sm dark:text-gray-300">{lead.email || '—'}</div>
                     </td>
-                    <td className="px-4 py-3 align-top text-sm text-gray-500">{formatDateTime(lead.createdAt)}</td>
+                    <td className="px-4 py-3 align-top text-sm text-gray-500 dark:text-gray-400">{formatDateTime(lead.createdAt)}</td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex gap-2">
                         {lead.email ? (
-                          <a href={`mailto:${lead.email}`} className="text-sm text-blue-600 hover:underline">Email</a>
+                          <a href={`mailto:${lead.email}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Email</a>
                         ) : null}
-                        <a href={`/admin/leads/${lead.id}`} className="text-sm text-gray-600 hover:text-gray-800">View</a>
+                        <a href={`/admin/leads/${lead.id}`} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">View</a>
                       </div>
                     </td>
                   </tr>
@@ -638,6 +651,7 @@ export default function AdminDashboard() {
           )}
         </div>
       </section>
-    </div>
+      </div>
+    </ModuleAccess>
   );
 }

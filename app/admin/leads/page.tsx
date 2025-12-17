@@ -5,6 +5,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, orderBy, query, where, getDocs } from 'firebase/firestore';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { formatDateTime } from '@/lib/utils';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 interface Lead {
   id: string;
@@ -164,6 +165,7 @@ export default function LeadsPage() {
   }, [queryText, itemsPerPage]);
 
   return (
+    <ModuleAccess module="leads">
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
@@ -177,11 +179,13 @@ export default function LeadsPage() {
             placeholder="Search name, email, service or message"
             className="border px-3 py-2 rounded w-80"
           />
-          <button
-            className="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700"
-            onClick={() => downloadCSV(sorted)}
-            disabled={loading || sorted.length === 0}
-          >Export CSV</button>
+          <PermissionGate module="leads" action="create">
+            <button
+              className="bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700"
+              onClick={() => downloadCSV(sorted)}
+              disabled={loading || sorted.length === 0}
+            >Export CSV</button>
+          </PermissionGate>
         </div>
       </header>
 
@@ -392,5 +396,6 @@ export default function LeadsPage() {
         </div>
       )}
     </div>
+    </ModuleAccess>
   );
 }

@@ -10,6 +10,7 @@ import VehicleForm from '@/components/admin/customers/VehicleForm';
 import NotesSection from '@/components/admin/customers/NotesSection';
 import ActivityHistory from '@/components/admin/customers/ActivityHistory';
 import CustomerForm from '@/components/admin/customers/CustomerForm';
+import { PermissionGate } from '@/components/PermissionGate';
 
 export default function CustomerProfilePage() {
   const params = useParams();
@@ -57,21 +58,25 @@ export default function CustomerProfilePage() {
           <div className="text-sm text-gray-600">{customer.email} • {customer.mobile}</div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowEdit(true)}>Edit</Button>
-          <Button
-            className={customer.status === 'active' ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' : 'bg-green-600 hover:bg-green-700 text-white'}
-            onClick={async () => {
-              if (!customer?.id) return;
-              setSavingStatus(true);
-              const next = customer.status === 'active' ? 'inactive' : 'active';
-              await updateCustomer(customer.id, { status: next });
-              setCustomer({ ...customer, status: next });
-              setSavingStatus(false);
-            }}
-            disabled={savingStatus}
-          >
-            {customer.status === 'active' ? (savingStatus ? 'Deactivating…' : 'Deactivate') : (savingStatus ? 'Activating…' : 'Activate')}
-          </Button>
+          <PermissionGate module="customers" action="edit">
+            <Button variant="outline" onClick={() => setShowEdit(true)}>Edit</Button>
+          </PermissionGate>
+          <PermissionGate module="customers" action="edit">
+            <Button
+              className={customer.status === 'active' ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' : 'bg-green-600 hover:bg-green-700 text-white'}
+              onClick={async () => {
+                if (!customer?.id) return;
+                setSavingStatus(true);
+                const next = customer.status === 'active' ? 'inactive' : 'active';
+                await updateCustomer(customer.id, { status: next });
+                setCustomer({ ...customer, status: next });
+                setSavingStatus(false);
+              }}
+              disabled={savingStatus}
+            >
+              {customer.status === 'active' ? (savingStatus ? 'Deactivating…' : 'Deactivate') : (savingStatus ? 'Activating…' : 'Activate')}
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -93,7 +98,9 @@ export default function CustomerProfilePage() {
           <Card className="p-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Vehicles</h2>
-              <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => setShowAddVehicle(true)}>Add Vehicle</Button>
+              <PermissionGate module="customers" action="create">
+                <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => setShowAddVehicle(true)}>Add Vehicle</Button>
+              </PermissionGate>
             </div>
             {vehicles.length === 0 ? (
               <div className="text-sm text-gray-500">No vehicles found</div>
@@ -155,12 +162,14 @@ export default function CustomerProfilePage() {
                                 {service.jobCardNo && (
                                   <div className="text-gray-500 truncate">Job: {service.jobCardNo}</div>
                                 )}
-                                <a 
-                                  href={`/admin/book-service/${service.id}`}
-                                  className="text-orange-600 hover:text-orange-700 hover:underline ml-auto"
-                                >
-                                  View
-                                </a>
+                                <PermissionGate module="services" action="view">
+                                  <a 
+                                    href={`/admin/book-service/${service.id}`}
+                                    className="text-orange-600 hover:text-orange-700 hover:underline ml-auto"
+                                  >
+                                    View
+                                  </a>
+                                </PermissionGate>
                               </div>
                             </div>
                           ))}
@@ -196,7 +205,9 @@ export default function CustomerProfilePage() {
                 {invoices.slice(0, 6).map(inv => (
                   <li key={inv.id} className="flex items-center justify-between">
                     <span>#{inv.id?.slice(0,6)} • AED {inv.total}</span>
-                    <a href={`/admin/invoice/${inv.id}`} className="text-orange-600 hover:underline">View</a>
+                    <PermissionGate module="invoices" action="view">
+                      <a href={`/admin/invoice/${inv.id}`} className="text-orange-600 hover:underline">View</a>
+                    </PermissionGate>
                   </li>
                 ))}
               </ul>

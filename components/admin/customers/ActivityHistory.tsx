@@ -5,6 +5,7 @@ import type { Customer } from '@/lib/types';
 import { getCustomerActivityHistory } from '@/lib/firestore/customers';
 import { useRouter } from 'next/navigation';
 import { formatDateTime } from '@/lib/utils';
+import { PermissionGate } from '@/components/PermissionGate';
 
 export default function ActivityHistory({ customer }: { customer: Customer; }) {
   const router = useRouter();
@@ -52,30 +53,36 @@ export default function ActivityHistory({ customer }: { customer: Customer; }) {
     switch (item.type) {
       case 'service':
         return (
-          <button
-            onClick={() => router.push(`/admin/book-service/${item.id}`)}
-            className="text-xs text-orange-600 hover:underline"
-          >
-            View Service
-          </button>
+          <PermissionGate module="services" action="view">
+            <button
+              onClick={() => router.push(`/admin/book-service/${item.id}`)}
+              className="text-xs text-orange-600 hover:underline"
+            >
+              View Service
+            </button>
+          </PermissionGate>
         );
       case 'lead':
         return (
-          <button
-            onClick={() => router.push(`/admin/leads/${item.id}`)}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            View Lead
-          </button>
+          <PermissionGate module="leads" action="view">
+            <button
+              onClick={() => router.push(`/admin/leads/${item.id}`)}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              View Lead
+            </button>
+          </PermissionGate>
         );
       case 'invoice':
         return (
-          <button
-            onClick={() => router.push(`/admin/invoice/${item.id}`)}
-            className="text-xs text-green-600 hover:underline"
-          >
-            View Invoice
-          </button>
+          <PermissionGate module="invoices" action="view">
+            <button
+              onClick={() => router.push(`/admin/invoice/${item.id}`)}
+              className="text-xs text-green-600 hover:underline"
+            >
+              View Invoice
+            </button>
+          </PermissionGate>
         );
       default:
         return null;

@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { findOrCreateCustomer } from '@/lib/firestore/customers';
 import { formatDateTime, formatDate } from '@/lib/utils';
+import { PermissionGate } from '@/components/PermissionGate';
+import { useUser } from '@/lib/userContext';
+import { hasPermission } from '@/lib/permissions';
 
 interface Lead {
   id: string;
@@ -24,6 +27,7 @@ interface Lead {
 export default function LeadDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { role } = useUser();
   const id = params?.id as string | undefined;
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -635,11 +639,15 @@ export default function LeadDetailsPage() {
                       ✓ Booked ({relatedBookings.length})
                     </span>
                   </div>
-                  {relatedBookings.map((booking) => (
+                  {relatedBookings.map((booking) => {
+                    const canViewBooking = hasPermission(role, 'services', 'view');
+                    return (
                     <div
                       key={booking.id}
-                      className="p-4 bg-gray-50 rounded border hover:bg-gray-100 cursor-pointer transition-colors"
-                      onClick={() => router.push(`/admin/book-service/${booking.id}`)}
+                      className={`p-4 bg-gray-50 rounded border transition-colors ${
+                        canViewBooking ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
+                      }`}
+                      onClick={canViewBooking ? () => router.push(`/admin/book-service/${booking.id}`) : undefined}
                     >
                       <div className="flex justify-between items-start">
                         <div>
@@ -662,7 +670,8 @@ export default function LeadDetailsPage() {
                         </span>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               ) : (
                 <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded border">
@@ -678,14 +687,16 @@ export default function LeadDetailsPage() {
             <Card className="p-6">
               <h3 className="font-semibold mb-4">Actions</h3>
               <div className="space-y-3">
-                {!showBookService && (
-                  <Button 
-                    className="w-full bg-orange-600 hover:bg-orange-700"
-                    onClick={() => setShowBookService(true)}
-                  >
-                    📅 Book Service
-                  </Button>
-                )}
+                <PermissionGate module="services" action="create">
+                  {!showBookService && (
+                    <Button 
+                      className="w-full bg-orange-600 hover:bg-orange-700"
+                      onClick={() => setShowBookService(true)}
+                    >
+                      📅 Book Service
+                    </Button>
+                  )}
+                </PermissionGate>
                 <Button 
                   variant="outline"
                   className="w-full"

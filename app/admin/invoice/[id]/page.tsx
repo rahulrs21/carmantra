@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { jsPDF } from 'jspdf';
 import InvoiceForm from '@/components/admin/InvoiceForm';
+import { PermissionGate } from '@/components/PermissionGate';
 
 export default function InvoiceDetails() {
   const params = useParams();
@@ -613,15 +614,21 @@ export default function InvoiceDetails() {
           <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors" onClick={() => router.push('/admin/invoice')}>
             ← Back
           </button>
-          <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors" onClick={() => setShowEditModal(true)}>
-            ✏️ Edit Invoice
-          </button>
-          <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors" onClick={downloadPDF}>
-            📥 Download PDF
-          </button>
-          <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors" onClick={sendInvoice}>
-            📧 Send Invoice
-          </button>
+          <PermissionGate module="invoices" action="edit">
+            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors" onClick={() => setShowEditModal(true)}>
+              ✏️ Edit Invoice
+            </button>
+          </PermissionGate>
+          <PermissionGate module="invoices" action="create">
+            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors" onClick={downloadPDF}>
+              📥 Download PDF
+            </button>
+          </PermissionGate>
+          <PermissionGate module="invoices" action="create">
+            <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors" onClick={sendInvoice}>
+              📧 Send Invoice
+            </button>
+          </PermissionGate>
         </div>
       </div>
 

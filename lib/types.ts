@@ -74,3 +74,76 @@ export interface InvoiceDoc {
     plate?: string;
   };
 }
+
+export type UserRole = 'admin' | 'manager' | 'sales' | 'support' | 'viewer';
+
+export interface Permission {
+  module: string;
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+export interface UserAccount {
+  id?: string;
+  email: string;
+  role: UserRole;
+  displayName?: string;
+  status: 'active' | 'inactive' | 'pending';
+  permissions?: Permission[];
+  createdAt?: any;
+  createdBy?: string;
+  lastLogin?: any;
+  inviteToken?: string;
+  inviteExpires?: any;
+}
+
+// Default permissions by role
+export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
+  admin: [
+    { module: 'dashboard', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'leads', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'customers', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'services', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'invoices', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'users', canView: true, canCreate: true, canEdit: true, canDelete: true },
+  ],
+  manager: [
+    { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leads', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'customers', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'services', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'invoices', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'users', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  ],
+  sales: [
+    { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leads', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'customers', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'services', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'invoices', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  ],
+  support: [
+    { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leads', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'customers', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'services', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'invoices', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'quotations', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  ],
+  viewer: [
+    { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leads', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'customers', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'services', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'invoices', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'quotations', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  ],
+};

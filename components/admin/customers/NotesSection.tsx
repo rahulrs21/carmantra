@@ -6,6 +6,7 @@ import type { Note } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatDateTime } from '@/lib/utils';
+import { PermissionGate } from '@/components/PermissionGate';
 
 export default function NotesSection({ customerId }: { customerId: string; }) {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -36,10 +37,12 @@ export default function NotesSection({ customerId }: { customerId: string; }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
-        <Input placeholder="Add a note" value={message} onChange={e => setMessage(e.target.value)} />
-        <Button onClick={handleAdd} className="bg-orange-600 hover:bg-orange-700">Add</Button>
-      </div>
+      <PermissionGate module="customers" action="create">
+        <div className="flex gap-2">
+          <Input placeholder="Add a note" value={message} onChange={e => setMessage(e.target.value)} />
+          <Button onClick={handleAdd} className="bg-orange-600 hover:bg-orange-700">Add</Button>
+        </div>
+      </PermissionGate>
       <div className="bg-white rounded border divide-y">
         {loading ? (
           <div className="p-4">Loading…</div>
@@ -52,7 +55,9 @@ export default function NotesSection({ customerId }: { customerId: string; }) {
                 <div className="text-sm">{n.message}</div>
                 <div className="text-xs text-gray-500 mt-1">{formatDateTime(n.createdAt)}</div>
               </div>
-              <button className="text-xs text-red-600" onClick={() => handleDelete(n.id)}>Delete</button>
+              <PermissionGate module="customers" action="delete">
+                <button className="text-xs text-red-600" onClick={() => handleDelete(n.id)}>Delete</button>
+              </PermissionGate>
             </div>
           ))
         )}

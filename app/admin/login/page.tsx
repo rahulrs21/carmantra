@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, updateDoc, Timestamp } from "firebase/firestore";
 import { getUserRole } from '@/lib/getUserRole';
 import { useRouter } from "next/navigation";
 import { safeConsoleError } from '@/lib/safeConsole';
@@ -49,15 +50,28 @@ export default function AdminLogin() {
         // For other errors, continue to treat as missing role
         role = null;
       }
-      if (role !== 'admin') {
-        // Not an admin — sign out and show error
+      
+      // Check if user has a valid role (admin, manager, sales, support, viewer)
+      const validRoles = ['admin', 'manager', 'sales', 'support', 'viewer'];
+      if (!role || !validRoles.includes(role)) {
+        // No valid role — sign out and show error
         await signOut(auth);
         if (!role) {
-          setError("Your account is missing an admin role in Firestore. Create a user doc in 'users/{uid}' with role: 'admin', or run the create_admin_doc script.");
+          setError("Your account is missing a role in Firestore. Please contact the administrator to assign you a role.");
         } else {
           setError("You are not authorized to access the admin area.");
         }
         return;
+      }
+
+      // Update last login timestamp
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          lastLogin: Timestamp.now()
+        });
+      } catch (err) {
+        // Silently fail if can't update lastLogin
+        safeConsoleError('Failed to update lastLogin:', err);
       }
 
       router.push("/admin");
@@ -147,10 +161,21 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm">
+    <div 
+      className="min-h-screen flex items-center justify-center p-6 relative"
+      style={{
+        backgroundImage: 'url("https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?q=80&w=2083&auto=format&fit=crop")',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      {/* Dark overlay for better contrast */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+      
+      <div className="bg-white/95 backdrop-blur-md p-8 rounded-xl shadow-2xl w-full max-w-sm relative z-10 border border-gray-200">
 
-        <h1 className="text-2xl font-bold mb-4 text-center">Admin Login</h1>
+        <h1 className="text-2xl font-bold mb-4 text-center text-gray-800">Admin Login</h1>
 
         {error && <p className="text-red-600 mb-3">{error}</p>}
         {grantError === 'permission_denied' && (
@@ -167,10 +192,10 @@ export default function AdminLogin() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block mb-1 font-medium">Email</label>
+            <label className="block mb-1 font-medium dark:text-black">Email</label>
             <input
               type="email"
-              className="w-full border p-3 rounded"
+              className="w-full border p-3 rounded dark:text-black"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -178,13 +203,13 @@ export default function AdminLogin() {
           </div>
 
           <div className="relative ">
-            <label className="block mb-1 font-medium">Password</label>
+            <label className="block mb-1 font-medium dark:text-black">Password</label>
 
             <div className="flex items-center justify-between">
 
               <input
                 type={show ? "text" : "password"}
-                className="w-full border p-3 rounded pr-10"
+                className="w-full border p-3 rounded pr-10 dark:text-black"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

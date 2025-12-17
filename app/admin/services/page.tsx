@@ -9,6 +9,7 @@ import { formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 interface Service {
   id: string;
@@ -233,6 +234,7 @@ export default function ServicesPage() {
   }
 
   return (
+    <ModuleAccess module="services">
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
@@ -240,12 +242,16 @@ export default function ServicesPage() {
           <p className="text-sm text-gray-500 mt-1">All service bookings and history from Book Service module</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={downloadCSV} disabled={loading || sorted.length === 0}>
-            Export CSV
-          </Button>
-          <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => router.push('/admin/book-service')}>
-            + New Booking
-          </Button>
+          <PermissionGate module="services" action="create">
+            <Button variant="outline" onClick={downloadCSV} disabled={loading || sorted.length === 0}>
+              Export CSV
+            </Button>
+          </PermissionGate>
+          <PermissionGate module="services" action="create">
+            <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => router.push('/admin/book-service')}>
+              + New Booking
+            </Button>
+          </PermissionGate>
         </div>
       </header>
 
@@ -479,5 +485,6 @@ export default function ServicesPage() {
         </div>
       )}
     </div>
+    </ModuleAccess>
   );
 }

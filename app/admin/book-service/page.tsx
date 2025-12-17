@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { findOrCreateCustomer } from '@/lib/firestore/customers';
 import { formatDateTime } from '@/lib/utils';
+import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 export default function BookServiceList() {
     const router = useRouter();
@@ -412,6 +413,7 @@ export default function BookServiceList() {
     if (loading) return <div className="p-6 text-center">Loading...</div>;
 
     return (
+        <ModuleAccess module="services">
         <div className="space-y-6">
             <header className="flex items-center justify-between">
                 <div>
@@ -1022,5 +1024,6 @@ export default function BookServiceList() {
                 </DialogContent>
             </Dialog>
         </div>
+        </ModuleAccess>
     );
 }
