@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 import AdminLogout from '@/components/AdminLogout';
 import { startLeadCustomerSync } from '@/lib/firestore/leadSync';
 import { useUser } from '@/lib/userContext';
@@ -13,10 +14,16 @@ import { Sun, Moon, Menu, X } from 'lucide-react';
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { role, displayName } = useUser();
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [showBottomNav, setShowBottomNav] = useState(true);
+  const { role, displayName, photoURL } = useUser();
   const { theme, toggleTheme } = useTheme();
+  const [brandName, setBrandName] = useState('CarMantra CRM');
+  const [brandLogo, setBrandLogo] = useState<string | null>(null);
+  const lastScrollY = useRef(0);
 
   // Check authentication state
   useEffect(() => {
@@ -30,6 +37,50 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     startLeadCustomerSync();
   }, []);
+
+  // Show bottom nav on scroll up, hide on scroll down
+  useEffect(() => {
+    const handleScroll = () => {
+      const current = window.scrollY;
+      if (current < 20) {
+        setShowBottomNav(true);
+      } else if (current > lastScrollY.current + 10) {
+        setShowBottomNav(false);
+      } else if (current < lastScrollY.current - 10) {
+        setShowBottomNav(true);
+      }
+      lastScrollY.current = current;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Listen to branding settings
+  useEffect(() => {
+    const brandingRef = doc(db, 'settings', 'branding');
+    const unsub = onSnapshot(brandingRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as { name?: string; logoUrl?: string };
+        setBrandName(data.name || 'CarMantra CRM');
+        setBrandLogo(data.logoUrl || null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  async function handleLogout() {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Sign out error', error);
+    }
+
+    try {
+      await router.push('/admin/login');
+    } catch (err) {
+      try { window.location.assign('/admin/login'); } catch (_) {/* noop */}
+    }
+  }
 
   const isActive = (href: string) => {
     if (href === '/admin') {
@@ -87,6 +138,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       module: 'invoices',
       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
     },
+    
     { 
       href: '/admin/send-form', 
       label: 'Send Form',
@@ -98,6 +150,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       label: 'Users',
       module: 'users',
       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+    },
+    { 
+      href: '/admin/account', 
+      label: 'My Account',
+      module: 'dashboard',
+      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
     },
   ];
   
@@ -112,8 +170,19 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 shadow-md">
         <div className="flex items-center justify-between px-4 py-3">
-          <h1 className="text-xl font-bold dark:text-white">CarMantra CRM</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            {brandLogo ? (
+              <img src={brandLogo} alt={brandName} className="w-9 h-9 rounded" />
+            ) : (
+              <div className="w-9 h-9 rounded bg-orange-600 text-white flex items-center justify-center font-bold text-sm">
+                {brandName?.[0]?.toUpperCase() || 'C'}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold dark:text-white truncate">{brandName}</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 relative">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -125,6 +194,35 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 <Moon className="w-5 h-5 text-gray-600" />
               )}
             </button>
+            <div className="relative">
+              <button
+                onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Open profile menu"
+              >
+                <UserAvatar displayName={displayName} photoURL={photoURL} small />
+              </button>
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                  <a
+                    href="/admin/account"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="block px-3 py-2 text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    My Account
+                  </a>
+                  <button
+                    onClick={async () => {
+                      setIsProfileMenuOpen(false);
+                      await handleLogout();
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -147,6 +245,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
+      {isProfileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-30"
+          onClick={() => setIsProfileMenuOpen(false)}
+        />
+      )}
 
       {/* SIDEBAR - Desktop & Mobile Drawer */}
       <aside className={`
@@ -156,16 +260,28 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         lg:block mt-[60px] lg:mt-0
       `}>
         <div className="p-6">
-          <div className="mb-2 hidden lg:block">
-            <h2 className="text-2xl font-bold dark:text-white">CarMantra CRM</h2>
+          <div className="mb-4 hidden lg:flex flex-col items-start gap-2">
+            {brandLogo ? (
+              <img src={brandLogo} alt={brandName} className="w-14 h-14 rounded" />
+            ) : (
+              <div className="w-14 h-14 rounded bg-orange-600 text-white flex items-center justify-center font-bold text-xl">
+                {brandName?.[0]?.toUpperCase() || 'C'}
+              </div>
+            )}
+            <div className="min-w-0 space-y-1">
+              <h2 className="text-2xl font-bold dark:text-white truncate">{brandName}</h2>
+            </div>
           </div>
           
           {/* Welcome Message */}
           {displayName && isLoggedIn && (
-            <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back,</p>
-                <p className="text-base font-semibold text-gray-800 dark:text-white">{displayName}</p>
+            <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <UserAvatar displayName={displayName} photoURL={photoURL} />
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back,</p>
+                  <p className="text-base font-semibold text-gray-800 dark:text-white truncate">{displayName}</p>
+                </div>
               </div>
               
               {/* Theme Toggle - Desktop only */}
@@ -228,8 +344,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg">
-        <div className="flex items-stretch gap-1 px-2 py-2 overflow-x-auto snap-x snap-mandatory">
+      <nav className={`lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-200 ${showBottomNav ? 'translate-y-0' : 'translate-y-full'}`}>
+        <div className="flex items-stretch gap-1 px-2 py-2 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {visibleNavItems.slice(0, 6).map((item) => (
             <a
               key={item.href}
@@ -250,6 +366,20 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           ))}
         </div>
       </nav>
+
+    </div>
+  );
+}
+
+function UserAvatar({ displayName, photoURL, small = false }: { displayName: string | null; photoURL: string | null; small?: boolean }) {
+  const initial = displayName?.[0]?.toUpperCase() || 'U';
+  const size = small ? 'w-7 h-7' : 'w-10 h-10';
+  if (photoURL) {
+    return <img src={photoURL} alt={displayName || 'User'} className={`${size} rounded-full object-cover border`} />;
+  }
+  return (
+    <div className={`${size} rounded-full bg-orange-600 text-white flex items-center justify-center font-semibold`}>
+      {initial}
     </div>
   );
 }

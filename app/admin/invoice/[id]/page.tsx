@@ -602,30 +602,30 @@ export default function InvoiceDetails() {
   if (!invoice) return <div className="p-6">Invoice not found</div>;
 
   return (
-    <div className="space-y-6 p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Invoice #{invoice.invoiceNumber || invoice.id}</h1>
           <div className="text-sm text-gray-500 mt-1">
             {invoice.customerName} • {invoice.customerMobile}
           </div>
         </div>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors" onClick={() => router.push('/admin/invoice')}>
+        <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors w-full sm:w-auto" onClick={() => router.push('/admin/invoice')}>
             ← Back
           </button>
           <PermissionGate module="invoices" action="edit">
-            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors" onClick={() => setShowEditModal(true)}>
+            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors w-full sm:w-auto" onClick={() => setShowEditModal(true)}>
               ✏️ Edit Invoice
             </button>
           </PermissionGate>
           <PermissionGate module="invoices" action="create">
-            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors" onClick={downloadPDF}>
+            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition-colors w-full sm:w-auto" onClick={downloadPDF}>
               📥 Download PDF
             </button>
           </PermissionGate>
           <PermissionGate module="invoices" action="create">
-            <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors" onClick={sendInvoice}>
+            <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors w-full sm:w-auto" onClick={sendInvoice}>
               📧 Send Invoice
             </button>
           </PermissionGate>
@@ -642,15 +642,15 @@ export default function InvoiceDetails() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200">
+      <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
         {/* Invoice Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-8 rounded-t-lg">
-          <div className="flex justify-between items-start">
+        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-5 sm:p-8 rounded-t-lg">
+          <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
             <div>
-              <h2 className="text-3xl font-bold mb-2">INVOICE</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold mb-2">INVOICE</h2>
               <p className="text-blue-100">Invoice #: {invoice.invoiceNumber || invoice.id}</p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <p className="text-blue-100">Date:</p>
               <p className="font-semibold">{new Date().toLocaleDateString()}</p>
             </div>
@@ -658,7 +658,7 @@ export default function InvoiceDetails() {
         </div>
 
         {/* Customer & Vehicle Information */}
-        <div className="grid md:grid-cols-3 gap-6 p-8 bg-gray-50">
+        <div className="grid gap-6 p-5 sm:p-8 md:grid-cols-3 bg-gray-50">
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Bill From</h3>
             <div className="space-y-1">
@@ -705,9 +705,37 @@ export default function InvoiceDetails() {
         )}
 
         {/* Service Items Table */}
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           <h3 className="text-lg font-semibold mb-4">Service Items</h3>
-          <div className="overflow-x-auto">
+
+          {/* Mobile cards */}
+          <div className="space-y-3 md:hidden">
+            {(invoice.items || []).map((it: any, i: number) => (
+              <div key={i} className="p-4 rounded-lg border border-gray-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-gray-700">Item {i + 1}</div>
+                  <div className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-full">AED {(it.amount || 0).toFixed(2)}</div>
+                </div>
+                <div className="mt-2 text-sm font-medium text-gray-900 break-words leading-snug">{it.description || '—'}</div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div>
+                    <div className="text-gray-500">Qty</div>
+                    <div className="font-semibold">{it.quantity || 1}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Rate</div>
+                    <div className="font-semibold">AED {(it.rate || 0).toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {(!invoice.items || invoice.items.length === 0) && (
+              <div className="text-sm text-gray-500">No items added</div>
+            )}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b-2 border-gray-300">
@@ -734,7 +762,7 @@ export default function InvoiceDetails() {
         </div>
 
         {/* Totals Section */}
-        <div className="px-8 pb-8">
+        <div className="px-5 sm:px-8 pb-8">
           <div className="flex justify-end">
             <div className="w-full md:w-1/2 lg:w-1/3 space-y-3">
               <div className="flex justify-between text-sm">
@@ -775,16 +803,16 @@ export default function InvoiceDetails() {
         </div>
 
         {/* Accepted Stamp */}
-        <div className="px-8 pb-2 flex justify-center">
+        <div className="px-5 sm:px-8 pb-2 flex justify-center">
           <img 
             src="/images/sample-stamp.png" 
             alt="Accepted Stamp" 
-            className="w-32 h-32 object-contain"
+            className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
           />
         </div>
 
         {/* Payment Status & Terms */}
-        <div className="px-8 pb-8 space-y-3">
+        <div className="px-5 sm:px-8 pb-8 space-y-3">
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">Payment Status:</span>
