@@ -23,6 +23,7 @@ export default function CustomerProfilePage() {
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+  const [vehicleIndex, setVehicleIndex] = useState(0);
 
   async function refresh() {
     if (!id) return;
@@ -50,8 +51,79 @@ export default function CustomerProfilePage() {
   if (loading) return <div className="p-6">Loading…</div>;
   if (!customer) return <div className="p-6 text-red-600">Customer not found</div>;
 
+  const totalVehicles = vehicles.length;
+
+  const renderVehicleCard = (v: Vehicle, idx: number) => (
+    <div key={v.id || `vehicle-${idx}`} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-r from-white to-gray-50 flex flex-col">
+      <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-gray-900 text-base truncate">
+            {v.make} {v.model}
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            <span className="font-medium">Plate:</span> {v.plate}
+          </div>
+          {(v.year || v.vin || v.color || v.fuelType) && (
+            <div className="text-xs text-gray-500 mt-2 space-y-0.5">
+              {v.year && <div>Year: {v.year}</div>}
+              {v.fuelType && <div>Fuel: {v.fuelType}</div>}
+              {v.color && <div>Color: {v.color}</div>}
+              {v.vin && <div className="truncate">VIN: {v.vin}</div>}
+            </div>
+          )}
+        </div>
+        {v.id && (
+          <div className="ml-2 flex-shrink-0">
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              Saved
+            </span>
+          </div>
+        )}
+      </div>
+      {v.services && v.services.length > 0 && (
+        <div className="mt-auto pt-3 border-t border-gray-200">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-semibold text-gray-700">Service History</h4>
+            <span className="text-xs text-gray-500">{v.services.length}</span>
+          </div>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {v.services.map((service, sIdx) => (
+              <div key={service.id || sIdx} className="text-xs bg-white p-2 rounded border border-gray-100">
+                <div className="flex items-start justify-between gap-1 mb-1">
+                  <div className="font-medium text-gray-800 flex-1 truncate">{service.category}</div>
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                    service.status === 'completed'
+                      ? 'bg-green-100 text-green-800'
+                      : service.status === 'cancelled'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {service.status || 'pending'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  {service.jobCardNo && (
+                    <div className="text-gray-500 truncate">Job: {service.jobCardNo}</div>
+                  )}
+                  <PermissionGate module="services" action="view">
+                    <a
+                      href={`/admin/book-service/${service.id}`}
+                      className="text-orange-600 hover:text-orange-700 hover:underline ml-auto"
+                    >
+                      View
+                    </a>
+                  </PermissionGate>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="space-y-6 max-w-full w-full overflow-x-hidden p-4 sm:p-0">
+    <div className="space-y-6 max-w-full w-full overflow-x-hidden p-1 sm:p-0">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 w-full min-w-0">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold leading-tight break-words">{customer.firstName} {customer.lastName}</h1>
@@ -105,80 +177,45 @@ export default function CustomerProfilePage() {
             {vehicles.length === 0 ? (
               <div className="text-sm text-gray-500">No vehicles found</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {vehicles.map((v, idx) => (
-                  <div key={v.id || `vehicle-${idx}`} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-r from-white to-gray-50 flex flex-col">
-                    <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-gray-900 text-base truncate">
-                          {v.make} {v.model}
-                        </div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Plate:</span> {v.plate}
-                        </div>
-                        {(v.year || v.vin || v.color || v.fuelType) && (
-                          <div className="text-xs text-gray-500 mt-2 space-y-0.5">
-                            {v.year && <div>Year: {v.year}</div>}
-                            {v.fuelType && <div>Fuel: {v.fuelType}</div>}
-                            {v.color && <div>Color: {v.color}</div>}
-                            {v.vin && <div className="truncate">VIN: {v.vin}</div>}
-                          </div>
-                        )}
-                      </div>
-                      {v.id && (
-                        <div className="ml-2 flex-shrink-0">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Saved
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Service History for this vehicle */}
-                    {v.services && v.services.length > 0 && (
-                      <div className="mt-auto pt-3 border-t border-gray-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-xs font-semibold text-gray-700">Service History</h4>
-                          <span className="text-xs text-gray-500">
-                            {v.services.length}
-                          </span>
-                        </div>
-                        <div className="space-y-2 max-h-40 overflow-y-auto">
-                          {v.services.map((service, sIdx) => (
-                            <div key={service.id || sIdx} className="text-xs bg-white p-2 rounded border border-gray-100">
-                              <div className="flex items-start justify-between gap-1 mb-1">
-                                <div className="font-medium text-gray-800 flex-1 truncate">{service.category}</div>
-                                <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
-                                  service.status === 'completed' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : service.status === 'cancelled'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-blue-100 text-blue-800'
-                                }`}>
-                                  {service.status || 'pending'}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                {service.jobCardNo && (
-                                  <div className="text-gray-500 truncate">Job: {service.jobCardNo}</div>
-                                )}
-                                <PermissionGate module="services" action="view">
-                                  <a 
-                                    href={`/admin/book-service/${service.id}`}
-                                    className="text-orange-600 hover:text-orange-700 hover:underline ml-auto"
-                                  >
-                                    View
-                                  </a>
-                                </PermissionGate>
-                              </div>
-                            </div>
+              <>
+                {/* Mobile slider */}
+                <div className="md:hidden space-y-3">
+                  <div className="relative">
+                    {renderVehicleCard(vehicles[vehicleIndex], vehicleIndex)}
+                    {totalVehicles > 1 && (
+                      <div className="flex items-center justify-between mt-3">
+                        <button
+                          className="px-3 py-1 text-sm border rounded bg-white shadow-sm"
+                          onClick={() => setVehicleIndex((i) => (i - 1 + totalVehicles) % totalVehicles)}
+                        >
+                          Prev
+                        </button>
+                        <div className="flex items-center gap-2">
+                          {vehicles.map((_, dotIdx) => (
+                            <button
+                              key={dotIdx}
+                              onClick={() => setVehicleIndex(dotIdx)}
+                              className={`h-2 w-2 rounded-full ${dotIdx === vehicleIndex ? 'bg-orange-600' : 'bg-gray-300'}`}
+                              aria-label={`Go to vehicle ${dotIdx + 1}`}
+                            />
                           ))}
                         </div>
+                        <button
+                          className="px-3 py-1 text-sm border rounded bg-white shadow-sm"
+                          onClick={() => setVehicleIndex((i) => (i + 1) % totalVehicles)}
+                        >
+                          Next
+                        </button>
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                </div>
+
+                {/* Desktop grid */}
+                <div className="hidden md:grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {vehicles.map((v, idx) => renderVehicleCard(v, idx))}
+                </div>
+              </>
             )}
             <div className="mt-3 text-xs text-gray-500">
               Showing vehicles from customer profile, service bookings, and invoices

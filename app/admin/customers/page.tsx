@@ -156,7 +156,7 @@ export default function CustomersPage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 w-full sm:w-auto min-w-0">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 w-full sm:w-auto min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {([
               { key: 'all', label: 'All' },
               { key: 'today', label: 'Today' },
@@ -312,7 +312,7 @@ export default function CustomersPage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               <button
                 onClick={() => setCurrentPage(1)}
                 disabled={currentPage === 1}

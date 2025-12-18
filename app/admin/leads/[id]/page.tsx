@@ -311,7 +311,7 @@ export default function LeadDetailsPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6 overflow-x-hidden">
+    <div className="p-1 sm:p-6 max-w-7xl w-full mx-auto space-y-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold leading-tight break-words">Lead Details</h1>
