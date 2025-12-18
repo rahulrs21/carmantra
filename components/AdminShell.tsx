@@ -9,11 +9,12 @@ import { startLeadCustomerSync } from '@/lib/firestore/leadSync';
 import { useUser } from '@/lib/userContext';
 import { useTheme } from '@/lib/themeContext';
 import { getRoleLabel, getRoleBadgeColor, canAccessModule } from '@/lib/permissions';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Menu, X } from 'lucide-react';
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { role, displayName } = useUser();
   const { theme, toggleTheme } = useTheme();
 
@@ -102,24 +103,17 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   
   // Filter nav items based on user permissions
   const visibleNavItems = navItems.filter(item => canAccessModule(role, item.module));
-  return (
-    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors"> 
 
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg p-6 fixed h-full overflow-y-auto transition-colors">
-        <div className="mb-2">
-          <h2 className="text-2xl font-bold dark:text-white">CarMantra CRM</h2>
-        </div>
-        
-        {/* Welcome Message */}
-        {displayName && isLoggedIn && (
-          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back,</p>
-              <p className="text-base font-semibold text-gray-800 dark:text-white">{displayName}</p>
-            </div>
-            
-            {/* Theme Toggle */}
+  // Get current active item for mobile bottom nav
+  const activeItem = visibleNavItems.find(item => isActive(item.href));
+  
+  return (
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
+      {/* Mobile Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 shadow-md">
+        <div className="flex items-center justify-between px-4 py-3">
+          <h1 className="text-xl font-bold dark:text-white">CarMantra CRM</h1>
+          <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -131,43 +125,131 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 <Moon className="w-5 h-5 text-gray-600" />
               )}
             </button>
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Toggle menu"
+            >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6 dark:text-white" />
+              ) : (
+                <Menu className="w-6 h-6 dark:text-white" />
+              )}
+            </button>
           </div>
-        )}
-        
-        {/* Role Badge with Pulse */}
-        {role && (
-          <div className="mb-6 flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </span>
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(role)}`}>
-              {getRoleLabel(role)}
-            </span>
-          </div>
-        )}
+        </div>
+      </header>
 
-        <nav className={`space-y-3 ${!isLoggedIn ? 'blur-sm pointer-events-none' : ''}`}>
-          {visibleNavItems.map((item) => (
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 z-40 mt-[60px]"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR - Desktop & Mobile Drawer */}
+      <aside className={`
+        fixed h-full z-50 transition-transform duration-300 ease-in-out
+        w-64 bg-white dark:bg-gray-800 shadow-lg overflow-y-auto
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        lg:block mt-[60px] lg:mt-0
+      `}>
+        <div className="p-6">
+          <div className="mb-2 hidden lg:block">
+            <h2 className="text-2xl font-bold dark:text-white">CarMantra CRM</h2>
+          </div>
+          
+          {/* Welcome Message */}
+          {displayName && isLoggedIn && (
+            <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back,</p>
+                <p className="text-base font-semibold text-gray-800 dark:text-white">{displayName}</p>
+              </div>
+              
+              {/* Theme Toggle - Desktop only */}
+              <button
+                onClick={toggleTheme}
+                className="hidden lg:block p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Toggle theme"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-yellow-500" />
+                ) : (
+                  <Moon className="w-5 h-5 text-gray-600" />
+                )}
+              </button>
+            </div>
+          )}
+          
+          {/* Role Badge with Pulse */}
+          {role && (
+            <div className="mb-6 flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(role)}`}>
+                {getRoleLabel(role)}
+              </span>
+            </div>
+          )}
+
+          <nav className={`space-y-3 ${!isLoggedIn ? 'blur-sm pointer-events-none' : ''}`}>
+            {visibleNavItems.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 p-2 rounded transition-colors ${
+                  isActive(item.href)
+                    ? 'bg-orange-600 text-white font-semibold'
+                    : 'hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </a>
+            ))}
+
+            {isLoggedIn && (
+              <div onClick={() => setIsMobileMenuOpen(false)}>
+                <AdminLogout />
+              </div>
+            )}
+          </nav>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-4 sm:p-6 lg:p-10 lg:ml-64 dark:bg-gray-900 dark:text-white transition-colors pt-[76px] lg:pt-10 pb-20 lg:pb-10 overflow-x-hidden">
+        {children}
+      </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg">
+        <div className="flex items-stretch gap-1 px-2 py-2 overflow-x-auto snap-x snap-mandatory">
+          {visibleNavItems.slice(0, 6).map((item) => (
             <a
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 p-2 rounded transition-colors ${
+              className={`flex flex-col items-center justify-center px-3 py-2 min-w-[80px] rounded-lg transition-colors snap-start whitespace-nowrap ${
                 isActive(item.href)
-                  ? 'bg-orange-600 text-white font-semibold'
-                  : 'hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-gray-300'
+                  ? 'bg-orange-600 text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
             >
-              {item.icon}
-              <span>{item.label}</span>
+              <div className="w-6 h-6 flex-shrink-0">
+                {item.icon}
+              </div>
+              <span className="text-[11px] mt-1 font-medium text-center">
+                {item.label}
+              </span>
             </a>
           ))}
-
-          {isLoggedIn && <AdminLogout />}
-        </nav>
-      </aside>
-
-      <main className="ml-64 flex-1 p-10 dark:bg-gray-900 dark:text-white transition-colors">{children}</main>
+        </div>
+      </nav>
     </div>
   );
 }

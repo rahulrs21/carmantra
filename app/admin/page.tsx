@@ -17,6 +17,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { ChartContainer, ChartTooltipContent, ChartLegendContent } from '@/components/ui/chart';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -287,39 +288,14 @@ export default function AdminDashboard() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-lg">
-          <h1 className="text-xl font-bold mb-4">Access error</h1>
-          <p className="text-sm text-red-600 mb-3">{error}</p>
-          <div className="flex justify-end">
-            <a href="/admin/login" className="text-blue-600 hover:underline">Go to Login</a>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <ModuleAccess module="dashboard">
-      <div className={`space-y-8 ${!isLoggedIn ? 'blur-sm pointer-events-none select-none' : ''}`}>
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold dark:text-white">Dashboard</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Overview of recent leads and activity</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-xs text-gray-400 dark:text-gray-500">Updated</div>
-            <div className="text-sm text-gray-700 dark:text-gray-300">{formatDateTime(new Date())}</div>
-          </div>
-        </div>
-      </header>
-
-      {/* Module Overview Section */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/book-service'}>
+  const moduleCards = [
+    {
+      key: 'services',
+      render: () => (
+        <div
+          className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer h-full min-h-[200px] flex flex-col"
+          onClick={() => (window.location.href = '/admin/book-service')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 mb-1">Total Services</p>
@@ -336,17 +312,24 @@ export default function AdminDashboard() {
             <div className="mt-4 pt-4 border-t">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Pending</span>
-                <span className="font-medium">{services.filter(s => s.status === 'pending').length}</span>
+                <span className="font-medium">{services.filter((s) => s.status === 'pending').length}</span>
               </div>
               <div className="flex items-center justify-between text-xs mt-1">
                 <span className="text-gray-500">Completed</span>
-                <span className="font-medium text-green-600">{services.filter(s => s.status === 'completed').length}</span>
+                <span className="font-medium text-green-600">{services.filter((s) => s.status === 'completed').length}</span>
               </div>
             </div>
           )}
         </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/customers'}>
+      ),
+    },
+    {
+      key: 'customers',
+      render: () => (
+        <div
+          className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer h-full min-h-[200px] flex flex-col"
+          onClick={() => (window.location.href = '/admin/customers')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Customers</p>
@@ -360,8 +343,15 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/invoice'}>
+      ),
+    },
+    {
+      key: 'revenue',
+      render: () => (
+        <div
+          className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer h-full min-h-[200px] flex flex-col"
+          onClick={() => (window.location.href = '/admin/invoice')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Revenue</p>
@@ -383,8 +373,15 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer" onClick={() => window.location.href = '/admin/quotation'}>
+      ),
+    },
+    {
+      key: 'quotations',
+      render: () => (
+        <div
+          className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer h-full min-h-[200px] flex flex-col"
+          onClick={() => (window.location.href = '/admin/quotation')}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Quotations</p>
@@ -398,49 +395,144 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      ),
+    },
+  ];
+
+  const metricCards = [
+    {
+      key: 'total-leads',
+      render: () => (
+        <div className="h-full min-h-[100px]">
+          <MetricCard
+            title="Total Leads"
+            value={leads.length}
+            trendData={analytics.series.map((s) => ({ date: String(s.date), value: s.count }))}
+            color={COLORS[0]}
+            onClick={() => {
+              setFilterService(null);
+              scrollToLeads();
+            }}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'today',
+      render: () => (
+        <div className="h-full min-h-[100px]">
+          <MetricCard
+            title="Today"
+            value={todayCount}
+            subtitle={`${todayChange >= 0 ? '+' : ''}${todayChange}% vs yesterday`}
+            trendData={analytics.series.slice(-7).map((s) => ({ date: String(s.date), value: s.count }))}
+            color={COLORS[1]}
+            onClick={() => {
+              setFilterService(null);
+              scrollToLeads();
+            }}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'unread',
+      render: () => (
+        <div className="h-full min-h-[100px]">
+          <MetricCard
+            title="Unread"
+            value={unreadCount}
+            subtitle={unreadCount ? `${unreadCount} unread` : 'All read'}
+            color={COLORS[2]}
+            onClick={() => {
+              setFilterService(null);
+              scrollToLeads();
+            }}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-lg">
+          <h1 className="text-xl font-bold mb-4">Access error</h1>
+          <p className="text-sm text-red-600 mb-3">{error}</p>
+          <div className="flex justify-end">
+            <a href="/admin/login" className="text-blue-600 hover:underline">Go to Login</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ModuleAccess module="dashboard">
+      <div className={`space-y-6 lg:space-y-8 ${!isLoggedIn ? 'blur-sm pointer-events-none select-none' : ''}`}>
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-extrabold dark:text-white break-words">Dashboard</h1>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">Overview of recent leads and activity</p>
+        </div>
+        <div className="flex items-center justify-between sm:justify-end gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+          <span className="uppercase tracking-wide text-[11px] sm:text-xs text-gray-400 dark:text-gray-500">Updated</span>
+          <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatDateTime(new Date())}</span>
+        </div>
+      </header>
+
+      {/* Module Overview Section */}
+      <section className="sm:hidden">
+        <Carousel opts={{ align: 'start', dragFree: true }}>
+          <CarouselContent>
+            {moduleCards.map(({ key, render }) => (
+              <CarouselItem key={key} className="basis-[88%] h-full">
+                {render()}
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+        </Carousel>
+      </section>
+
+      <section className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {moduleCards.map(({ key, render }) => (
+          <div key={key}>{render()}</div>
+        ))}
       </section>
 
       {/* Leads Metrics Section */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <MetricCard
-          title="Total Leads"
-          value={leads.length}
-          trendData={analytics.series.map(s => ({ date: String(s.date), value: s.count }))}
-          color={COLORS[0]}
-          onClick={() => { setFilterService(null); scrollToLeads(); }}
-        />
+      <section className="sm:hidden">
+        <Carousel opts={{ align: 'start', dragFree: true }}>
+          <CarouselContent>
+            {metricCards.map(({ key, render }) => (
+              <CarouselItem key={key} className="basis-[88%] h-full">
+                {render()}
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+        </Carousel>
+      </section>
 
-        <MetricCard
-          title="Today"
-          value={todayCount}
-          subtitle={`${todayChange >= 0 ? '+' : ''}${todayChange}% vs yesterday`}
-          trendData={analytics.series.slice(-7).map(s => ({ date: String(s.date), value: s.count }))}
-          color={COLORS[1]}
-          onClick={() => { setFilterService(null); scrollToLeads(); }}
-        />
-
-        <MetricCard
-          title="Unread"
-          value={unreadCount}
-          subtitle={unreadCount ? `${unreadCount} unread` : 'All read'}
-          color={COLORS[2]}
-          onClick={() => { setFilterService(null); scrollToLeads(); }}
-        />
+      <section className="hidden sm:grid grid-cols-3 gap-4">
+        {metricCards.map(({ key, render }) => (
+          <div key={key}>{render()}</div>
+        ))}
       </section>
 
       <section>
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Analytics</h2>
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-gray-500">Leads trends & service breakdown</div>
-              <div className="flex items-center gap-2">
-                <div className="inline-flex rounded-md shadow-sm bg-white items-center">
-                  <button className={`px-3 py-1 text-sm ${rangeType==='30d' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('30d'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Last 30d</button>
-                  <button className={`px-3 py-1 text-sm ${rangeType==='yesterday' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('yesterday'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Yesterday</button>
-                  <button className={`px-3 py-1 text-sm ${rangeType==='today' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('today'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Today</button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-xl sm:text-2xl font-semibold">Analytics</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="text-xs sm:text-sm text-gray-500 hidden md:block">Leads trends & service breakdown</div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full">
+                <div className="inline-flex rounded-md shadow-sm bg-white items-center flex-shrink-0">
+                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='30d' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('30d'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Last 30d</button>
+                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='yesterday' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('yesterday'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Yesterday</button>
+                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='today' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('today'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Today</button>
                   <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                     <PopoverTrigger asChild>
-                      <button className={`px-3 py-1 text-sm ${rangeType==='custom' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => setIsPopoverOpen(true)}>Custom</button>
+                      <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='custom' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => setIsPopoverOpen(true)}>Custom</button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto">
                       <div className="flex flex-col gap-2">
@@ -486,22 +578,22 @@ export default function AdminDashboard() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button className="text-sm text-indigo-600 hover:underline" onClick={exportServiceCSV}>Export services CSV</button>
-                  <button className="text-sm text-indigo-600 hover:underline" onClick={exportLeadsCSV}>Export leads CSV</button>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2 w-full sm:w-auto">
+                  <button className="text-xs sm:text-sm text-indigo-600 hover:underline" onClick={exportServiceCSV}>Export services CSV</button>
+                  <button className="text-xs sm:text-sm text-indigo-600 hover:underline" onClick={exportLeadsCSV}>Export leads CSV</button>
                 </div>
               </div>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-gray-800 relative rounded-lg shadow dark:shadow-gray-700 p-4 lg:col-span-2">
-            <h3 className="text-sm text-gray-600 dark:text-gray-300 mb-10">Leads ({rangeLabel})</h3>
-            <ChartContainer config={{ count: { label: 'Leads', color: '#4f46e5' } }} className="h-72 aspect-auto">
+          <div className="bg-white dark:bg-gray-800 relative rounded-xl shadow dark:shadow-gray-700 p-4 lg:col-span-2 overflow-hidden">
+            <h3 className="text-sm text-gray-600 dark:text-gray-300 mb-4 sm:mb-10">Leads ({rangeLabel})</h3>
+            <ChartContainer config={{ count: { label: 'Leads', color: '#4f46e5' } }} className="h-64 sm:h-72 aspect-auto flex relative -left-8 sm:-left-5 justify-center w-[calc(100%+3rem)] -mx-6 sm:w-full sm:mx-0">
               {analytics.series.length === 0 ? (
                 <div className="h-64 flex items-center justify-center text-sm text-gray-400">No data for selected range</div>
               ) : (
-                <LineChart data={analytics.series} margin={{ left: -12, right: 12 }}>
+                <LineChart data={analytics.series} margin={{ left: 0, right: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e6e6f0" />
                   <XAxis
                     dataKey="date"
@@ -532,22 +624,22 @@ export default function AdminDashboard() {
             </ChartContainer>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-gray-700 p-4">
             <h3 className="text-sm text-gray-600 dark:text-gray-400 mb-2">Services breakdown</h3>
-            <div className="h-48">
+            <div className="h-56 sm:h-48 pt-4 sm:pt-0">
               <ChartContainer
                 config={analytics.serviceBreakdown.reduce((acc, s, i) => ({ ...acc, [s.name]: { label: s.name, color: COLORS[i % COLORS.length] } }), {} as any)}
-                className="h-48 aspect-auto"
+                className="h-full aspect-auto flex justify-center items-center"
               >
                 <PieChart>
                   <Pie
                     data={analytics.serviceBreakdown}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={28}
-                    outerRadius={60}
+                    innerRadius={32}
+                    outerRadius={64}
                     paddingAngle={4}
-                    cy="50%"
+                    cy="55%"
                   >
                     {analytics.serviceBreakdown.map((entry, idx) => (
                       <Cell key={entry.name} fill={COLORS[idx % COLORS.length]} onClick={() => setFilterService(entry.name)} style={{ cursor: 'pointer' }} />
@@ -559,12 +651,12 @@ export default function AdminDashboard() {
               </ChartContainer>
             </div>
 
-            <div className="mt-3">
-              <table className="w-full text-sm">
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[260px] text-sm">
                 <thead className="text-xs text-gray-500">
                   <tr>
-                    <th className="text-left">Service</th>
-                    <th className="text-right">Count</th>
+                    <th className="text-left px-2">Service</th>
+                    <th className="text-right px-2">Count</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -573,8 +665,8 @@ export default function AdminDashboard() {
                   )}
                   {analytics.serviceBreakdown.map((s) => (
                     <tr key={s.name} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setFilterService(s.name)}>
-                      <td className="py-2 flex items-center gap-2"><span className="w-2 h-2 rounded" style={{ background: COLORS[analytics.serviceBreakdown.indexOf(s) % COLORS.length] }} />{s.name}</td>
-                      <td className="py-2 text-right font-medium">{s.value}</td>
+                      <td className="py-2 px-2 flex items-center gap-2"><span className="w-2 h-2 rounded" style={{ background: COLORS[analytics.serviceBreakdown.indexOf(s) % COLORS.length] }} />{s.name}</td>
+                      <td className="py-2 px-2 text-right font-medium">{s.value}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -584,19 +676,19 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      <section>
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Latest Leads</h2>
-          <div className="text-sm text-gray-500">Showing recent 50 leads</div>
+      <section id="dashboard-leads">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-4">
+          <h2 className="text-xl sm:text-2xl font-semibold">Latest Leads</h2>
+          <div className="text-xs sm:text-sm text-gray-500">Showing recent 50 leads</div>
         </div>
 
-        <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 overflow-hidden">
+        <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-gray-700 overflow-hidden">
           {filterService && (
-            <div className="p-3 border-b dark:border-gray-700 flex items-center justify-between">
-              <div className="text-sm text-gray-700 dark:text-gray-300">Filtered by service: <span className="font-medium">{filterService}</span></div>
-              <div className="flex items-center gap-2">
-                <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setFilterService(null)}>Clear filter</button>
-                <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline" onClick={exportLeadsCSV}>Export filtered leads</button>
+            <div className="p-3 border-b dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Filtered by service: <span className="font-medium">{filterService}</span></div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap" onClick={() => setFilterService(null)}>Clear filter</button>
+                <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap" onClick={exportLeadsCSV}>Export filtered leads</button>
               </div>
             </div>
           )}
@@ -607,47 +699,81 @@ export default function AdminDashboard() {
               <div className="h-4 bg-gray-100 dark:bg-gray-700 rounded w-full animate-pulse" />
             </div>
           ) : (
-            <table className="w-full table-auto min-w-[600px] text-left">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Name</th>
-                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Service</th>
-                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Phone</th>
-                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Email</th>
-                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Date</th>
-                  <th className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="flex flex-col gap-4">
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-3 px-3 pb-3">
                 {filteredLeads.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No leads</td>
-                  </tr>
+                  <div className="rounded-lg border bg-white dark:bg-gray-900 p-4 text-sm text-gray-500 dark:text-gray-300">No leads</div>
                 )}
                 {filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="border-t dark:border-gray-700 last:border-b dark:last:border-gray-700">
-                    <td className="px-4 py-3 align-top">
-                      <div className="font-medium dark:text-white">{lead.name || '—'}</div>
-                      <div className="text-xs text-gray-400">{lead.message ? `${lead.message.slice(0, 60)}${lead.message.length>60? '…': ''}` : ''}</div>
-                    </td>
-                    <td className="px-4 py-3 align-top dark:text-gray-300">{lead.service || '—'}</td>
-                    <td className="px-4 py-3 align-top dark:text-gray-300">{lead.phone || '—'}</td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="text-sm dark:text-gray-300">{lead.email || '—'}</div>
-                    </td>
-                    <td className="px-4 py-3 align-top text-sm text-gray-500 dark:text-gray-400">{formatDateTime(lead.createdAt)}</td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex gap-2">
-                        {lead.email ? (
-                          <a href={`mailto:${lead.email}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Email</a>
-                        ) : null}
-                        <a href={`/admin/leads/${lead.id}`} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">View</a>
+                  <div key={lead.id} className="rounded-lg border bg-white dark:bg-gray-900 p-4 shadow-sm space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-sm dark:text-white break-words">{lead.name || '—'}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{lead.service || '—'}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{lead.message ? `${lead.message.slice(0, 80)}${lead.message.length>80 ? '…' : ''}` : ''}</div>
                       </div>
-                    </td>
-                  </tr>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(lead.createdAt)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300">
+                      {lead.phone && <span className="whitespace-nowrap">{lead.phone}</span>}
+                      {lead.email && <span className="break-all">{lead.email}</span>}
+                    </div>
+                    <div className="flex gap-2">
+                      {lead.email ? (
+                        <a href={`mailto:${lead.email}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Email</a>
+                      ) : null}
+                      <a href={`/admin/leads/${lead.id}`} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100">View</a>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full table-auto min-w-[600px] text-left">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">Name</th>
+                      <th className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">Service</th>
+                      <th className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">Phone</th>
+                      <th className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">Email</th>
+                      <th className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">Date</th>
+                      <th className="px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 dark:text-gray-300">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLeads.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">No leads</td>
+                      </tr>
+                    )}
+                    {filteredLeads.map((lead) => (
+                      <tr key={lead.id} className="border-t dark:border-gray-700 last:border-b dark:last:border-gray-700">
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top">
+                          <div className="font-medium text-sm dark:text-white break-words">{lead.name || '—'}</div>
+                          <div className="text-xs text-gray-400 break-words">{lead.message ? `${lead.message.slice(0, 60)}${lead.message.length>60? '…': ''}` : ''}</div>
+                        </td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top text-sm dark:text-gray-300 whitespace-nowrap">{lead.service || '—'}</td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top text-sm dark:text-gray-300 whitespace-nowrap">{lead.phone || '—'}</td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top">
+                          <div className="text-xs sm:text-sm dark:text-gray-300 break-all">{lead.email || '—'}</div>
+                        </td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(lead.createdAt)}</td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top">
+                          <div className="flex gap-2 flex-wrap">
+                            {lead.email ? (
+                              <a href={`mailto:${lead.email}`} className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">Email</a>
+                            ) : null}
+                            <a href={`/admin/leads/${lead.id}`} className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 whitespace-nowrap">View</a>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       </section>

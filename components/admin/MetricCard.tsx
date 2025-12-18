@@ -19,11 +19,16 @@ export default function MetricCard({
   onClick?: () => void;
 }) {
   return (
-    <button onClick={onClick} className="w-full p-5 bg-white rounded-xl shadow flex items-center justify-between text-left hover:shadow-md transition">
+    <button
+      onClick={onClick}
+      className="w-full h-full p-5 bg-white rounded-xl shadow flex items-center justify-between text-left hover:shadow-md transition"
+    >
       <div>
         <h3 className="text-sm text-gray-500">{title}</h3>
         <div className="text-2xl font-bold mt-1">{value}</div>
-        {subtitle && <div className="text-xs text-gray-400 mt-1">{subtitle}</div>}
+        <div className="text-xs text-gray-400 mt-1 min-h-[18px]">
+          {subtitle ?? <span className="invisible">placeholder</span>}
+        </div>
       </div>
 
       <div className="w-28 h-12">

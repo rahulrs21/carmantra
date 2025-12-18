@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+import { DateRange } from 'react-day-picker';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
@@ -9,6 +10,8 @@ import { formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 
 interface Service {
@@ -42,6 +45,10 @@ export default function ServicesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [scheduledRange, setScheduledRange] = useState<DateRange | undefined>(undefined);
+  const [tempScheduledRange, setTempScheduledRange] = useState<DateRange | undefined>(undefined);
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [sortField, setSortField] = useState<'jobCardNo' | 'category' | 'customerName' | 'status' | 'scheduledDate' | 'createdAt'>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -85,6 +92,21 @@ export default function ServicesPage() {
     return sortDirection === 'asc' ? <span className="ml-1">↑</span> : <span className="ml-1">↓</span>;
   };
 
+  function toDate(ts?: { seconds?: number } | { toDate?: () => Date } | null) {
+    if (!ts) return null;
+    if ('toDate' in ts && typeof ts.toDate === 'function') return ts.toDate();
+    if (typeof (ts as any).seconds === 'number') return new Date((ts as any).seconds * 1000);
+    return null;
+  }
+
+  function startOfDay(d: Date) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  function endOfDay(d: Date) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  }
+
   const filtered = useMemo(() => {
     let result = services;
 
@@ -114,8 +136,18 @@ export default function ServicesPage() {
       result = result.filter(s => s.category === categoryFilter);
     }
 
+    if (scheduledRange?.from && scheduledRange?.to) {
+      const start = startOfDay(scheduledRange.from);
+      const end = endOfDay(scheduledRange.to);
+      result = result.filter((s) => {
+        const d = toDate(s.scheduledDate as any);
+        if (!d) return false;
+        return d >= start && d <= end;
+      });
+    }
+
     return result;
-  }, [services, searchQuery, statusFilter, categoryFilter]);
+  }, [services, searchQuery, statusFilter, categoryFilter, scheduledRange]);
 
   const sorted = useMemo(() => {
     const data = [...filtered];
@@ -168,7 +200,7 @@ export default function ServicesPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, categoryFilter, itemsPerPage]);
+  }, [searchQuery, statusFilter, categoryFilter, scheduledRange, itemsPerPage]);
 
   const categories = useMemo(() => {
     const cats = new Set(services.map(s => s.category).filter(Boolean));
@@ -181,14 +213,20 @@ export default function ServicesPage() {
   }, [services]);
 
   async function handleDelete(id: string) {
-    if (!confirm('Are you sure you want to delete this booking?')) return;
-    
     try {
       await deleteDoc(doc(db, 'bookedServices', id));
     } catch (err: any) {
       safeConsoleError('Delete booking error', err);
       alert('Error deleting booking: ' + err.message);
     }
+  }
+
+  function confirmAndDelete(service: Service) {
+    const name = `${service.firstName || ''} ${service.lastName || ''}`.trim();
+    const label = service.jobCardNo || service.numberPlate || 'this booking';
+    const message = `Delete ${label}${name ? ` for ${name}` : ''}? This action cannot be undone.`;
+    if (!confirm(message)) return;
+    handleDelete(service.id);
   }
 
   function handleViewDetails(id: string) {
@@ -236,19 +274,19 @@ export default function ServicesPage() {
   return (
     <ModuleAccess module="services">
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Services History</h1>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold break-words">Services History</h1>
           <p className="text-sm text-gray-500 mt-1">All service bookings and history from Book Service module</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto sm:justify-end">
           <PermissionGate module="services" action="create">
-            <Button variant="outline" onClick={downloadCSV} disabled={loading || sorted.length === 0}>
+            <Button variant="outline" onClick={downloadCSV} disabled={loading || sorted.length === 0} className="w-full sm:w-auto">
               Export CSV
             </Button>
           </PermissionGate>
           <PermissionGate module="services" action="create">
-            <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => router.push('/admin/book-service')}>
+            <Button className="bg-orange-600 hover:bg-orange-700 w-full sm:w-auto" onClick={() => router.push('/admin/book-service')}>
               + New Booking
             </Button>
           </PermissionGate>
@@ -260,18 +298,30 @@ export default function ServicesPage() {
       )}
 
       {/* Filters */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between md:hidden">
+          <div className="text-sm font-medium text-gray-700">Filters</div>
+          <button
+            className="flex items-center gap-2 px-3 py-2 text-sm border rounded hover:bg-gray-50"
+            onClick={() => setShowMobileFilters((v) => !v)}
+          >
+            <span className="text-gray-600">{showMobileFilters ? 'Hide' : 'Show'}</span>
+            <span className="text-gray-400">⋮</span>
+          </button>
+        </div>
+
+        {/* Desktop filters */}
+        <div className="hidden md:grid grid-cols-5 gap-3 items-center">
           <Input
             placeholder="Search services..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="col-span-1 md:col-span-2"
+            className="col-span-1 md:col-span-2 h-11"
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border rounded px-3 py-2 text-sm h-11"
           >
             <option value="all">All Status</option>
             {statuses.map(status => (
@@ -281,129 +331,345 @@ export default function ServicesPage() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border rounded px-3 py-2 text-sm h-11"
           >
             <option value="all">All Categories</option>
             {categories.map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
+          <div className="flex flex-col gap-1">
+            <Popover
+              open={isDatePopoverOpen}
+              onOpenChange={(open) => {
+                setIsDatePopoverOpen(open);
+                if (open) {
+                  setTempScheduledRange(scheduledRange);
+                }
+              }}
+            >
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="justify-between h-11">
+                  <span className="text-sm">
+                    {scheduledRange?.from && scheduledRange?.to
+                      ? `${scheduledRange.from.toLocaleDateString()} — ${scheduledRange.to.toLocaleDateString()}`
+                      : 'Date Filter'}
+                  </span>
+                  <span className="text-xs text-gray-500">Change</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-3" align="start">
+                <div className="flex flex-col gap-3">
+                  <Calendar
+                    mode="range"
+                    selected={tempScheduledRange}
+                    onSelect={(range) => setTempScheduledRange(range || undefined)}
+
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setScheduledRange(undefined);
+                        setTempScheduledRange(undefined);
+                        setIsDatePopoverOpen(false);
+                      }}
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (tempScheduledRange?.from && tempScheduledRange?.to) {
+                          setScheduledRange({
+                            from: tempScheduledRange.from,
+                            to: tempScheduledRange.to,
+                          });
+                        }
+                        setIsDatePopoverOpen(false);
+                      }}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
         </div>
+
+        {/* Mobile filters (collapsible) */}
+        {showMobileFilters && (
+          <div className="md:hidden grid grid-cols-1 gap-3">
+            <Input
+              placeholder="Search services..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-11"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="border rounded px-3 py-2 text-sm h-11"
+            >
+              <option value="all">All Status</option>
+              {statuses.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="border rounded px-3 py-2 text-sm h-11"
+            >
+              <option value="all">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <div className="flex flex-col gap-1">
+              <Popover
+                open={isDatePopoverOpen}
+                onOpenChange={(open) => {
+                  setIsDatePopoverOpen(open);
+                  if (open) {
+                    setTempScheduledRange(scheduledRange);
+                  }
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-between h-11">
+                    <span className="text-sm">
+                      {scheduledRange?.from && scheduledRange?.to
+                        ? `${scheduledRange.from.toLocaleDateString()} — ${scheduledRange.to.toLocaleDateString()}`
+                        : 'Date Filter'}
+                    </span>
+                    <span className="text-xs text-gray-500">Change</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-3" align="start">
+                  <div className="flex flex-col gap-3">
+                    <Calendar
+                      mode="range"
+                      selected={tempScheduledRange}
+                      onSelect={(range) => setTempScheduledRange(range || undefined)}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setScheduledRange(undefined);
+                          setTempScheduledRange(undefined);
+                          setIsDatePopoverOpen(false);
+                        }}
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (tempScheduledRange?.from && tempScheduledRange?.to) {
+                            setScheduledRange({
+                              from: tempScheduledRange.from,
+                              to: tempScheduledRange.to,
+                            });
+                          }
+                          setIsDatePopoverOpen(false);
+                        }}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Services Table */}
-      <div className="bg-white rounded shadow overflow-auto">
+      <div className="bg-white rounded shadow">
         {loading ? (
           <div className="p-6">Loading…</div>
         ) : (
-          <table className="w-full min-w-[1200px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('jobCardNo')}>
-                  <div className="flex items-center">
-                    Job Card No
-                    <SortIcon field="jobCardNo" />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('customerName')}>
-                  <div className="flex items-center">
-                    Customer
-                    <SortIcon field="customerName" />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600">Contact</th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('category')}>
-                  <div className="flex items-center">
-                    Service Type
-                    <SortIcon field="category" />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600">Vehicle</th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('status')}>
-                  <div className="flex items-center">
-                    Status
-                    <SortIcon field="status" />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('scheduledDate')}>
-                  <div className="flex items-center">
-                    Scheduled
-                    <SortIcon field="scheduledDate" />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('createdAt')}>
-                  <div className="flex items-center">
-                    Created
-                    <SortIcon field="createdAt" />
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-sm text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y">
               {paginated.length === 0 && (
-                <tr><td colSpan={9} className="p-6 text-center text-gray-500">No service bookings found</td></tr>
+                <div className="p-4 text-sm text-gray-500">No service bookings found</div>
               )}
-              {paginated.map(service => (
-                <tr key={service.id} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-blue-600">{service.jobCardNo}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{service.firstName} {service.lastName}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    <div>{service.mobileNo}</div>
-                    <div className="text-xs text-gray-400">{service.email}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
-                      {service.category}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    <div className="font-medium">{service.vehicleBrand} {service.modelName}</div>
-                    <div className="text-xs text-gray-400">{service.numberPlate}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(service.status)}`}>
+              {paginated.map((service) => (
+                <div key={service.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm text-gray-500">Job Card</div>
+                      <div className="font-semibold text-blue-600 break-words">{service.jobCardNo}</div>
+                      <div className="text-sm font-medium mt-1 break-words">{service.firstName} {service.lastName}</div>
+                      <div className="text-xs text-gray-500 break-words">{service.mobileNo}</div>
+                      <div className="text-xs text-gray-400 break-all">{service.email}</div>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${getStatusColor(service.status)}`}>
                       {service.status}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {formatDateTime(service.scheduledDate)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {formatDateTime(service.createdAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        className="text-sm text-blue-600 hover:underline"
-                        onClick={() => handleViewDetails(service.id)}
-                      >
-                        View
-                      </button>
-                      <button
-                        className="text-sm text-red-600 hover:underline"
-                        onClick={() => handleDelete(service.id)}
-                      >
-                        Delete
-                      </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+                    {service.category && (
+                      <span className="px-2 py-1 rounded bg-blue-50 text-blue-700">{service.category}</span>
+                    )}
+                    <span className="px-2 py-1 rounded bg-gray-50 text-gray-700">
+                      {service.vehicleBrand} {service.modelName}
+                    </span>
+                    {service.numberPlate && (
+                      <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">{service.numberPlate}</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
+                    <div>
+                      <div className="text-gray-500">Scheduled</div>
+                      <div className="font-medium">{formatDateTime(service.scheduledDate)}</div>
                     </div>
-                  </td>
-                </tr>
+                    <div>
+                      <div className="text-gray-500">Created</div>
+                      <div className="font-medium">{formatDateTime(service.createdAt)}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      className="text-sm text-blue-600 hover:underline"
+                      onClick={() => handleViewDetails(service.id)}
+                    >
+                      View
+                    </button>
+                    <button
+                      className="text-sm text-red-600 hover:underline"
+                      onClick={() => confirmAndDelete(service)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-auto">
+              <table className="w-full min-w-[1200px]">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('jobCardNo')}>
+                      <div className="flex items-center">
+                        Job Card No
+                        <SortIcon field="jobCardNo" />
+                      </div>
+                    </th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('customerName')}>
+                      <div className="flex items-center">
+                        Customer
+                        <SortIcon field="customerName" />
+                      </div>
+                    </th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600">Contact</th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('category')}>
+                      <div className="flex items-center">
+                        Service Type
+                        <SortIcon field="category" />
+                      </div>
+                    </th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600">Vehicle</th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('status')}>
+                      <div className="flex items-center">
+                        Status
+                        <SortIcon field="status" />
+                      </div>
+                    </th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('scheduledDate')}>
+                      <div className="flex items-center">
+                        Scheduled
+                        <SortIcon field="scheduledDate" />
+                      </div>
+                    </th>
+                    <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('createdAt')}>
+                      <div className="flex items-center">
+                        Created
+                        <SortIcon field="createdAt" />
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-sm text-gray-600">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.length === 0 && (
+                    <tr><td colSpan={9} className="p-6 text-center text-gray-500">No service bookings found</td></tr>
+                  )}
+                  {paginated.map(service => (
+                    <tr key={service.id} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-blue-600">{service.jobCardNo}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{service.firstName} {service.lastName}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div>{service.mobileNo}</div>
+                        <div className="text-xs text-gray-400">{service.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
+                          {service.category}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div className="font-medium">{service.vehicleBrand} {service.modelName}</div>
+                        <div className="text-xs text-gray-400">{service.numberPlate}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(service.status)}`}>
+                          {service.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {formatDateTime(service.scheduledDate)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {formatDateTime(service.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button
+                            className="text-sm text-blue-600 hover:underline"
+                            onClick={() => handleViewDetails(service.id)}
+                          >
+                            View
+                          </button>
+                          <button
+                            className="text-sm text-red-600 hover:underline"
+                            onClick={() => confirmAndDelete(service)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
       {/* Pagination Controls */}
       {!loading && sorted.length > 0 && (
         <div className="bg-white rounded shadow p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <div className="text-sm text-gray-600">
                 Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, sorted.length)} of {sorted.length} bookings
               </div>
@@ -421,7 +687,7 @@ export default function ServicesPage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setCurrentPage(1)}
                 disabled={currentPage === 1}

@@ -330,7 +330,10 @@ export default function BookServiceDetails() {
   }
 
   async function deleteService() {
-    if (!confirm('Are you sure you want to delete this booking?')) return;
+    const bookingLabel = service?.jobCardNo || service?.numberPlate || 'this booking';
+    const customerName = `${service?.firstName || ''} ${service?.lastName || ''}`.trim();
+    const message = `Cancel ${bookingLabel}${customerName ? ` for ${customerName}` : ''}? This cannot be undone.`;
+    if (!confirm(message)) return;
     setStatus('Deleting...');
     try {
       await updateDoc(doc(db, 'bookedServices', id!), {

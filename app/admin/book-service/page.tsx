@@ -99,7 +99,8 @@ export default function BookServiceList() {
     };
 
     const isDateDisabled = (date: Date) => {
-        return isPastDate(date) || isWeekend(date);
+        // Allow viewing past dates but keep weekends blocked for booking
+        return isWeekend(date);
     };
 
     const getServicesByDate = (date: Date) => {
@@ -121,8 +122,18 @@ export default function BookServiceList() {
         '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
     ];
 
+    const formatTimeLabel = (time: string) => {
+        const [h, m] = time.split(':');
+        let hour = Number(h);
+        const suffix = hour >= 12 ? 'PM' : 'AM';
+        if (hour === 0) hour = 12;
+        else if (hour > 12) hour -= 12;
+        return `${hour}:${m} ${suffix}`;
+    };
+
     const isTimeDisabled = (time: string) => {
         if (!selectedDate) return false;
+        if (isPastDate(selectedDate)) return true;
         const today = new Date();
         if (selectedDate.toDateString() === today.toDateString()) {
             const [hours, minutes] = time.split(':');
@@ -239,6 +250,11 @@ export default function BookServiceList() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedDate || !selectedTime) return;
+
+        if (isPastDate(selectedDate)) {
+            alert('You cannot book a service in the past.');
+            return;
+        }
 
         if (isDateDisabled(selectedDate) || isTimeDisabled(selectedTime)) {
             alert('Please select a valid date and time within working hours (weekdays, future, 9 AM - 6 PM).');
@@ -377,15 +393,15 @@ export default function BookServiceList() {
                 <div
                     key={day}
                     onClick={() => !disabled && setSelectedDate(date)}
-                    className={`p-3 min-h-24 border cursor-pointer transition-colors ${disabled
+                    className={`p-2 sm:p-3 min-h-[88px] border cursor-pointer transition-colors ${disabled
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : isSelected
                             ? 'bg-orange-200 border-orange-500'
                             : 'hover:bg-orange-50'
-                        }`}
+                        } ${isPastDate(date) ? 'opacity-70' : ''}`}
                 >
-                    <div className="font-semibold text-sm mb-1">{day}</div>
-                    <div className="text-xs space-y-0.5">
+                    <div className="font-semibold text-xs sm:text-sm mb-1">{day}</div>
+                    <div className="text-[11px] sm:text-xs space-y-0.5">
                         {dayServices.slice(0, 2).map((service, i) => (
                             <div
                                 key={i}
@@ -414,13 +430,13 @@ export default function BookServiceList() {
 
     return (
         <ModuleAccess module="services">
-        <div className="space-y-6">
-            <header className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-extrabold">Book Service Calendar</h1>
+        <div className="space-y-6 max-w-full w-full overflow-x-hidden">
+            <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight break-words">Book Service Calendar</h1>
                     <p className="text-sm text-gray-500 mt-1">Total Bookings: {services.length}</p>
                 </div>
-                <Button onClick={() => setView(view === 'calendar' ? 'list' : 'calendar')}>
+                <Button onClick={() => setView(view === 'calendar' ? 'list' : 'calendar')} className="self-start sm:self-auto">
                     {view === 'calendar' ? 'List View' : 'Calendar View'}
                 </Button>
             </header>
@@ -429,50 +445,53 @@ export default function BookServiceList() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Calendar */}
                     <div className="lg:col-span-2 space-y-4">
-                        <Card className="p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-orange-600">
+                        <Card className="p-4 sm:p-6">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+                                <h2 className="text-xl sm:text-2xl font-bold text-orange-600">
                                     {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                                 </h2>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                                     <Button
                                         variant="outline"
                                         onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         ← Prev
                                     </Button>
                                     <Button
                                         variant="outline"
                                         onClick={() => setCurrentDate(new Date())}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Today
                                     </Button>
                                     <Button
                                         variant="outline"
                                         onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
+                                        className="flex-1 sm:flex-none"
                                     >
                                         Next →
                                     </Button>
                                     <Button
-                                        className="bg-orange-600 hover:bg-orange-700 text-white"
+                                        className="bg-orange-600 hover:bg-orange-700 text-white flex-1 sm:flex-none"
                                         onClick={openBookingForm}
-                                        disabled={!selectedDate}
+                                        disabled={!selectedDate || isPastDate(selectedDate)}
                                     >
                                         + Book Service
                                     </Button>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-7 gap-0 border">
+                            <div className="grid grid-cols-7 gap-0 border rounded overflow-hidden text-xs sm:text-sm">
                                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                                    <div key={day} className="p-3 text-center font-semibold bg-gray-100 border-b text-orange-600">
+                                    <div key={day} className="p-2 sm:p-3 text-center font-semibold bg-gray-100 border-b text-orange-600">
                                         {day}
                                     </div>
                                 ))}
                                 {renderCalendar()}
                             </div>
 
-                            <div className="mt-4 flex gap-4 text-sm">
+                            <div className="mt-4 flex flex-wrap gap-4 text-sm">
                                 <div className="flex items-center gap-2">
                                     <div className="w-4 h-4 bg-blue-500 rounded"></div>
                                     <span>Open</span>
@@ -544,7 +563,7 @@ export default function BookServiceList() {
                     {/* Time Selector */}
                     <div className="space-y-4">
                         {selectedDate && (
-                            <Card className="p-6 sticky top-6">
+                            <Card className="p-4 sm:p-6 sticky top-6">
                                 <h3 className="font-semibold mb-4">Schedule Service</h3>
                                 <div className="mb-4">
                                     <p className="text-sm text-gray-600 mb-2">Selected Date:</p>
@@ -559,7 +578,7 @@ export default function BookServiceList() {
 
                                 <div>
                                     <p className="text-sm text-gray-600 mb-3">Select Time:</p>
-                                    <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-96 overflow-y-auto">
                                         {timeSlots.map((time) => (
                                             <button
                                                 key={time}
@@ -572,7 +591,7 @@ export default function BookServiceList() {
                                                         : 'border-gray-300 hover:bg-orange-50'
                                                     }`}
                                             >
-                                                {time}
+                                                {formatTimeLabel(time)}
                                             </button>
                                         ))}
                                     </div>
@@ -581,6 +600,7 @@ export default function BookServiceList() {
                                 <Button
                                     className="w-full mt-4 bg-orange-600 hover:bg-orange-700"
                                     onClick={openBookingForm}
+                                    disabled={!selectedDate || isPastDate(selectedDate)}
                                 >
                                     + Book Service
                                 </Button>
@@ -745,7 +765,7 @@ export default function BookServiceList() {
                         {/* Service Details */}
                         <div>
                             <h3 className="text-lg font-semibold mb-3">SERVICE DETAILS</h3>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <Label htmlFor="jobCardNo">Job Card No.*</Label>
                                     <Input
@@ -760,7 +780,7 @@ export default function BookServiceList() {
                                     <Input
                                         id="scheduledDate"
                                         value={selectedDate && selectedTime ?
-                                            `${selectedDate.toLocaleDateString()} ${selectedTime}` : ''}
+                                            `${selectedDate.toLocaleDateString()} ${formatTimeLabel(selectedTime)}` : ''}
                                         readOnly
                                         className="bg-gray-50"
                                     />
@@ -789,7 +809,7 @@ export default function BookServiceList() {
                         {/* Customer Details */}
                         <div>
                             <h3 className="text-lg font-semibold mb-3">CUSTOMER DETAILS</h3>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <Label htmlFor="firstName">First Name*</Label>
                                     <Input
@@ -867,7 +887,7 @@ export default function BookServiceList() {
                         {/* Vehicle Details */}
                         <div>
                             <h3 className="text-lg font-semibold mb-3">VEHICLE DETAILS</h3>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <Label htmlFor="vehicleType">Vehicle Type*</Label>
                                     <Select value={formData.vehicleType} onValueChange={(val) => updateFormField('vehicleType', val)}>
@@ -1004,7 +1024,7 @@ export default function BookServiceList() {
 
 
                         {/* Submit Button */}
-                        <div className="flex gap-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <Button
                                 type="submit"
                                 className="flex-1 bg-orange-600 hover:bg-orange-700"

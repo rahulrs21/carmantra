@@ -51,13 +51,13 @@ export default function CustomerProfilePage() {
   if (!customer) return <div className="p-6 text-red-600">Customer not found</div>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{customer.firstName} {customer.lastName}</h1>
-          <div className="text-sm text-gray-600">{customer.email} • {customer.mobile}</div>
+    <div className="space-y-6 max-w-full w-full overflow-x-hidden p-4 sm:p-0">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 w-full min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold leading-tight break-words">{customer.firstName} {customer.lastName}</h1>
+          <div className="text-sm text-gray-600 break-all">{customer.email} • {customer.mobile}</div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <PermissionGate module="customers" action="edit">
             <Button variant="outline" onClick={() => setShowEdit(true)}>Edit</Button>
           </PermissionGate>
@@ -80,23 +80,23 @@ export default function CustomerProfilePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 w-full">
         {/* Left: Details and Vehicles */}
         <div className="xl:col-span-2 space-y-6">
-          <Card className="p-6">
+          <Card className="p-6 w-full">
             <h2 className="text-lg font-semibold mb-3">Customer Details</h2>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">Status:</span> <span className="font-medium">{customer.status}</span></div>
-              <div><span className="text-gray-500">Email:</span> <span className="font-medium">{customer.email}</span></div>
-              <div><span className="text-gray-500">Mobile:</span> <span className="font-medium">{customer.mobile}</span></div>
-              <div><span className="text-gray-500">Address:</span> <span className="font-medium">{customer.address || latestBooking?.address || '-'}</span></div>
-              <div><span className="text-gray-500">City:</span> <span className="font-medium">{customer.city || latestBooking?.city || '-'}</span></div>
-              <div><span className="text-gray-500">Country:</span> <span className="font-medium">{customer.country || latestBooking?.country || '-'}</span></div>
+              <div><span className="text-gray-500">Email:</span> <span className="font-medium break-all">{customer.email}</span></div>
+              <div><span className="text-gray-500">Mobile:</span> <span className="font-medium break-words">{customer.mobile}</span></div>
+              <div><span className="text-gray-500">Address:</span> <span className="font-medium break-words">{customer.address || latestBooking?.address || '-'}</span></div>
+              <div><span className="text-gray-500">City:</span> <span className="font-medium break-words">{customer.city || latestBooking?.city || '-'}</span></div>
+              <div><span className="text-gray-500">Country:</span> <span className="font-medium break-words">{customer.country || latestBooking?.country || '-'}</span></div>
             </div>
           </Card>
 
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-3">
+          <Card className="p-6 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
               <h2 className="text-lg font-semibold">Vehicles</h2>
               <PermissionGate module="customers" action="create">
                 <Button className="bg-orange-600 hover:bg-orange-700" onClick={() => setShowAddVehicle(true)}>Add Vehicle</Button>
@@ -108,7 +108,7 @@ export default function CustomerProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {vehicles.map((v, idx) => (
                   <div key={v.id || `vehicle-${idx}`} className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-r from-white to-gray-50 flex flex-col">
-                    <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-gray-900 text-base truncate">
                           {v.make} {v.model}
@@ -185,8 +185,8 @@ export default function CustomerProfilePage() {
             </div>
           </Card>
 
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
+          <Card className="p-6 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
               <h2 className="text-lg font-semibold">Complete Activity History</h2>
               <span className="text-xs text-gray-500">Services • Leads • Invoices</span>
             </div>
@@ -195,8 +195,8 @@ export default function CustomerProfilePage() {
         </div>
 
         {/* Right: Invoices & Notes */}
-        <div className="space-y-6">
-          <Card className="p-6">
+        <div className="space-y-6 w-full">
+          <Card className="p-6 w-full">
             <h2 className="text-lg font-semibold mb-3">Invoices</h2>
             {invoices.length === 0 ? (
               <div className="text-sm text-gray-500">No invoices</div>
@@ -217,7 +217,7 @@ export default function CustomerProfilePage() {
             )}
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 w-full">
             <h2 className="text-lg font-semibold mb-3">Notes</h2>
             <NotesSection customerId={customer.id!} />
           </Card>

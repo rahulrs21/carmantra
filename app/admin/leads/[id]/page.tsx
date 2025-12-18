@@ -311,13 +311,13 @@ export default function LeadDetailsPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Lead Details</h1>
-          <p className="text-sm text-gray-500 mt-1">Lead ID: {id}</p>
+    <div className="p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold leading-tight break-words">Lead Details</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 break-all">Lead ID: {id}</p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/admin/leads')}>Back to Leads</Button>
+        <Button variant="outline" className="self-start sm:self-auto" onClick={() => router.push('/admin/leads')}>Back to Leads</Button>
       </div>
 
       {loading ? (
@@ -325,15 +325,15 @@ export default function LeadDetailsPage() {
       ) : error ? (
         <Card className="p-6 bg-red-50 text-red-700">{error}</Card>
       ) : lead ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
           {/* Lead Information */}
           <div className="lg:col-span-2 space-y-6">
-            <Card className="p-6">
+            <Card className="p-6 w-full">
               <h2 className="text-xl font-semibold mb-4">Lead Information</h2>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Status:</span>
-                  <span>
+                  <span className="text-right sm:text-left">
                     {bookingsLoading ? (
                       <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-600">Loading...</span>
                     ) : relatedBookings.length > 0 ? (
@@ -351,30 +351,30 @@ export default function LeadDetailsPage() {
                     )}
                   </span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Name:</span>
-                  <span className="font-medium">{lead.name || '—'}</span>
+                  <span className="font-medium text-right sm:text-left break-words max-w-full">{lead.name || '—'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Phone:</span>
-                  <span className="font-medium">{lead.phone || '—'}</span>
+                  <span className="font-medium text-right sm:text-left break-words max-w-full">{lead.phone || '—'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Email:</span>
-                  <span className="font-medium">{lead.email || '—'}</span>
+                  <span className="font-medium text-right sm:text-left break-all max-w-full">{lead.email || '—'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Service Interest:</span>
-                  <span className="font-medium">{lead.service || '—'}</span>
+                  <span className="font-medium text-right sm:text-left break-words max-w-full">{lead.service || '—'}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Received:</span>
-                  <span className="font-medium">{formatDateTime(lead.createdAt)}</span>
+                  <span className="font-medium text-right sm:text-left break-words max-w-full">{formatDateTime(lead.createdAt)}</span>
                 </div>
                 {lead.message && (
                   <div className="pt-3 border-t">
                     <div className="text-gray-600 mb-2">Message:</div>
-                    <div className="whitespace-pre-wrap bg-gray-50 p-3 rounded">{lead.message}</div>
+                    <div className="whitespace-pre-wrap break-words bg-gray-50 p-3 rounded">{lead.message}</div>
                   </div>
                 )}
               </div>
@@ -615,7 +615,7 @@ export default function LeadDetailsPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-3 pt-2">
+                  <div className="flex flex-wrap gap-3 pt-2">
                     <Button type="submit" disabled={bookingLoading} className="bg-orange-600 hover:bg-orange-700">
                       {bookingLoading ? 'Booking...' : 'Confirm Booking'}
                     </Button>
@@ -628,7 +628,7 @@ export default function LeadDetailsPage() {
             )}
 
             {/* Related Bookings */}
-            <Card className="p-6">
+            <Card className="p-6 w-full">
               <h2 className="text-xl font-semibold mb-4">Booking Status</h2>
               {bookingsLoading ? (
                 <div className="text-sm text-gray-500">Loading bookings...</div>
@@ -649,8 +649,8 @@ export default function LeadDetailsPage() {
                       }`}
                       onClick={canViewBooking ? () => router.push(`/admin/book-service/${booking.id}`) : undefined}
                     >
-                      <div className="flex justify-between items-start">
-                        <div>
+                      <div className="flex justify-between items-start gap-3 flex-wrap">
+                        <div className="min-w-0">
                           <div className="font-semibold text-sm">{booking.firstName} {booking.lastName}</div>
                           <div className="text-xs text-gray-600 mt-1">{booking.category}</div>
                           <div className="text-xs text-gray-500 mt-1">
@@ -660,7 +660,7 @@ export default function LeadDetailsPage() {
                             Scheduled: {formatDateTime(booking.scheduledDate)}
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${booking.status === 'completed'
+                        <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${booking.status === 'completed'
                           ? 'bg-green-100 text-green-800'
                           : booking.status === 'cancelled'
                             ? 'bg-red-100 text-red-800'
