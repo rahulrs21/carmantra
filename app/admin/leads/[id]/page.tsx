@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, addDoc, collection, Timestamp, query, where, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { doc, getDoc, updateDoc, addDoc, collection, Timestamp, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { findOrCreateCustomer } from '@/lib/firestore/customers';
-import { formatDateTime, formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { PermissionGate } from '@/components/PermissionGate';
 import { useUser } from '@/lib/userContext';
 import { hasPermission } from '@/lib/permissions';
@@ -48,17 +47,12 @@ export default function LeadDetailsPage() {
     city: '',
     address: '',
   });
-  const [preInspection, setPreInspection] = useState({
-    message: '',
-    images: [] as File[],
-    videos: [] as File[],
-  });
-  const [previewFiles, setPreviewFiles] = useState({
-    images: [] as string[],
-    videos: [] as string[],
-  });
   const [bookingStatus, setBookingStatus] = useState<string | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const [selectedTime, setSelectedTime] = useState('09:00');
+  const [allBookings, setAllBookings] = useState<any[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -82,6 +76,19 @@ export default function LeadDetailsPage() {
       }
     })();
   }, [id]);
+
+  useEffect(() => {
+    const bookingsQuery = query(collection(db, 'bookedServices'));
+    const unsubscribe = onSnapshot(
+      bookingsQuery,
+      (snapshot) => {
+        setAllBookings(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => safeConsoleError('All bookings fetch error', err)
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   async function fetchRelatedBookings(leadId: string) {
     setBookingsLoading(true);
@@ -107,122 +114,147 @@ export default function LeadDetailsPage() {
     return 'J' + Date.now().toString().slice(-6);
   }
 
-  function getMinDateTime(): string {
-    const now = new Date();
-    const minutes = now.getMinutes();
-    const roundedMinutes = Math.ceil(minutes / 30) * 30;
-    if (roundedMinutes === 60) {
-      now.setHours(now.getHours() + 1, 0);
-    } else {
-      now.setMinutes(roundedMinutes);
-    }
-    now.setSeconds(0);
-    now.setMilliseconds(0);
-    
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const date = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const mins = String(now.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${date}T${hours}:${mins}`;
-  }
+  const timeSlots = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+  ];
 
-  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    setPreInspection((prev) => ({
-      ...prev,
-      images: [...prev.images, ...files],
-    }));
+  const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  };
+  const isPastDate = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+  const isDateDisabled = (date: Date) => isWeekend(date);
 
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewFiles((prev) => ({
-          ...prev,
-          images: [...prev.images, reader.result as string],
-        }));
-      };
-      reader.readAsDataURL(file);
+  const getServicesByDate = (date: Date) => {
+    return allBookings.filter((service) => {
+      const serviceDate = service.scheduledDate?.toDate
+        ? service.scheduledDate.toDate()
+        : new Date(service.scheduledDate);
+      return (
+        serviceDate.getDate() === date.getDate() &&
+        serviceDate.getMonth() === date.getMonth() &&
+        serviceDate.getFullYear() === date.getFullYear()
+      );
     });
+  };
 
-    e.target.value = '';
-  }
+  const formatTimeLabel = (time: string) => {
+    const [h, m] = time.split(':');
+    let hour = Number(h);
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    if (hour === 0) hour = 12;
+    else if (hour > 12) hour -= 12;
+    return `${hour}:${m} ${suffix}`;
+  };
 
-  function handleVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    setPreInspection((prev) => ({
-      ...prev,
-      videos: [...prev.videos, ...files],
-    }));
-
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewFiles((prev) => ({
-          ...prev,
-          videos: [...prev.videos, reader.result as string],
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
-
-    e.target.value = '';
-  }
-
-  function removeImage(index: number) {
-    setPreInspection((prev) => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
-    setPreviewFiles((prev) => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
-  }
-
-  function removeVideo(index: number) {
-    setPreInspection((prev) => ({
-      ...prev,
-      videos: prev.videos.filter((_, i) => i !== index),
-    }));
-    setPreviewFiles((prev) => ({
-      ...prev,
-      videos: prev.videos.filter((_, i) => i !== index),
-    }));
-  }
-
-  async function uploadPreInspectionFiles(jobCardNo: string) {
-    const uploadedImages: string[] = [];
-    const uploadedVideos: string[] = [];
-
-    try {
-      for (const file of preInspection.images) {
-        const storageRef = ref(storage, `pre-inspections/${jobCardNo}/images/${file.name}-${Date.now()}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        uploadedImages.push(url);
-      }
-
-      for (const file of preInspection.videos) {
-        const storageRef = ref(storage, `pre-inspections/${jobCardNo}/videos/${file.name}-${Date.now()}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        uploadedVideos.push(url);
-      }
-
-      return { uploadedImages, uploadedVideos };
-    } catch (err: any) {
-      safeConsoleError('File upload error', err);
-      throw err;
+  const isTimeDisabled = (time: string) => {
+    if (!selectedDate) return false;
+    if (isPastDate(selectedDate)) return true;
+    const today = new Date();
+    if (selectedDate.toDateString() === today.toDateString()) {
+      const [hours, minutes] = time.split(':');
+      const timeDate = new Date();
+      timeDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+      return timeDate < today;
     }
-  }
+    return false;
+  };
+
+  const renderCalendarDays = () => {
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    const days = [] as JSX.Element[];
+
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="p-2 border bg-gray-50" />);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+      const dayServices = getServicesByDate(date);
+      const disabled = isDateDisabled(date);
+      const isSelected = selectedDate?.toDateString() === date.toDateString();
+
+      days.push(
+        <button
+          type="button"
+          key={day}
+          onClick={() => !disabled && setSelectedDate(date)}
+          className={`p-2 min-h-[96px] border text-left transition-colors focus:outline-none ${
+            disabled
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : isSelected
+                ? 'bg-orange-100 border-orange-500 shadow-inner'
+                : 'hover:bg-orange-50'
+          } ${isPastDate(date) ? 'opacity-80' : ''}`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-semibold text-sm">{day}</span>
+            {dayServices.length > 0 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                {dayServices.length}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 space-y-1 text-[11px]">
+            {dayServices.slice(0, 2).map((service, idx) => (
+              <div
+                key={idx}
+                className={`px-1 py-0.5 rounded text-white truncate ${
+                  service.status === 'completed'
+                    ? 'bg-green-500'
+                    : service.status === 'cancelled'
+                      ? 'bg-red-500'
+                      : 'bg-blue-500'
+                }`}
+              >
+                {service.firstName || 'Booking'}
+              </div>
+            ))}
+            {dayServices.length > 2 && (
+              <div className="text-gray-500">+{dayServices.length - 2} more</div>
+            )}
+          </div>
+        </button>
+      );
+    }
+
+    return days;
+  };
 
   async function handleBookService(e: React.FormEvent) {
     e.preventDefault();
     if (!lead || !id) return;
 
-    if (!bookingForm.scheduledDate || !bookingForm.category) {
-      setBookingStatus('Please fill in all required fields');
+    if (!selectedDate || !selectedTime) {
+      setBookingStatus('Select a date and time before booking');
+      return;
+    }
+
+    if (isDateDisabled(selectedDate) || isTimeDisabled(selectedTime)) {
+      setBookingStatus('Please choose a weekday slot in working hours');
+      return;
+    }
+
+    const scheduledDateTime = new Date(selectedDate);
+    const [hours, minutes] = selectedTime.split(':');
+    scheduledDateTime.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+
+    if (scheduledDateTime < new Date()) {
+      setBookingStatus('Selected time is in the past');
+      return;
+    }
+
+    if (!bookingForm.category) {
+      setBookingStatus('Please select a service category');
       return;
     }
 
@@ -248,23 +280,6 @@ export default function LeadDetailsPage() {
 
       // Create booking
       const jobCardNo = generateJobCardNo();
-      const scheduledDateTime = new Date(bookingForm.scheduledDate);
-      
-      // Upload pre-inspection files if any
-      setBookingStatus('Uploading files...');
-      const preInspectionData: any = {
-        message: preInspection.message || '',
-        images: [],
-        videos: [],
-      };
-
-      if (preInspection.images.length > 0 || preInspection.videos.length > 0) {
-        const uploaded = await uploadPreInspectionFiles(jobCardNo);
-        preInspectionData.images = uploaded.uploadedImages;
-        preInspectionData.videos = uploaded.uploadedVideos;
-      }
-
-      setBookingStatus('Creating booking...');
       
       const bookingRef = await addDoc(collection(db, 'bookedServices'), {
         jobCardNo,
@@ -283,8 +298,14 @@ export default function LeadDetailsPage() {
         modelName: bookingForm.modelName,
         numberPlate: bookingForm.numberPlate,
         fuelType: bookingForm.fuelType,
-        preInspection: preInspectionData,
+        preInspection: {
+          message: '',
+          images: [],
+          videos: [],
+        },
         status: 'pending',
+        quotationStatus: 'not_created',
+        quotationId: null,
         createdAt: Timestamp.now(),
         sourceLeadId: id,
       });
@@ -299,6 +320,7 @@ export default function LeadDetailsPage() {
       setTimeout(() => {
         router.push(`/admin/book-service/${bookingRef.id}`);
       }, 1500);
+      setSelectedTime('09:00');
       
       // Refresh related bookings
       if (id) fetchRelatedBookings(id);
@@ -325,7 +347,7 @@ export default function LeadDetailsPage() {
       ) : error ? (
         <Card className="p-6 bg-red-50 text-red-700">{error}</Card>
       ) : lead ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+        <div className={`grid grid-cols-1 ${showBookService ? 'lg:grid-cols-1' : 'lg:grid-cols-3'} gap-6 w-full`}>
           {/* Lead Information */}
           <div className="lg:col-span-2 space-y-6">
             <Card className="p-6 w-full">
@@ -382,7 +404,12 @@ export default function LeadDetailsPage() {
 
             {/* Book Service Form */}
             {showBookService && (
-              <Card className="p-6 border-2 border-orange-200">
+              <Card className="p-6 border-2 border-orange-200 relative overflow-hidden lg:-mx-4 xl:-mx-8">
+                {bookingLoading && (
+                  <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                    <div className="w-10 h-10 border-4 border-orange-200 border-t-orange-600 rounded-full animate-spin" aria-label="Booking in progress" />
+                  </div>
+                )}
                 <h2 className="text-xl font-semibold mb-4 text-orange-700">Book Service from Lead</h2>
                 
                 {bookingStatus && (
@@ -391,22 +418,116 @@ export default function LeadDetailsPage() {
                   </div>
                 )}
 
-                <form onSubmit={handleBookService} className="space-y-4">
-                  {/* Service Details */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-gray-700">Service Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Scheduled Date & Time *</label>
-                        <input
-                          type="datetime-local"
-                          required
-                          min={getMinDateTime()}
-                          value={bookingForm.scheduledDate}
-                          onChange={(e) => setBookingForm({...bookingForm, scheduledDate: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                        />
+                <form onSubmit={handleBookService}>
+                  <fieldset disabled={bookingLoading} className="space-y-4">
+                    {/* Service Details */}
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-sm text-gray-700">Service Details</h3>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                        <div className="lg:col-span-2 border rounded-lg p-3 shadow-sm">
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <div>
+                              <p className="text-xs text-gray-500">Select Date</p>
+                              <p className="font-semibold text-orange-700">
+                                {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
+                              >
+                                ← Prev
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentDate(new Date())}
+                              >
+                                Today
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
+                              >
+                                Next →
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-7 text-center text-[11px] font-semibold text-gray-600 border-b">
+                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                              <div key={day} className="py-2">
+                                {day}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-7">{renderCalendarDays()}</div>
+
+                          <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-600">
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-blue-500" />Open</div>
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-green-500" />Completed</div>
+                            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-red-500" />Cancelled</div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="border rounded-lg p-3 shadow-sm">
+                            <p className="text-xs text-gray-500">Selected Date</p>
+                            <p className="font-semibold text-sm text-gray-800">
+                              {selectedDate
+                                ? selectedDate.toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    month: 'long',
+                                    day: 'numeric',
+                                  })
+                                : 'No date selected'}
+                            </p>
+                            <p className="text-xs text-gray-600 mt-1">{formatTimeLabel(selectedTime)}</p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="mt-2 text-orange-700"
+                              onClick={() => {
+                                setSelectedDate(null);
+                                setSelectedTime('09:00');
+                              }}
+                            >
+                              Clear Selection
+                            </Button>
+                          </div>
+
+                          <div className="border rounded-lg p-3 shadow-sm">
+                            <p className="text-xs text-gray-500 mb-2">Select Time</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto hide-scrollbar">
+                              {timeSlots.map((time) => (
+                                <button
+                                  key={time}
+                                  type="button"
+                                  disabled={isTimeDisabled(time)}
+                                  onClick={() => setSelectedTime(time)}
+                                  className={`p-2 text-sm rounded border transition-colors ${
+                                    isTimeDisabled(time)
+                                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
+                                      : selectedTime === time
+                                        ? 'bg-orange-500 text-white border-orange-500'
+                                        : 'border-gray-300 hover:bg-orange-50'
+                                  }`}
+                                >
+                                  {formatTimeLabel(time)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
+
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Service Category *</label>
                         <select
@@ -428,201 +549,131 @@ export default function LeadDetailsPage() {
                         </select>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Vehicle Details */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-gray-700">Vehicle Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
-                        <select
-                          value={bookingForm.vehicleType}
-                          onChange={(e) => setBookingForm({...bookingForm, vehicleType: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                        >
-                          <option value="">Select Type</option>
-                          <option value="sedan">Sedan</option>
-                          <option value="suv">SUV</option>
-                          <option value="hatchback">Hatchback</option>
-                          <option value="coupe">Coupe</option>
-                          <option value="truck">Truck</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Brand</label>
-                        <input
-                          type="text"
-                          value={bookingForm.vehicleBrand}
-                          onChange={(e) => setBookingForm({...bookingForm, vehicleBrand: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="e.g., BMW, Toyota"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Model</label>
-                        <input
-                          type="text"
-                          value={bookingForm.modelName}
-                          onChange={(e) => setBookingForm({...bookingForm, modelName: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="e.g., X5, Camry"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Number Plate</label>
-                        <input
-                          type="text"
-                          value={bookingForm.numberPlate}
-                          onChange={(e) => setBookingForm({...bookingForm, numberPlate: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="e.g., ABC123"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
-                        <select
-                          value={bookingForm.fuelType}
-                          onChange={(e) => setBookingForm({...bookingForm, fuelType: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                        >
-                          <option value="">Select Fuel</option>
-                          <option value="petrol">Petrol</option>
-                          <option value="diesel">Diesel</option>
-                          <option value="electric">Electric</option>
-                          <option value="hybrid">Hybrid</option>
-                        </select>
+                    {/* Vehicle Details */}
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-sm text-gray-700">Vehicle Details</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
+                          <select
+                            value={bookingForm.vehicleType}
+                            onChange={(e) => setBookingForm({...bookingForm, vehicleType: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                          >
+                            <option value="">Select Type</option>
+                            <option value="sedan">Sedan</option>
+                            <option value="suv">SUV</option>
+                            <option value="hatchback">Hatchback</option>
+                            <option value="coupe">Coupe</option>
+                            <option value="truck">Truck</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Brand</label>
+                          <input
+                            type="text"
+                            value={bookingForm.vehicleBrand}
+                            onChange={(e) => setBookingForm({...bookingForm, vehicleBrand: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="e.g., BMW, Toyota"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Model</label>
+                          <input
+                            type="text"
+                            value={bookingForm.modelName}
+                            onChange={(e) => setBookingForm({...bookingForm, modelName: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="e.g., X5, Camry"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Number Plate</label>
+                          <input
+                            type="text"
+                            value={bookingForm.numberPlate}
+                            onChange={(e) => setBookingForm({...bookingForm, numberPlate: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="e.g., ABC123"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
+                          <select
+                            value={bookingForm.fuelType}
+                            onChange={(e) => setBookingForm({...bookingForm, fuelType: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                          >
+                            <option value="">Select Fuel</option>
+                            <option value="petrol">Petrol</option>
+                            <option value="diesel">Diesel</option>
+                            <option value="electric">Electric</option>
+                            <option value="hybrid">Hybrid</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Address Details */}
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-sm text-gray-700">Address Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Country</label>
-                        <input
-                          type="text"
-                          value={bookingForm.country}
-                          onChange={(e) => setBookingForm({...bookingForm, country: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="e.g., United Arab Emirates"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">State</label>
-                        <input
-                          type="text"
-                          value={bookingForm.state}
-                          onChange={(e) => setBookingForm({...bookingForm, state: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="e.g., Dubai"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">City</label>
-                        <input
-                          type="text"
-                          value={bookingForm.city}
-                          onChange={(e) => setBookingForm({...bookingForm, city: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="e.g., Dubai"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-xs text-gray-600 mb-1">Address</label>
-                        <input
-                          type="text"
-                          value={bookingForm.address}
-                          onChange={(e) => setBookingForm({...bookingForm, address: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                          placeholder="Full address"
-                        />
+                    {/* Address Details */}
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-sm text-gray-700">Address Details</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Country</label>
+                          <input
+                            type="text"
+                            value={bookingForm.country}
+                            onChange={(e) => setBookingForm({...bookingForm, country: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="e.g., United Arab Emirates"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">State</label>
+                          <input
+                            type="text"
+                            value={bookingForm.state}
+                            onChange={(e) => setBookingForm({...bookingForm, state: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="e.g., Dubai"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">City</label>
+                          <input
+                            type="text"
+                            value={bookingForm.city}
+                            onChange={(e) => setBookingForm({...bookingForm, city: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="e.g., Dubai"
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs text-gray-600 mb-1">Address</label>
+                          <input
+                            type="text"
+                            value={bookingForm.address}
+                            onChange={(e) => setBookingForm({...bookingForm, address: e.target.value})}
+                            className="w-full border rounded px-3 py-2 text-sm"
+                            placeholder="Full address"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Pre-Inspection Checklist */}
-                  <div className="space-y-3 border-t pt-4">
-                    <h3 className="font-semibold text-sm text-gray-700">Pre-Inspection Checklist</h3>
-                    
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Notes</label>
-                      <textarea
-                        value={preInspection.message}
-                        onChange={(e) => setPreInspection({...preInspection, message: e.target.value})}
-                        className="w-full border rounded px-3 py-2 text-sm"
-                        rows={3}
-                        placeholder="Add any pre-inspection notes..."
-                      />
+                    {/* Pre-Inspection is captured on the booking detail page after scheduling. */}
+
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <Button type="submit" disabled={bookingLoading} className="bg-orange-600 hover:bg-orange-700">
+                        {bookingLoading ? 'Booking...' : 'Confirm Booking'}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setShowBookService(false)} disabled={bookingLoading}>
+                        Cancel
+                      </Button>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Upload Images</label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleImageUpload}
-                          className="w-full text-sm"
-                        />
-                        {previewFiles.images.length > 0 && (
-                          <div className="mt-2 grid grid-cols-3 gap-2">
-                            {previewFiles.images.map((preview, idx) => (
-                              <div key={idx} className="relative group">
-                                <img src={preview} alt={`Preview ${idx}`} className="w-full h-20 object-cover rounded border" />
-                                <button
-                                  type="button"
-                                  onClick={() => removeImage(idx)}
-                                  className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Upload Videos</label>
-                        <input
-                          type="file"
-                          accept="video/*"
-                          multiple
-                          onChange={handleVideoUpload}
-                          className="w-full text-sm"
-                        />
-                        {previewFiles.videos.length > 0 && (
-                          <div className="mt-2 space-y-2">
-                            {previewFiles.videos.map((preview, idx) => (
-                              <div key={idx} className="relative group">
-                                <video src={preview} className="w-full h-20 object-cover rounded border" />
-                                <button
-                                  type="button"
-                                  onClick={() => removeVideo(idx)}
-                                  className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-5 h-5 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <Button type="submit" disabled={bookingLoading} className="bg-orange-600 hover:bg-orange-700">
-                      {bookingLoading ? 'Booking...' : 'Confirm Booking'}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setShowBookService(false)}>
-                      Cancel
-                    </Button>
-                  </div>
+                  </fieldset>
                 </form>
               </Card>
             )}

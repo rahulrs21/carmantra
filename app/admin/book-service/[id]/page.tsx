@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, Timestamp, addDoc, collection } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc, Timestamp, addDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { formatDateTime } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
+import QuotationForm from '@/components/admin/QuotationForm';
+import { useUser } from '@/lib/userContext';
 
 export default function BookServiceDetails() {
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
+  const { displayName } = useUser();
   const [service, setService] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
@@ -27,6 +31,16 @@ export default function BookServiceDetails() {
   const [discount, setDiscount] = useState(0);
   const [paymentTerms, setPaymentTerms] = useState('cash');
   const [paymentTermsOther, setPaymentTermsOther] = useState('');
+  const [quotation, setQuotation] = useState<any | null>(null);
+  const [quotationLoading, setQuotationLoading] = useState(true);
+  const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [preMessage, setPreMessage] = useState('');
+  const [preImages, setPreImages] = useState<File[]>([]);
+  const [preVideos, setPreVideos] = useState<File[]>([]);
+  const [preImagePreview, setPreImagePreview] = useState<string[]>([]);
+  const [preVideoPreview, setPreVideoPreview] = useState<string[]>([]);
+  const [savingPreInspection, setSavingPreInspection] = useState(false);
+  const [showPreInspectionList, setShowPreInspectionList] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: '',
     lastName: '',
@@ -36,12 +50,17 @@ export default function BookServiceDetails() {
     state: '',
     city: '',
     address: '',
+    source: '',
     vehicleType: '',
     vehicleBrand: '',
     modelName: '',
     numberPlate: '',
     fuelType: '',
+    vinNumber: '',
+    mulkiyaUrl: '',
   });
+  const [mulkiyaFile, setMulkiyaFile] = useState<File | null>(null);
+  const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
 
   // Helper functions
   function getMinDateTime(): string {
@@ -113,6 +132,40 @@ export default function BookServiceDetails() {
     return null;
   }
 
+  function toDate(value: any): Date | null {
+    try {
+      if (!value) return null;
+      if (value instanceof Date) return value;
+      if (typeof value?.toDate === 'function') return value.toDate();
+      if (typeof value?.seconds === 'number') return new Date(value.seconds * 1000);
+      const maybeDate = new Date(value);
+      return Number.isNaN(maybeDate.getTime()) ? null : maybeDate;
+    } catch {
+      return null;
+    }
+  }
+
+  function formatDateTime12(value: any) {
+    const d = toDate(value);
+    if (!d) return '-';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const hh = String(hours).padStart(2, '0');
+    return `${day}/${month}/${year} ${hh}:${minutes} ${period}`;
+  }
+
+  function formatHistoryDate(value: any) {
+    if (!value) return '';
+    const parsed = toDate(value);
+    if (!parsed) return '';
+    return formatDateTime12(parsed);
+  }
+
   useEffect(() => {
     if (!id) return;
     (async () => {
@@ -120,7 +173,9 @@ export default function BookServiceDetails() {
         const snap = await getDoc(doc(db, 'bookedServices', id));
         if (!snap.exists()) return setService(null);
         const data = snap.data() as any;
-        setService({ ...data, id: snap.id });
+        const detectedSource = data.source || (data.sourceLeadId ? 'lead' : 'direct');
+        setService({ ...data, source: detectedSource, id: snap.id });
+        if (data?.preInspection?.message) setPreMessage(data.preInspection.message);
         // pre-fill the reschedule date if it exists
         if (data.scheduledDate) {
           const date = data.scheduledDate.toDate ? data.scheduledDate.toDate() : new Date(data.scheduledDate);
@@ -136,11 +191,14 @@ export default function BookServiceDetails() {
           state: data.state || '',
           city: data.city || '',
           address: data.address || '',
+          source: detectedSource,
           vehicleType: data.vehicleType || '',
           vehicleBrand: data.vehicleBrand || '',
           modelName: data.modelName || '',
           numberPlate: data.numberPlate || '',
           fuelType: data.fuelType || '',
+          vinNumber: data.vinNumber || '',
+          mulkiyaUrl: data.mulkiyaUrl || '',
         });
       } catch (err: any) {
         safeConsoleError('Book service fetch error', err);
@@ -148,6 +206,25 @@ export default function BookServiceDetails() {
         setLoading(false);
       }
     })();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    const quotationQuery = query(collection(db, 'quotations'), where('serviceBookingId', '==', id));
+    const unsubscribe = onSnapshot(
+      quotationQuery,
+      (snap) => {
+        const first = snap.docs[0];
+        setQuotation(first ? { id: first.id, ...(first.data() as any) } : null);
+        setQuotationLoading(false);
+      },
+      (err) => {
+        safeConsoleError('Quotation fetch error', err);
+        setQuotationLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, [id]);
 
   // Image popup handlers
@@ -209,18 +286,128 @@ export default function BookServiceDetails() {
   }
 
   function markComplete() {
-    // Initialize billing items with service category
-    setBillingItems([{ 
-      description: service.category || 'Service', 
-      quantity: 1, 
-      rate: 0, 
-      amount: 0 
-    }]);
-    setLaborCharges(0);
-    setDiscount(0);
+    if (!quotation) {
+      setStatus('Please create a quotation before invoicing');
+      setShowQuotationModal(true);
+      return;
+    }
+
+    if (quotation.status !== 'accepted') {
+      setStatus('Quotation must be accepted before invoicing');
+      return;
+    }
+
+    // Pre-fill billing with accepted quotation values
+    const quotedItems = Array.isArray(quotation.items) && quotation.items.length > 0
+      ? quotation.items.map((item: any) => ({
+          description: item.description || service.category || 'Service',
+          quantity: Number(item.quantity) || 1,
+          rate: Number(item.rate) || 0,
+          amount: Number(item.amount) || (Number(item.quantity) || 1) * (Number(item.rate) || 0),
+        }))
+      : [{ description: service.category || 'Service', quantity: 1, rate: 0, amount: 0 }];
+
+    setBillingItems(quotedItems);
+    setLaborCharges(Number(quotation.laborCharges) || 0);
+    setDiscount(Number(quotation.discount) || 0);
     setPaymentTerms('cash');
     setPaymentTermsOther('');
     setShowBilling(true);
+  }
+
+  function handlePreImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setPreImages(prev => [...prev, ...files]);
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreImagePreview(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  }
+
+  function handlePreVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setPreVideos(prev => [...prev, ...files]);
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreVideoPreview(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  }
+
+  function removePreImage(idx: number) {
+    setPreImages(prev => prev.filter((_, i) => i !== idx));
+    setPreImagePreview(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  function removePreVideo(idx: number) {
+    setPreVideos(prev => prev.filter((_, i) => i !== idx));
+    setPreVideoPreview(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function savePreInspection() {
+    if (!service) return;
+    setSavingPreInspection(true);
+    setStatus(null);
+
+    try {
+      const jobCard = service.jobCardNo || service.numberPlate || service.id;
+      const uploadedImages: string[] = service.preInspection?.images ? [...service.preInspection.images] : [];
+      const uploadedVideos: string[] = service.preInspection?.videos ? [...service.preInspection.videos] : [];
+
+      for (const file of preImages) {
+        const storageRef = ref(storage, `pre-inspections/${jobCard}/images/${file.name}-${Date.now()}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        uploadedImages.push(url);
+      }
+
+      for (const file of preVideos) {
+        const storageRef = ref(storage, `pre-inspections/${jobCard}/videos/${file.name}-${Date.now()}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        uploadedVideos.push(url);
+      }
+
+      await updateDoc(doc(db, 'bookedServices', service.id), {
+        preInspection: {
+          message: preMessage,
+          images: uploadedImages,
+          videos: uploadedVideos,
+        },
+      });
+
+      const updated = {
+        ...service,
+        preInspection: {
+          message: preMessage,
+          images: uploadedImages,
+          videos: uploadedVideos,
+        },
+      };
+      setService(updated);
+      setPreMessage('');
+      setPreImages([]);
+      setPreVideos([]);
+      setPreImagePreview([]);
+      setPreVideoPreview([]);
+      setStatus('✓ Pre-inspection saved');
+    } catch (err: any) {
+      safeConsoleError('Pre-inspection save error', err);
+      setStatus('Failed to save pre-inspection');
+    } finally {
+      setSavingPreInspection(false);
+    }
   }
 
   function addBillingItem() {
@@ -303,7 +490,7 @@ export default function BookServiceDetails() {
         taxAmount: totals.tax,
         discount,
         total: totals.grandTotal,
-        paymentStatus: 'unpaid',
+        paymentStatus: 'paid',
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
         createdAt: Timestamp.now(),
@@ -317,9 +504,19 @@ export default function BookServiceDetails() {
         status: 'completed',
         invoiceId: docRef.id,
         completedAt: Timestamp.now(),
+        paymentStatus: 'paid',
+        paymentTerms,
+        paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
       });
       
-      setService({ ...service, status: 'completed', invoiceId: docRef.id });
+      setService({
+        ...service,
+        status: 'completed',
+        invoiceId: docRef.id,
+        paymentStatus: 'paid',
+        paymentTerms,
+        paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+      });
       setCreatedInvoiceId(docRef.id);
       setStatus('✓ Invoice created and service marked as completed!');
       setShowBilling(false);
@@ -329,11 +526,14 @@ export default function BookServiceDetails() {
     }
   }
 
-  async function deleteService() {
+  async function deleteService(skipPrompt = false) {
     const bookingLabel = service?.jobCardNo || service?.numberPlate || 'this booking';
     const customerName = `${service?.firstName || ''} ${service?.lastName || ''}`.trim();
     const message = `Cancel ${bookingLabel}${customerName ? ` for ${customerName}` : ''}? This cannot be undone.`;
-    if (!confirm(message)) return;
+    if (!skipPrompt) {
+      const shouldCancel = typeof window !== 'undefined' ? window.confirm(message) : false;
+      if (!shouldCancel) return;
+    }
     setStatus('Deleting...');
     try {
       await updateDoc(doc(db, 'bookedServices', id!), {
@@ -351,6 +551,16 @@ export default function BookServiceDetails() {
   async function handleUpdate() {
     setStatus('Updating...');
     try {
+      setMulkiyaUploading(true);
+      let uploadedMulkiyaUrl = editForm.mulkiyaUrl || service.mulkiyaUrl || '';
+
+      if (mulkiyaFile) {
+        const jobCard = service.jobCardNo || service.numberPlate || service.id;
+        const storageRef = ref(storage, `mulkiya/${jobCard}/${mulkiyaFile.name}-${Date.now()}`);
+        await uploadBytes(storageRef, mulkiyaFile);
+        uploadedMulkiyaUrl = await getDownloadURL(storageRef);
+      }
+
       await updateDoc(doc(db, 'bookedServices', id!), {
         firstName: editForm.firstName,
         lastName: editForm.lastName,
@@ -360,23 +570,30 @@ export default function BookServiceDetails() {
         state: editForm.state,
         city: editForm.city,
         address: editForm.address,
+        source: editForm.source,
         vehicleType: editForm.vehicleType,
         vehicleBrand: editForm.vehicleBrand,
         modelName: editForm.modelName,
         numberPlate: editForm.numberPlate,
         fuelType: editForm.fuelType,
+        vinNumber: editForm.vinNumber,
+        mulkiyaUrl: uploadedMulkiyaUrl,
       });
-      setService({ ...service, ...editForm });
+      setService({ ...service, ...editForm, mulkiyaUrl: uploadedMulkiyaUrl });
       setStatus('✓ Details updated successfully');
       setEditing(false);
       setTimeout(() => setStatus(null), 3000);
     } catch (err: any) {
       safeConsoleError('Update error', err);
       setStatus('Failed to update details');
+    } finally {
+      setMulkiyaUploading(false);
+      setMulkiyaFile(null);
     }
   }
 
   function cancelEdit() {
+    const detectedSource = service.source || (service.sourceLeadId ? 'lead' : 'direct');
     setEditForm({
       firstName: service.firstName || '',
       lastName: service.lastName || '',
@@ -386,26 +603,110 @@ export default function BookServiceDetails() {
       state: service.state || '',
       city: service.city || '',
       address: service.address || '',
+      source: detectedSource,
       vehicleType: service.vehicleType || '',
       vehicleBrand: service.vehicleBrand || '',
       modelName: service.modelName || '',
       numberPlate: service.numberPlate || '',
       fuelType: service.fuelType || '',
+      vinNumber: service.vinNumber || '',
+      mulkiyaUrl: service.mulkiyaUrl || '',
     });
     setEditing(false);
+    setMulkiyaFile(null);
   }
+
+  const quotationStatus = quotation?.status || service?.quotationStatus || 'not_created';
+  const hasPreInspection = !!(service?.preInspection && (service.preInspection.message || service.preInspection.images?.length || service.preInspection.videos?.length));
+  const derivedSource = service?.source || (service?.sourceLeadId ? 'lead' : 'direct');
+  const sourceLabelMap: Record<string, string> = {
+    lead: 'Lead',
+    direct: 'Direct booking',
+    referral: 'Referral',
+    other: 'Other',
+  };
+  const sourceLabel = derivedSource ? (sourceLabelMap[derivedSource] || derivedSource) : 'Direct booking';
+  const isCancelled = service?.status === 'cancelled';
+  const progressSteps = [
+    { key: 'booking', label: 'Booking Created', done: true },
+    // Pre-inspection is optional; it should not block subsequent steps
+    { key: 'pre', label: 'Pre-Inspection (optional)', done: true, optional: true, hasData: hasPreInspection },
+    { key: 'quote', label: 'Quotation Accepted', done: quotationStatus === 'accepted' },
+    { key: 'invoice', label: 'Invoice Generated', done: !!service?.invoiceId },
+    { key: 'complete', label: 'Completed', done: service?.status === 'completed' },
+  ];
+  const nextStepIndex = progressSteps.findIndex((s) => !s.done);
+  const activeStepIndex = nextStepIndex === -1 ? progressSteps.length - 1 : nextStepIndex;
+  const quotationLabelMap: Record<string, string> = {
+    accepted: 'Accepted',
+    pending: 'Pending',
+    rejected: 'Rejected',
+    not_created: 'Not created',
+  };
+  const quotationBadgeClass = quotationStatus === 'accepted'
+    ? 'bg-green-100 text-green-800'
+    : quotationStatus === 'pending'
+      ? 'bg-yellow-100 text-yellow-800'
+      : quotationStatus === 'rejected'
+        ? 'bg-red-100 text-red-800'
+        : 'bg-gray-100 text-gray-700';
+  const canInvoice = quotationStatus === 'accepted';
+  const quotationSeed = service ? {
+    customerName: `${service.firstName || ''} ${service.lastName || ''}`.trim(),
+    customerEmail: service.email || '',
+    customerMobile: service.mobileNo || '',
+    vehicleDetails: {
+      type: service.vehicleType || '',
+      brand: service.vehicleBrand || '',
+      model: service.modelName || '',
+      plate: service.numberPlate || '',
+    },
+    serviceCategory: service.category || '',
+    items: [{ description: service.category || 'Service', quantity: 1, rate: 0, amount: 0 }],
+    laborCharges: 0,
+    discount: 0,
+    validityDays: 30,
+    notes: '',
+    status: 'pending',
+    serviceBookingId: service.id,
+  } : undefined;
+
+  const currentAdminName = displayName || 'Admin';
+
+  const historyItems = [
+    service?.createdAt ? {
+      label: 'Booking Created',
+      user: service?.createdByName || service?.createdBy || service?.updatedByName || service?.updatedBy || currentAdminName,
+      time: formatHistoryDate(service.createdAt),
+    } : null,
+    quotation?.status === 'accepted' ? {
+      label: 'Quotation Accepted',
+      user: quotation?.updatedByName || quotation?.updatedBy || quotation?.createdByName || quotation?.createdBy || currentAdminName,
+      time: formatHistoryDate((quotation as any)?.updatedAt || (quotation as any)?.acceptedAt || quotation?.createdAt),
+    } : null,
+    service?.invoiceId ? {
+      label: 'Invoice Generated',
+      user: service?.completedByName || service?.completedBy || service?.updatedByName || service?.updatedBy || currentAdminName,
+      time: formatHistoryDate(service?.completedAt || service?.updatedAt),
+    } : null,
+    service?.status === 'completed' ? {
+      label: 'Work Completed',
+      user: service?.completedByName || service?.completedBy || service?.updatedByName || service?.updatedBy || currentAdminName,
+      time: formatHistoryDate(service?.completedAt || service?.updatedAt),
+    } : null,
+  ].filter((item) => item && item.time) as Array<{ label: string; user: string; time: string }>;
 
   if (loading) return <div className="p-6 text-center">Loading...</div>;
   if (!service) return <div className="p-6 text-center text-red-600">Service not found</div>;
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="space-y-6 px-3 sm:px-0 pb-8">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold">Service Booking</h1>
-          <p className="text-sm text-gray-500 mt-1">Job Card: {service.jobCardNo}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold">Service Booking</h1>
+          <p className="text-sm text-gray-500 mt-1 break-words">Job Card: {service.jobCardNo}</p>
         </div>
-        <Button variant="outline" onClick={() => router.back()}>Back</Button>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => router.back()}>Back</Button>
       </header>
 
       {status && (
@@ -414,9 +715,62 @@ export default function BookServiceDetails() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Main Details */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Progress Breadcrumb */}
+          {isCancelled ? (
+            <div className="p-4 rounded-lg border border-red-200 bg-red-50 text-red-800 text-sm font-medium">Job cancelled</div>
+          ) : (
+            <div className="p-4 rounded-lg border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-sm">
+              <div className="flex items-center justify-between text-xs font-medium text-gray-600 mb-2">
+                <span>Progress</span>
+                <span className="text-gray-500">Next: {progressSteps[activeStepIndex]?.label}</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 gap-3">
+                {progressSteps.map((step, idx) => {
+                  const isDone = step.done;
+                  const isActive = idx === activeStepIndex;
+                  const isOptionalPending = step.optional && step.hasData === false;
+                  const circleClass = isOptionalPending
+                    ? 'bg-yellow-200 text-yellow-900'
+                    : isDone
+                      ? 'bg-green-500 text-white'
+                      : isActive
+                        ? 'bg-blue-600 text-white animate-pulse'
+                        : 'bg-gray-200 text-gray-600';
+                  const barClass = idx < progressSteps.length - 1
+                    ? isOptionalPending
+                      ? 'from-yellow-200 to-yellow-200'
+                      : isDone
+                        ? 'from-green-500 to-green-400'
+                        : isActive
+                          ? 'from-blue-400 to-blue-300'
+                          : 'from-gray-200 to-gray-200'
+                    : '';
+                  const labelClass = isOptionalPending
+                    ? 'text-yellow-800'
+                    : isDone
+                      ? 'text-gray-800'
+                      : isActive
+                        ? 'text-blue-700'
+                        : 'text-gray-500';
+                  return (
+                    <div key={step.key} className="flex items-center gap-2 w-full sm:flex-1 min-w-0">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shadow ${circleClass}`}>{idx + 1}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className={` sm:text-[11px] text-[12px] font-semibold truncate ${labelClass}`}>{step.label}</p>
+                        {idx < progressSteps.length - 1 && (
+                          <div className={`hidden sm:block h-1 rounded-full bg-gradient-to-r ${barClass} mt-2`} aria-hidden />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Service Details */}
           <Card className="p-6">
             <h2 className="text-xl font-semibold mb-4">Service Details</h2>
@@ -430,11 +784,27 @@ export default function BookServiceDetails() {
                 <span className="font-medium">{service.category}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Scheduled Date:</span>
-                <span className="font-medium">{formatDateTime(service.scheduledDate)}</span>
+                <span className="text-gray-600">Source:</span>
+                <span className="font-medium">{sourceLabel}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Status:</span>
+                <span className="text-gray-600">Scheduled Date:</span>
+                <span className="font-medium">{formatDateTime12(service.scheduledDate)}</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Quotation:</span>
+                {quotationLoading ? (
+                  <span className="text-xs text-gray-500">Checking…</span>
+                ) : (
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${quotationBadgeClass}`}>
+                    {quotationLabelMap[quotationStatus] || quotationStatus}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gray-600">Job Status:</span>
                 <span className={`px-2 py-1 rounded text-xs font-medium ${service.status === 'completed' ? 'bg-green-100 text-green-800' : service.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                   {service.status || 'pending'}
                 </span>
@@ -499,6 +869,20 @@ export default function BookServiceDetails() {
                     />
                   </div>
                   <div>
+                    <label className="block text-xs text-gray-600 mb-1">Source</label>
+                    <select
+                      value={editForm.source}
+                      onChange={(e) => setEditForm({...editForm, source: e.target.value})}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">Select Source</option>
+                      <option value="lead">Lead</option>
+                      <option value="direct">Direct Booking</option>
+                      <option value="referral">Referral</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-xs text-gray-600 mb-1">Country</label>
                     <input
                       type="text"
@@ -548,6 +932,10 @@ export default function BookServiceDetails() {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Email:</span>
                     <span className="font-medium">{service.email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Source:</span>
+                    <span className="font-medium">{sourceLabel}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Country:</span>
@@ -632,13 +1020,50 @@ export default function BookServiceDetails() {
                       <option value="hybrid">Hybrid</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">VIN (optional)</label>
+                    <input
+                      type="text"
+                      value={editForm.vinNumber}
+                      onChange={(e) => setEditForm({ ...editForm, vinNumber: e.target.value })}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                      placeholder="Enter VIN"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-xs text-gray-600 mb-1">Mulkiya (optional)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setMulkiyaFile(e.target.files?.[0] || null)}
+                      className="w-full border rounded px-2 py-1 text-sm bg-white"
+                    />
+                    {(mulkiyaUploading || mulkiyaFile) && (
+                      <p className="text-[11px] text-gray-600">
+                        {mulkiyaUploading ? 'Uploading mulkiya…' : mulkiyaFile ? mulkiyaFile.name : ''}
+                      </p>
+                    )}
+                    {editForm.mulkiyaUrl && (
+                      <div className="flex items-center gap-3 text-xs text-gray-700">
+                        <span className="font-semibold">Current:</span>
+                        <a
+                          href={editForm.mulkiyaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-orange-600 underline"
+                        >
+                          View Mulkiya
+                        </a>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-2 pt-3">
                     <Button
                       size="sm"
                       onClick={handleUpdate}
                       className="flex-1 bg-green-600 hover:bg-green-700"
                     >
-                      💾 Save Changes
+                      💾 {mulkiyaUploading ? 'Saving…' : 'Save Changes'}
                     </Button>
                     <Button
                       size="sm"
@@ -669,6 +1094,25 @@ export default function BookServiceDetails() {
                     <span className="font-medium">{service.numberPlate}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-gray-600">VIN:</span>
+                    <span className="font-medium">{service.vinNumber || '-'}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-3">
+                    <span className="text-gray-600">Mulkiya:</span>
+                    {service.mulkiyaUrl ? (
+                      <a
+                        href={service.mulkiyaUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-orange-600 font-medium underline break-all"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      <span className="font-medium">-</span>
+                    )}
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-600">Fuel Type:</span>
                     <span className="font-medium">{service.fuelType}</span>
                   </div>
@@ -677,129 +1121,276 @@ export default function BookServiceDetails() {
             </div>
           </Card>
 
-          {/* Pre-Inspection Checklist */}
-          {service.preInspection && (service.preInspection.message || service.preInspection.images?.length > 0 || service.preInspection.videos?.length > 0) && (
-            <Card className="p-6 border-2 border-orange-200">
-              <h2 className="text-xl font-semibold mb-4 text-orange-700">Pre-Inspection Checklist</h2>
-              
-              {service.preInspection.message && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <h3 className="text-sm font-semibold text-gray-700">Notes</h3>
-                  </div>
-                  <p className="text-sm text-gray-800 bg-gradient-to-r from-orange-50 to-gray-50 p-4 rounded-lg border border-orange-100 leading-relaxed whitespace-pre-wrap">
-                    {service.preInspection.message}
-                  </p>
-                </div>
+          {/* Pre-Inspection Capture & View */}
+          <Card className="p-6 border-2 border-orange-200 space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-orange-700">Pre-Inspection Checklist</h2>
+                {hasPreInspection && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">Saved</span>
+                )}
+              </div>
+              {hasPreInspection ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreInspectionList(!showPreInspectionList)}
+                  className="text-xs"
+                >
+                  {showPreInspectionList ? 'Hide Pre-Inspection' : 'Open Pre-Inspection'}
+                </Button>
+              ) : (
+                <span className="text-xs px-3 py-1 rounded border border-yellow-300 bg-yellow-50 text-yellow-800">No inspection yet</span>
               )}
+            </div>
 
-              {service.preInspection.images && service.preInspection.images.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <h3 className="text-sm font-semibold text-gray-700">
-                        Images <span className="text-orange-600">({service.preInspection.images.length})</span>
-                      </h3>
+            {/* Capture Form */}
+            {service.status !== 'completed' && service.status !== 'cancelled' && (
+              <div className="space-y-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-800">Notes</label>
+                  <Textarea
+                    placeholder="Add pre-inspection notes..."
+                    value={preMessage}
+                    onChange={(e) => setPreMessage(e.target.value)}
+                    className="bg-white"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-800">Upload Images </label>
+                  <input type="file" accept="image/*" className='border border-gray-50 bg-white p-1 rounded cursor-pointer' multiple onChange={handlePreImageUpload} />
+                  {(preImagePreview.length > 0) && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {preImagePreview.map((src, idx) => (
+                        <div key={idx} className="relative border rounded overflow-hidden">
+                          <img src={src} alt={`Preview ${idx + 1}`} className="w-full h-24 object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removePreImage(idx)}
+                            className="absolute top-1 right-1 bg-black/60 text-white text-xs px-2 py-1 rounded"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                    <span className="text-xs text-gray-500">Click to enlarge</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {service.preInspection.images.map((url: string, idx: number) => (
-                      <button
-                        key={idx} 
-                        onClick={() => setSelectedImageIndex(idx)}
-                        className="group relative block overflow-hidden rounded-lg border-2 border-gray-200 hover:border-orange-500 transition-all duration-300 shadow-sm hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <div className="aspect-square relative">
-                          <img 
-                            src={url} 
-                            alt={`Pre-inspection image ${idx + 1}`} 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                            loading="lazy"
-                          />
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity duration-300 flex items-center justify-center">
-                            <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                            </svg>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-800">Upload Videos </label>
+                  <input type="file" accept="video/*"  className='border border-gray-50 bg-white p-1 rounded cursor-pointer' multiple onChange={handlePreVideoUpload} />
+                  {(preVideoPreview.length > 0) && (
+                    <div className="space-y-2">
+                      {preVideoPreview.map((src, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 border rounded">
+                          <span className="text-sm truncate">Video {idx + 1}</span>
+                          <div className="flex items-center gap-2">
+                            <video src={src} className="w-28 h-16 object-cover rounded" controls />
+                            <button
+                              type="button"
+                              onClick={() => removePreVideo(idx)}
+                              className="text-xs text-red-600 underline"
+                            >
+                              Remove
+                            </button>
                           </div>
                         </div>
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <p className="text-xs text-white font-medium">Image {idx + 1}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {service.preInspection.videos && service.preInspection.videos.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    className="bg-orange-600 hover:bg-orange-700 text-white flex-1"
+                    onClick={savePreInspection}
+                    disabled={savingPreInspection}
+                  >
+                    {savingPreInspection ? 'Saving...' : 'Save Pre-Inspection'}
+                  </Button>
+                  {(preMessage || preImagePreview.length > 0 || preVideoPreview.length > 0) && (
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setPreMessage(service.preInspection?.message || '');
+                        setPreImages([]);
+                        setPreVideos([]);
+                        setPreImagePreview([]);
+                        setPreVideoPreview([]);
+                      }}
+                    >
+                      Reset Changes
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Existing Records */}
+            {showPreInspectionList && (!service.preInspection || (!service.preInspection.message && (!service.preInspection.images?.length) && (!service.preInspection.videos?.length))) && (
+              <div className="p-4 border border-yellow-300 bg-yellow-50 text-yellow-800 text-sm rounded">
+                No inspection made yet.
+              </div>
+            )}
+
+            {showPreInspectionList && service.preInspection && (service.preInspection.message || service.preInspection.images?.length > 0 || service.preInspection.videos?.length > 0) && (
+              <div className="space-y-6">
+                {service.preInspection.message && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
                       <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      <h3 className="text-sm font-semibold text-gray-700">
-                        Videos <span className="text-orange-600">({service.preInspection.videos.length})</span>
-                      </h3>
+                      <h3 className="text-sm font-semibold text-gray-700">Notes</h3>
+                    </div>
+                    <p className="text-sm text-gray-800 bg-gradient-to-r from-orange-50 to-gray-50 p-4 rounded-lg border border-orange-100 leading-relaxed whitespace-pre-wrap">
+                      {service.preInspection.message}
+                    </p>
+                  </div>
+                )}
+
+                {service.preInspection.images && service.preInspection.images.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <h3 className="text-sm font-semibold text-gray-700">
+                          Images <span className="text-orange-600">({service.preInspection.images.length})</span>
+                        </h3>
+                      </div>
+                      <span className="text-xs text-gray-500">Click to enlarge</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {service.preInspection.images.map((url: string, idx: number) => (
+                        <button
+                          key={idx} 
+                          onClick={() => setSelectedImageIndex(idx)}
+                          className="group relative block overflow-hidden rounded-lg border-2 border-gray-200 hover:border-orange-500 transition-all duration-300 shadow-sm hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <div className="aspect-square relative">
+                            <img 
+                              src={url} 
+                              alt={`Pre-inspection image ${idx + 1}`} 
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-opacity duration-300 flex items-center justify-center">
+                              <svg className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                              </svg>
+                            </div>
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <p className="text-xs text-white font-medium">Image {idx + 1}</p>
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {service.preInspection.videos.map((url: string, idx: number) => (
-                      <div key={idx} className="group relative border-2 border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-lg hover:border-orange-500 transition-all duration-300 bg-black">
-                        <video 
-                          src={url} 
-                          controls 
-                          preload="metadata"
-                          className="w-full aspect-video object-contain bg-black"
-                        >
-                          Your browser does not support the video tag.
-                        </video>
-                        <div className="bg-gradient-to-r from-orange-50 to-gray-50 px-3 py-2 border-t border-gray-200">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-700">Video {idx + 1}</span>
-                            <div className="flex gap-2">
-                              <a 
-                                href={url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium transition-colors"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                                Open
-                              </a>
-                              <a 
-                                href={url} 
-                                download
-                                className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium transition-colors"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Download
-                              </a>
+                )}
+
+                {service.preInspection.videos && service.preInspection.videos.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <h3 className="text-sm font-semibold text-gray-700">
+                          Videos <span className="text-orange-600">({service.preInspection.videos.length})</span>
+                        </h3>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {service.preInspection.videos.map((url: string, idx: number) => (
+                        <div key={idx} className="group relative border-2 border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-lg hover:border-orange-500 transition-all duration-300 bg-black">
+                          <video 
+                            src={url} 
+                            controls 
+                            preload="metadata"
+                            className="w-full aspect-video object-contain bg-black"
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                          <div className="bg-gradient-to-r from-orange-50 to-gray-50 px-3 py-2 border-t border-gray-200">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-gray-700">Video {idx + 1}</span>
+                              <div className="flex gap-2">
+                                <a 
+                                  href={url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                  Open
+                                </a>
+                                <a 
+                                  href={url} 
+                                  download
+                                  className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                  Download
+                                </a>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </Card>
-          )}
+                )}
+              </div>
+            )}
+          </Card>
         </div>
 
         {/* Actions Sidebar */}
         <div className="space-y-4">
+          <Card className="p-6">
+            <h3 className="font-semibold mb-3">Quotation</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Status</span>
+                {quotationLoading ? (
+                  <span className="text-xs text-gray-500">Loading…</span>
+                ) : (
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${quotationBadgeClass}`}>
+                    {quotationLabelMap[quotationStatus] || quotationStatus}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">Invoice unlocks after the quotation is accepted.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+                  onClick={() => setShowQuotationModal(true)}
+                >
+                  {quotation ? 'Update Quotation' : 'Create Quotation'}
+                </Button>
+                {quotation?.id && (
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => router.push(`/admin/quotation/${quotation.id}`)}
+                  >
+                    View Quotation
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-6">
             <h3 className="font-semibold mb-4">Actions</h3>
             <div className="space-y-3">
@@ -813,21 +1404,49 @@ export default function BookServiceDetails() {
                     {rescheduling ? 'Close' : 'Reschedule'}
                   </Button>
                   <Button
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    className={`w-full ${canInvoice ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500'}`}
                     onClick={markComplete}
+                    disabled={!canInvoice}
+                    title={canInvoice ? 'Create invoice and mark complete' : 'Requires accepted quotation'}
                   >
-                    Mark Complete
+                    {canInvoice ? 'Mark Complete' : 'Mark Complete (needs quote)'}
                   </Button>
+                  {!canInvoice && (
+                    <p className="text-[11px] text-red-600">Accept the quotation before generating an invoice.</p>
+                  )}
                 </>
               )}
               <Button
                 variant="destructive"
                 className="w-full"
-                onClick={deleteService}
-                disabled={service.status === 'cancelled'}
+                onClick={() => deleteService()}
+                disabled={service.status === 'cancelled' || service.status === 'completed'}
               >
-                {service.status === 'cancelled' ? 'Cancelled' : 'Cancel Booking'}
+                {service.status === 'cancelled'
+                  ? 'Cancelled'
+                  : service.status === 'completed'
+                    ? 'Work is Completed'
+                    : 'Cancel Booking'}
               </Button>
+              {service.status === 'completed' && (
+                <div className="text-[11px] text-gray-600 space-y-2">
+                  <p className="leading-snug">Work is completed. Do you still want to cancel? This will run the cancel flow.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                    onClick={() => {
+                      const confirmMessage = 'Work is completed. Are you sure you want to cancel this booking?';
+                      if (window.confirm(confirmMessage)) {
+                        deleteService(true);
+                      }
+                    }}
+                    disabled={service.status === 'cancelled'}
+                  >
+                    Cancel Booking
+                  </Button>
+                </div>
+              )}
               <Button
                 variant="outline"
                 className="w-full"
@@ -874,6 +1493,35 @@ export default function BookServiceDetails() {
               </div>
             </Card>
           )}
+
+          {/* History */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900">History</h3>
+              <span className="text-[11px] text-gray-500">Latest activity</span>
+            </div>
+            {historyItems.length === 0 ? (
+              <p className="text-sm text-gray-600">No history available yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {historyItems.map((item, idx) => (
+                  <div
+                    key={`${item.label}-${idx}`}
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 p-3 rounded-lg border border-gray-100 bg-gray-50"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-2 h-2 rounded-full bg-green-500" aria-hidden />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{item.label}</p>
+                        <p className="text-xs text-gray-600 truncate">Updated By: {item.user}</p>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 sm:text-right sm:min-w-[160px]">{item.time}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
 
           {/* Reschedule Form */}
           {rescheduling && service.status !== 'completed' && service.status !== 'cancelled' && (
@@ -959,6 +1607,40 @@ export default function BookServiceDetails() {
                 </svg>
                 Open original
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quotation Modal */}
+      {showQuotationModal && service && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowQuotationModal(false)} />
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full z-10 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">{quotation ? 'Update Quotation' : 'Create Quotation'}</h2>
+              <button
+                className="text-gray-500 hover:text-gray-700"
+                onClick={() => setShowQuotationModal(false)}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <QuotationForm
+                quotation={quotation || quotationSeed}
+                serviceBookingId={service.id}
+                onCreated={(quoteId, meta) => {
+                  setShowQuotationModal(false);
+                  setStatus('Quotation saved');
+                  if (meta?.status) {
+                    setQuotation((prev: any) => ({ ...(prev || { id: quoteId }), id: quoteId, status: meta.status }));
+                  }
+                }}
+                onCancel={() => setShowQuotationModal(false)}
+              />
             </div>
           </div>
         </div>

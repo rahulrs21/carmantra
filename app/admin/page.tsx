@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import MetricCard from '@/components/admin/MetricCard';
 import { safeConsoleError } from '@/lib/safeConsole';
-import { formatDateTime, formatDate } from '@/lib/utils';
+// Local date/time formatting helpers for DD/MM/YYYY and 12-hour clock
 import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
 import { useUser } from '@/lib/userContext';
 
@@ -148,6 +148,36 @@ export default function AdminDashboard() {
     return null;
   }
 
+  function formatDateOnly(date: Date | null | undefined) {
+    if (!date) return '-';
+    const d = date;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  function formatDateTime12(ts?: Lead['createdAt'] | Date | null) {
+    const d = ts instanceof Date ? ts : toDate(ts as any);
+    if (!d) return '-';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    const hh = String(hours).padStart(2, '0');
+    return `${day}/${month}/${year} ${hh}:${minutes} ${period}`;
+  }
+
+  function formatHourLabel(hour: number) {
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const h12 = hour % 12 === 0 ? 12 : hour % 12;
+    return `${String(h12).padStart(2, '0')}:00 ${period}`;
+  }
+
   function startOfDay(d: Date) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
@@ -205,7 +235,7 @@ export default function AdminDashboard() {
         const svc = l.service || 'Unknown';
         services.set(svc, (services.get(svc) || 0) + 1);
       }
-      const series = hours.map((h) => ({ date: `${String(h.hour).padStart(2, '0')}:00`, count: h.count }));
+      const series = hours.map((h) => ({ date: formatHourLabel(h.hour), count: h.count }));
       const serviceBreakdown = Array.from(services.entries()).map(([name, value]) => ({ name, value }));
       return { series, serviceBreakdown };
     }
@@ -260,7 +290,7 @@ export default function AdminDashboard() {
   }
 
   function exportLeadsCSV() {
-    const rows = [['Name','Service','Phone','Email','Message','Date'], ...filteredLeads.map(l => [l.name || '', l.service || '', l.phone || '', l.email || '', (l.message||'').replace(/\n/g,' '), formatDateTime(l.createdAt)])];
+    const rows = [['Name','Service','Phone','Email','Message','Date'], ...filteredLeads.map(l => [l.name || '', l.service || '', l.phone || '', l.email || '', (l.message||'').replace(/\n/g,' '), formatDateTime12(l.createdAt)])];
     downloadCSV('leads.csv', rows);
   }
 
@@ -270,7 +300,7 @@ export default function AdminDashboard() {
     if (rangeType === '30d') return 'Last 30 days';
     if (rangeType === 'today') return 'Today';
     if (rangeType === 'yesterday') return 'Yesterday';
-    if (rangeType === 'custom' && customRange.from && customRange.to) return `${formatDate(customRange.from)} — ${formatDate(customRange.to)}`;
+    if (rangeType === 'custom' && customRange.from && customRange.to) return `${formatDateOnly(customRange.from)} — ${formatDateOnly(customRange.to)}`;
     return 'Custom range';
   }, [rangeType, customRange]);
 
@@ -478,7 +508,7 @@ export default function AdminDashboard() {
         </div>
         <div className="flex items-center justify-between sm:justify-end gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
           <span className="uppercase tracking-wide text-[11px] sm:text-xs text-gray-400 dark:text-gray-500">Updated</span>
-          <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatDateTime(new Date())}</span>
+          <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatDateTime12(new Date())}</span>
         </div>
       </header>
 
@@ -713,7 +743,7 @@ export default function AdminDashboard() {
                         <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{lead.service || '—'}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{lead.message ? `${lead.message.slice(0, 80)}${lead.message.length>80 ? '…' : ''}` : ''}</div>
                       </div>
-                      <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(lead.createdAt)}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime12(lead.createdAt)}</span>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300">
                       {lead.phone && <span className="whitespace-nowrap">{lead.phone}</span>}
@@ -759,7 +789,7 @@ export default function AdminDashboard() {
                         <td className="px-3 sm:px-4 py-2 sm:py-3 align-top">
                           <div className="text-xs sm:text-sm dark:text-gray-300 break-all">{lead.email || '—'}</div>
                         </td>
-                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(lead.createdAt)}</td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3 align-top text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime12(lead.createdAt)}</td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3 align-top">
                           <div className="flex gap-2 flex-wrap">
                             {lead.email ? (

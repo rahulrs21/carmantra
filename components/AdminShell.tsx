@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import AdminLogout from '@/components/AdminLogout';
 import { startLeadCustomerSync } from '@/lib/firestore/leadSync';
 import { useUser } from '@/lib/userContext';
@@ -24,6 +24,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [brandName, setBrandName] = useState('CarMantra CRM');
   const [brandLogo, setBrandLogo] = useState<string | null>(null);
   const lastScrollY = useRef(0);
+  const lastSeenLeadTsRef = useRef(0);
+  const leadSeenInitialized = useRef(false);
+  const latestLeadTimestamp = useRef(0);
+  const [hasNewLead, setHasNewLead] = useState(false);
 
   // Check authentication state
   useEffect(() => {
@@ -67,6 +71,55 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     });
     return () => unsub();
   }, []);
+
+  // Watch for new leads and flag the nav item
+  useEffect(() => {
+    const stored = Number(typeof window !== 'undefined' ? localStorage.getItem('crmLeadLastSeen') || '0' : '0');
+    if (stored) {
+      lastSeenLeadTsRef.current = stored;
+    }
+
+    const leadsRef = query(collection(db, 'crm-leads'), orderBy('createdAt', 'desc'), limit(1));
+    const unsub = onSnapshot(leadsRef, (snap) => {
+      const latest = snap.docs[0];
+      if (!latest) return;
+      const data = latest.data() as any;
+      const ts = data?.createdAt?.seconds
+        ? data.createdAt.seconds
+        : data?.createdAt?.toDate
+          ? Math.floor(data.createdAt.toDate().getTime() / 1000)
+          : 0;
+      if (!ts) return;
+
+      latestLeadTimestamp.current = ts;
+
+      if (!leadSeenInitialized.current) {
+        leadSeenInitialized.current = true;
+        if (!lastSeenLeadTsRef.current) {
+          lastSeenLeadTsRef.current = ts;
+          localStorage.setItem('crmLeadLastSeen', String(ts));
+        }
+        return;
+      }
+
+      if (ts > lastSeenLeadTsRef.current) {
+        setHasNewLead(true);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  // Clear lead badge when viewing leads
+  useEffect(() => {
+    if (pathname.startsWith('/admin/leads')) {
+      if (latestLeadTimestamp.current) {
+        lastSeenLeadTsRef.current = latestLeadTimestamp.current;
+        localStorage.setItem('crmLeadLastSeen', String(latestLeadTimestamp.current));
+      }
+      setHasNewLead(false);
+    }
+  }, [pathname]);
 
   async function handleLogout() {
     try {
@@ -255,7 +308,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       {/* SIDEBAR - Desktop & Mobile Drawer */}
       <aside className={`
         fixed h-full z-50 transition-transform duration-300 ease-in-out
-        w-64 bg-white dark:bg-gray-800 shadow-lg overflow-y-auto
+        w-64 bg-white dark:bg-gray-800 shadow-lg overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         lg:block mt-[60px] lg:mt-0
       `}>
@@ -318,7 +371,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 p-2 rounded transition-colors ${
+                className={`relative flex items-center gap-3 p-2 rounded transition-colors ${
                   isActive(item.href)
                     ? 'bg-orange-600 text-white font-semibold'
                     : 'hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-gray-300'
@@ -326,6 +379,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               >
                 {item.icon}
                 <span>{item.label}</span>
+                {item.href === '/admin/leads' && hasNewLead && (
+                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-label="New leads" />
+                )}
               </a>
             ))}
 
@@ -350,7 +406,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <a
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center justify-center px-3 py-2 min-w-[80px] rounded-lg transition-colors snap-start whitespace-nowrap ${
+              className={`relative flex flex-col items-center justify-center px-3 py-2 min-w-[80px] rounded-lg transition-colors snap-start whitespace-nowrap ${
                 isActive(item.href)
                   ? 'bg-orange-600 text-white'
                   : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -362,6 +418,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <span className="text-[11px] mt-1 font-medium text-center">
                 {item.label}
               </span>
+              {item.href === '/admin/leads' && hasNewLead && (
+                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-label="New leads" />
+              )}
             </a>
           ))}
         </div>

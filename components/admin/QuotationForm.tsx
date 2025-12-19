@@ -11,11 +11,13 @@ interface Item { description: string; quantity: number; rate: number; amount: nu
 export default function QuotationForm({ 
   quotation, 
   onCreated, 
-  onCancel 
+  onCancel,
+  serviceBookingId,
 }: { 
   quotation?: any; 
-  onCreated?: (id: string) => void; 
-  onCancel?: () => void; 
+  onCreated?: (id: string, meta?: { status?: string }) => void; 
+  onCancel?: () => void;
+  serviceBookingId?: string;
 }) {
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -33,6 +35,8 @@ export default function QuotationForm({
   const [status, setStatus] = useState('pending');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const linkedServiceId = serviceBookingId || quotation?.serviceBookingId;
 
   // Populate form when editing
   useEffect(() => {
@@ -95,7 +99,7 @@ export default function QuotationForm({
       const auth = getAuth();
       if (!auth.currentUser) throw new Error('Not authenticated');
 
-      const quotationData = {
+      const quotationData: any = {
         ownerId: auth.currentUser.uid,
         customerName,
         customerEmail,
@@ -121,11 +125,21 @@ export default function QuotationForm({
         updatedAt: Timestamp.now(),
       };
 
+      if (linkedServiceId) {
+        quotationData.serviceBookingId = linkedServiceId;
+      }
+
       if (quotation?.id) {
         // Update existing quotation
         await updateDoc(doc(db, 'quotations', quotation.id), quotationData);
+        if (linkedServiceId) {
+          await updateDoc(doc(db, 'bookedServices', linkedServiceId), {
+            quotationId: quotation.id,
+            quotationStatus: status,
+          });
+        }
         setMessage('Quotation updated successfully');
-        if (onCreated) onCreated(quotation.id);
+        if (onCreated) onCreated(quotation.id, { status });
       } else {
         // Create new quotation
         const quotationNumber = `QT-${Date.now()}`;
@@ -134,6 +148,12 @@ export default function QuotationForm({
           quotationNumber,
           createdAt: Timestamp.now(),
         });
+        if (linkedServiceId) {
+          await updateDoc(doc(db, 'bookedServices', linkedServiceId), {
+            quotationId: docRef.id,
+            quotationStatus: status,
+          });
+        }
         setMessage(`Quotation created: ${docRef.id}`);
         
         // Reset form
@@ -152,7 +172,7 @@ export default function QuotationForm({
         setNotes('');
         setStatus('pending');
         
-        if (onCreated) onCreated(docRef.id);
+        if (onCreated) onCreated(docRef.id, { status });
       }
     } catch (err) {
       safeConsoleError('Submit quotation error', err);

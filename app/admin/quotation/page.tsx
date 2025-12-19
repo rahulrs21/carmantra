@@ -612,7 +612,8 @@ export default function QuotationsPage() {
               <QuotationForm 
                 quotation={editingQuotation} 
                 onCreated={handleCloseModal} 
-                onCancel={handleCloseModal} 
+                onCancel={handleCloseModal}
+                serviceBookingId={editingQuotation?.serviceBookingId}
               />
             </div>
           </div>

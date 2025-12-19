@@ -419,10 +419,8 @@ export default function InvoiceForm({
             onChange={e => {
               const value = e.target.value;
               setPaymentTerms(value);
-              // Auto-select Paid status when specific payment methods are chosen
-              if (value === 'card' || value === 'cash' || value === 'bank' || value === 'tabby') {
-                setPaymentStatus('paid');
-              }
+              // Mark paid when a payment method is chosen; unpaid if none
+              setPaymentStatus(value ? 'paid' : 'unpaid');
             }}
           >
             <option value="card">Credit/Debit Card</option>

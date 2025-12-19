@@ -12,10 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { findOrCreateCustomer } from '@/lib/firestore/customers';
 import { formatDateTime } from '@/lib/utils';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess } from '@/components/PermissionGate';
 
 export default function BookServiceList() {
     const router = useRouter();
@@ -23,12 +22,13 @@ export default function BookServiceList() {
     const [loading, setLoading] = useState(true);
     const [currentDate, setCurrentDate] = useState<Date>(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-    const [selectedTime, setSelectedTime] = useState<string>('09:00');
+    const [selectedTime, setSelectedTime] = useState<string>('');
     const [view, setView] = useState<'calendar' | 'list'>('calendar');
     const [showBookingForm, setShowBookingForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [sortField, setSortField] = useState<'jobCardNo' | 'scheduledDate' | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+    const [mulkiyaFile, setMulkiyaFile] = useState<File | null>(null);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -46,20 +46,11 @@ export default function BookServiceList() {
         vehicleBrand: '',
         modelName: '',
         numberPlate: '',
-        fuelType: ''
+        fuelType: '',
+        vinNumber: '',
     });
 
-    // Pre-inspection checklist state
-    const [preInspection, setPreInspection] = useState({
-        message: '',
-        images: [] as File[],
-        videos: [] as File[]
-    });
-
-    const [previewFiles, setPreviewFiles] = useState({
-        images: [] as string[],
-        videos: [] as string[]
-    });
+    // Pre-inspection is captured after booking is created (car arrival)
 
     useEffect(() => {
         const q = query(collection(db, 'bookedServices'));
@@ -155,97 +146,11 @@ export default function BookServiceList() {
             ...formData,
             jobCardNo: generateJobCardNo()
         });
+        setMulkiyaFile(null);
         setShowBookingForm(true);
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        if (!files.length) return;
-
-        setPreInspection((prev) => ({
-            ...prev,
-            images: [...prev.images, ...files]
-        }));
-
-        files.forEach((file) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPreviewFiles((prev) => ({
-                    ...prev,
-                    images: [...prev.images, reader.result as string]
-                }));
-            };
-            reader.readAsDataURL(file);
-        });
-
-        e.target.value = '';
-    };
-
-    const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        if (!files.length) return;
-
-        setPreInspection((prev) => ({
-            ...prev,
-            videos: [...prev.videos, ...files]
-        }));
-
-        files.forEach((file) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setPreviewFiles((prev) => ({
-                    ...prev,
-                    videos: [...prev.videos, reader.result as string]
-                }));
-            };
-            reader.readAsDataURL(file);
-        });
-
-        e.target.value = '';
-    };
-
-    const removeImage = (index: number) => {
-        setPreInspection((prev) => ({
-            ...prev,
-            images: prev.images.filter((_, i) => i !== index)
-        }));
-        setPreviewFiles((prev) => ({
-            ...prev,
-            images: prev.images.filter((_, i) => i !== index)
-        }));
-    };
-
-    const removeVideo = (index: number) => {
-        setPreInspection((prev) => ({
-            ...prev,
-            videos: prev.videos.filter((_, i) => i !== index)
-        }));
-        setPreviewFiles((prev) => ({
-            ...prev,
-            videos: prev.videos.filter((_, i) => i !== index)
-        }));
-    };
-
-    const uploadPreInspectionFiles = async (jobCardNo: string) => {
-        const uploadedImages: string[] = [];
-        const uploadedVideos: string[] = [];
-
-        for (const file of preInspection.images) {
-            const storageRef = ref(storage, `pre-inspections/${jobCardNo}/images/${file.name}-${Date.now()}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            uploadedImages.push(url);
-        }
-
-        for (const file of preInspection.videos) {
-            const storageRef = ref(storage, `pre-inspections/${jobCardNo}/videos/${file.name}-${Date.now()}`);
-            await uploadBytes(storageRef, file);
-            const url = await getDownloadURL(storageRef);
-            uploadedVideos.push(url);
-        }
-
-        return { uploadedImages, uploadedVideos };
-    };
+    // Pre-inspection uploads are handled later in the booking lifecycle
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -267,19 +172,6 @@ export default function BookServiceList() {
             const scheduledDateTime = new Date(selectedDate);
             scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
 
-            // Upload pre-inspection files if any
-            let preInspectionData: { message: string; images: string[]; videos: string[] } = {
-                message: preInspection.message,
-                images: [],
-                videos: []
-            };
-
-            if (preInspection.images.length > 0 || preInspection.videos.length > 0) {
-                const uploaded = await uploadPreInspectionFiles(formData.jobCardNo || generateJobCardNo());
-                preInspectionData.images = uploaded.uploadedImages;
-                preInspectionData.videos = uploaded.uploadedVideos;
-            }
-
             // Auto-sync customer to Customer module
             await findOrCreateCustomer({
                 firstName: formData.firstName,
@@ -292,11 +184,26 @@ export default function BookServiceList() {
                 state: formData.state,
             });
 
+            let mulkiyaUrl = '';
+            if (mulkiyaFile) {
+                const storageRef = ref(storage, `mulkiya/${formData.jobCardNo || 'booking'}/${mulkiyaFile.name}-${Date.now()}`);
+                await uploadBytes(storageRef, mulkiyaFile);
+                mulkiyaUrl = await getDownloadURL(storageRef);
+            }
+
             await addDoc(collection(db, 'bookedServices'), {
                 ...formData,
                 scheduledDate: Timestamp.fromDate(scheduledDateTime),
-                preInspection: preInspectionData,
+                preInspection: {
+                    message: '',
+                    images: [],
+                    videos: [],
+                },
+                vinNumber: formData.vinNumber,
+                mulkiyaUrl,
                 status: 'pending',
+                quotationStatus: 'not_created',
+                quotationId: null,
                 createdAt: Timestamp.now()
             });
 
@@ -317,17 +224,11 @@ export default function BookServiceList() {
                 vehicleBrand: '',
                 modelName: '',
                 numberPlate: '',
-                fuelType: ''
+                fuelType: '',
+                vinNumber: '',
             });
-            setPreInspection({
-                message: '',
-                images: [],
-                videos: []
-            });
-            setPreviewFiles({
-                images: [],
-                videos: []
-            });
+            setMulkiyaFile(null);
+            // Pre-inspection will be captured after vehicle arrival
             alert('Booking created successfully!');
         } catch (err: any) {
             safeConsoleError('Booking creation error', err);
@@ -372,6 +273,43 @@ export default function BookServiceList() {
         });
     };
 
+    const WORK_STAGES = ['Not booked', 'Scheduled', 'Quotation', 'Completed'] as const;
+
+    const getWorkStage = (service: any) => {
+        let stage = 0;
+
+        if (service.status === 'completed') {
+            stage = 3;
+        } else if ((service.quotationStatus && service.quotationStatus !== 'not_created') || service.quotationId) {
+            stage = 2;
+        } else if (service.scheduledDate) {
+            stage = 1;
+        }
+
+        return { stage, label: WORK_STAGES[stage] };
+    };
+
+    const getQuotationMeta = (service: any) => {
+        const status = service.quotationStatus || (service.quotationId ? 'pending' : 'not_created');
+        const labelMap: Record<string, string> = {
+            accepted: 'Accepted',
+            pending: 'Pending',
+            rejected: 'Rejected',
+            not_created: 'Not created',
+        };
+        const classMap: Record<string, string> = {
+            accepted: 'bg-green-100 text-green-800',
+            pending: 'bg-yellow-100 text-yellow-800',
+            rejected: 'bg-red-100 text-red-800',
+            not_created: 'bg-gray-100 text-gray-700',
+        };
+        return {
+            status,
+            label: labelMap[status] || status,
+            className: classMap[status] || 'bg-gray-100 text-gray-700',
+        };
+    };
+
     const renderCalendar = () => {
         const daysInMonth = getDaysInMonth(currentDate);
         const firstDay = getFirstDayOfMonth(currentDate);
@@ -392,7 +330,11 @@ export default function BookServiceList() {
             days.push(
                 <div
                     key={day}
-                    onClick={() => !disabled && setSelectedDate(date)}
+                    onClick={() => {
+                        if (disabled) return;
+                        setSelectedDate(date);
+                        setSelectedTime('');
+                    }}
                     className={`p-2 sm:p-3 min-h-[88px] border cursor-pointer transition-colors ${disabled
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : isSelected
@@ -475,7 +417,7 @@ export default function BookServiceList() {
                                     <Button
                                         className="bg-orange-600 hover:bg-orange-700 text-white flex-1 sm:flex-none"
                                         onClick={openBookingForm}
-                                        disabled={!selectedDate || isPastDate(selectedDate)}
+                                        disabled={!selectedDate || isPastDate(selectedDate) || !selectedTime}
                                     >
                                         + Book Service
                                     </Button>
@@ -600,7 +542,7 @@ export default function BookServiceList() {
                                 <Button
                                     className="w-full mt-4 bg-orange-600 hover:bg-orange-700"
                                     onClick={openBookingForm}
-                                    disabled={!selectedDate || isPastDate(selectedDate)}
+                                    disabled={!selectedDate || isPastDate(selectedDate) || !selectedTime}
                                 >
                                     + Book Service
                                 </Button>
@@ -608,7 +550,10 @@ export default function BookServiceList() {
                                 <Button
                                     variant="outline"
                                     className="w-full mt-2"
-                                    onClick={() => setSelectedDate(null)}
+                                    onClick={() => {
+                                        setSelectedDate(null);
+                                        setSelectedTime('');
+                                    }}
                                 >
                                     Clear Selection
                                 </Button>
@@ -706,6 +651,8 @@ export default function BookServiceList() {
                                             )}
                                         </button>
                                     </th>
+                                    <th className="px-6 py-3 text-left text-sm font-semibold">Work Status</th>
+                                    <th className="px-6 py-3 text-left text-sm font-semibold">Quotation</th>
                                     <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
                                     <th className="px-6 py-3 text-left text-sm font-semibold">Action</th>
                                 </tr>
@@ -713,40 +660,65 @@ export default function BookServiceList() {
                             <tbody>
                                 {getSortedServices().length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                                             No services found
                                         </td>
                                     </tr>
                                 ) : (
-                                    getSortedServices().map((service) => (
-                                        <tr key={service.id} className="border-b hover:bg-gray-50">
-                                            <td className="px-6 py-4 text-sm">{service.jobCardNo}</td>
-                                            <td className="px-6 py-4 text-sm">{service.firstName} {service.lastName}</td>
-                                            <td className="px-6 py-4 text-sm">{service.category}</td>
-                                            <td className="px-6 py-4 text-sm">
-                                                {formatDateTime(service.scheduledDate)}
-                                            </td>
-                                            <td className="px-6 py-4 text-sm">
-                                                <span className={`px-2 py-1 rounded text-xs font-medium ${service.status === 'completed'
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : service.status === 'cancelled'
-                                                        ? 'bg-red-100 text-red-800'
-                                                        : 'bg-blue-100 text-blue-800'
-                                                    }`}>
-                                                    {service.status || 'pending'}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => router.push(`/admin/book-service/${service.id}`)}
-                                                >
-                                                    View Details
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))
+                                    getSortedServices().map((service) => {
+                                        const quote = getQuotationMeta(service);
+                                        const workStage = getWorkStage(service);
+                                        const actionLabel = quote.status === 'accepted'
+                                            ? 'Invoice'
+                                            : quote.status === 'pending'
+                                                ? 'Review Quote'
+                                                : 'Create Quote';
+                                        return (
+                                            <tr key={service.id} className="border-b hover:bg-gray-50">
+                                                <td className="px-6 py-4 text-sm">{service.jobCardNo}</td>
+                                                <td className="px-6 py-4 text-sm">{service.firstName} {service.lastName}</td>
+                                                <td className="px-6 py-4 text-sm">{service.category}</td>
+                                                <td className="px-6 py-4 text-sm">
+                                                    {formatDateTime(service.scheduledDate)}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm">
+                                                    <div className="flex items-center gap-1 text-xs">
+                                                        {WORK_STAGES.map((step, idx) => (
+                                                            <div key={step} className="flex items-center gap-1">
+                                                                <span className={`h-2 w-2 rounded-full ${idx <= workStage.stage ? 'bg-orange-500' : 'bg-gray-300'}`} />
+                                                                <span className={`${idx === workStage.stage ? 'font-semibold text-orange-700' : idx < workStage.stage ? 'text-gray-700' : 'text-gray-400'}`}>{step}</span>
+                                                                {idx < WORK_STAGES.length - 1 && <span className="text-gray-300 mx-1">›</span>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm">
+                                                    <span className={`px-2 py-1 rounded text-xs font-medium ${quote.className}`}>
+                                                        {quote.label}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm">
+                                                    <span className={`px-2 py-1 rounded text-xs font-medium ${service.status === 'completed'
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : service.status === 'cancelled'
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : 'bg-blue-100 text-blue-800'
+                                                        }`}>
+                                                        {service.status || 'pending'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => router.push(`/admin/book-service/${service.id}`)}
+                                                    >
+                                                        {actionLabel}
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
@@ -888,7 +860,7 @@ export default function BookServiceList() {
                         <div>
                             <h3 className="text-lg font-semibold mb-3">VEHICLE DETAILS</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
+                                <div className="col-span-1">
                                     <Label htmlFor="vehicleType">Vehicle Type*</Label>
                                     <Select value={formData.vehicleType} onValueChange={(val) => updateFormField('vehicleType', val)}>
                                         <SelectTrigger>
@@ -903,7 +875,7 @@ export default function BookServiceList() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
+                                <div className="col-span-1">
                                     <Label htmlFor="fuelType">Fuel Type*</Label>
                                     <Select value={formData.fuelType} onValueChange={(val) => updateFormField('fuelType', val)}>
                                         <SelectTrigger>
@@ -917,7 +889,7 @@ export default function BookServiceList() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
+                                <div className="col-span-1 sm:col-span-2">
                                     <Label htmlFor="vehicleBrand">Vehicle Brand*</Label>
                                     <Input
                                         id="vehicleBrand"
@@ -926,7 +898,7 @@ export default function BookServiceList() {
                                         required
                                     />
                                 </div>
-                                <div>
+                                <div className="col-span-1">
                                     <Label htmlFor="numberPlate">Number Plate*</Label>
                                     <Input
                                         id="numberPlate"
@@ -935,7 +907,16 @@ export default function BookServiceList() {
                                         required
                                     />
                                 </div>
-                                <div className="col-span-2">
+                                <div className="col-span-1">
+                                    <Label htmlFor="vinNumber">VIN (optional)</Label>
+                                    <Input
+                                        id="vinNumber"
+                                        value={formData.vinNumber}
+                                        onChange={(e) => updateFormField('vinNumber', e.target.value)}
+                                        placeholder="Enter VIN"
+                                    />
+                                </div>
+                                <div className="col-span-1 sm:col-span-2">
                                     <Label htmlFor="modelName">Model Name*</Label>
                                     <Input
                                         id="modelName"
@@ -944,78 +925,27 @@ export default function BookServiceList() {
                                         required
                                     />
                                 </div>
+                                <div className="col-span-1 sm:col-span-2">
+                                    <Label htmlFor="mulkiyaUpload">Mulkiya (optional)</Label>
+                                    <Input
+                                        id="mulkiyaUpload"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => setMulkiyaFile(e.target.files?.[0] || null)}
+                                    />
+                                    {mulkiyaFile && (
+                                        <p className="text-xs text-gray-600 mt-1">Selected: {mulkiyaFile.name}</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
                         {/* Pre-Inspection Checklist */}
                         <div className="pt-4 border-t border-gray-200">
                             <h3 className="text-lg font-semibold mb-3 text-orange-700">Pre-Inspection Checklist</h3>
-                            <div className="space-y-4">
-                                <div>
-                                    <Label htmlFor="preInspectionMessage">Notes</Label>
-                                    <Textarea
-                                        id="preInspectionMessage"
-                                        placeholder="Add any pre-inspection notes..."
-                                        value={preInspection.message}
-                                        onChange={(e) =>
-                                            setPreInspection((prev) => ({
-                                                ...prev,
-                                                message: e.target.value
-                                            }))
-                                        }
-                                        className="mt-1"
-                                    />
-                                </div>
-
-                                <div>
-                                    <Label className="mb-2 block">Upload Images</Label>
-                                    <Input type="file" accept="image/*" multiple onChange={handleImageUpload} />
-                                    {previewFiles.images.length > 0 && (
-                                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                            {previewFiles.images.map((src, idx) => (
-                                                <div key={idx} className="relative border rounded overflow-hidden">
-                                                    <img src={src} alt={`Upload ${idx + 1}`} className="w-full h-24 object-cover" />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeImage(idx)}
-                                                        className="absolute top-1 right-1 bg-black/60 text-white text-xs px-2 py-1 rounded"
-                                                    >
-                                                        Remove
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <Label className="mb-2 block">Upload Videos</Label>
-                                    <Input type="file" accept="video/*" multiple onChange={handleVideoUpload} />
-                                    {previewFiles.videos.length > 0 && (
-                                        <div className="mt-3 space-y-2">
-                                            {previewFiles.videos.map((src, idx) => (
-                                                <div key={idx} className="flex items-center justify-between p-2 border rounded">
-                                                    <span className="text-sm truncate">Video {idx + 1}</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <video src={src} className="w-28 h-16 object-cover rounded" controls />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeVideo(idx)}
-                                                            className="text-xs text-red-600 underline"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <p className="text-xs text-gray-500">
-                                    Attach relevant photos or videos before the vehicle arrives. Files upload when you submit.
-                                </p>
-                            </div>
+                            <p className="text-sm text-gray-600">
+                                Pre-inspection is recorded after the vehicle arrives for its scheduled slot. You can capture notes, photos, and videos from the booking detail page once the car is on-site.
+                            </p>
                         </div>
 
 

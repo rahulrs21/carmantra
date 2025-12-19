@@ -236,3 +236,13 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: #60a5fa; /* Lighter blue on hover */
 }
+
+/* Utility: hide scrollbars while keeping scroll enabled */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

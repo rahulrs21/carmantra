@@ -73,6 +73,15 @@ export default function QuotationDetailPage() {
     }
   }
 
+  const sourceLabelMap: Record<string, string> = {
+    lead: 'Lead',
+    direct: 'Direct booking',
+    referral: 'Referral',
+    other: 'Other',
+  };
+  const derivedSource = quotation ? (quotation.source || (quotation.sourceLeadId ? 'lead' : 'direct')) : 'direct';
+  const sourceLabel = sourceLabelMap[derivedSource] || 'Direct booking';
+
   function generatePDF() {
     if (!quotation) return;
 
@@ -144,6 +153,7 @@ export default function QuotationDetailPage() {
       yPos += 5;
       pdf.text(`Mobile: ${quotation.customerMobile}`, leftMargin, yPos);
     }
+ 
     
     // Vehicle Information
     if (quotation.vehicleDetails && Object.values(quotation.vehicleDetails).some(v => v)) {
@@ -506,6 +516,7 @@ export default function QuotationDetailPage() {
                 <p className="text-lg font-semibold text-gray-900">{quotation.customerName || 'N/A'}</p>
                 {quotation.customerEmail && <p className="text-gray-600">{quotation.customerEmail}</p>}
                 {quotation.customerMobile && <p className="text-gray-600">{quotation.customerMobile}</p>}
+                {/* <p className="text-gray-600">Source: {sourceLabel}</p> */}
               </div>
             </div>
 
@@ -622,6 +633,7 @@ export default function QuotationDetailPage() {
                   loadQuotation();
                 }}
                 onCancel={() => setShowEditModal(false)}
+                serviceBookingId={quotation?.serviceBookingId}
               />
             </div>
           </div>
