@@ -74,6 +74,12 @@ export default function QuotationsPage() {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
   }
 
+  const typeBadge = (qt: any) => (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${qt.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+      {qt.customerType === 'b2b' ? 'B2B' : 'B2C'}
+    </span>
+  );
+
   const filtered = useMemo(() => {
     let result = quotations;
     
@@ -362,7 +368,10 @@ export default function QuotationsPage() {
                     <div className="min-w-0">
                       <div className="text-xs text-gray-500">Quotation</div>
                       <div className="font-semibold text-blue-600 break-words">{qt.quotationNumber || '—'}</div>
-                      <div className="text-sm font-medium mt-1 break-words">{qt.customerName || 'Unknown'}</div>
+                      <div className="flex items-center gap-2 text-sm font-medium mt-1 break-words">
+                        <span className="truncate">{qt.customerName || 'Unknown'}</span>
+                        {typeBadge(qt)}
+                      </div>
                       <div className="text-xs text-gray-500 break-words">{qt.customerEmail}</div>
                       <div className="text-xs text-gray-400 break-words">{qt.customerMobile}</div>
                       {qt.vehicleDetails?.vin && (
@@ -466,7 +475,10 @@ export default function QuotationsPage() {
                   {paginated.map(qt => (
                     <tr key={qt.id} className="border-t hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="font-medium">{qt.customerName}</div>
+                        <div className="flex items-center gap-2 font-medium">
+                          <span className="truncate">{qt.customerName}</span>
+                          {typeBadge(qt)}
+                        </div>
                         <div className="text-xs text-gray-500">{qt.quotationNumber}</div>
                         {qt.vehicleDetails?.vin && (
                           <div className="text-xs text-gray-500">VIN: {qt.vehicleDetails.vin}</div>

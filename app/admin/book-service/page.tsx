@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, query, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
@@ -24,6 +24,7 @@ export default function BookServiceList() {
     const [currentDate, setCurrentDate] = useState<Date>(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [selectedTime, setSelectedTime] = useState<string>('');
+    const [scheduleCustomerType, setScheduleCustomerType] = useState<'b2c' | 'b2b'>('b2c');
     const [view, setView] = useState<'calendar' | 'list'>('calendar');
     const [showBookingForm, setShowBookingForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -31,26 +32,66 @@ export default function BookServiceList() {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
     const [mulkiyaPreviews, setMulkiyaPreviews] = useState<string[]>([]);
+    const [companySelectValue, setCompanySelectValue] = useState<'new' | string>('new');
     const mulkiyaInputRef = useRef<HTMLInputElement>(null);
+    const companyOptions = useMemo(() => {
+        const map = new Map<string, any>();
+        services
+            .filter((s) => s.customerType === 'b2b' && s.companyName)
+            .forEach((s) => {
+                if (!map.has(s.companyName)) {
+                    map.set(s.companyName, {
+                        name: s.companyName,
+                        contactName: s.contactName || '',
+                        contactEmail: s.contactEmail || '',
+                        contactPhone: s.contactPhone || '',
+                        companyVat: s.companyVat || '',
+                        companyCode: s.companyCode || '',
+                        address: s.address || '',
+                        city: s.city || '',
+                        country: s.country || '',
+                    });
+                }
+            });
+        return Array.from(map.values());
+    }, [services]);
 
     // Form state
     const [formData, setFormData] = useState({
         jobCardNo: '',
         category: '',
+        customerType: 'b2c' as 'b2c' | 'b2b',
+        // B2C
         firstName: '',
         lastName: '',
         mobileNo: '',
         email: '',
+        // B2B
+        companyName: '',
+        contactName: '',
+        contactEmail: '',
+        contactPhone: '',
+        companyVat: '',
+        companyCode: '',
+        poRef: '',
+        servicesHistory: '',
+        // Shared
         country: '',
         state: '',
         city: '',
         address: '',
-        vehicleType: '',
-        vehicleBrand: '',
-        modelName: '',
-        numberPlate: '',
-        fuelType: '',
-        vinNumber: '',
+        vehicles: [
+            {
+                vehicleType: '',
+                vehicleBrand: '',
+                modelName: '',
+                numberPlate: '',
+                fuelType: '',
+                vinNumber: '',
+                category: '',
+            },
+        ],
+        vehicleCount: 1,
     });
 
     // Pre-inspection is captured after booking is created (car arrival)
@@ -71,6 +112,36 @@ export default function BookServiceList() {
 
         return () => unsubscribe();
     }, []);
+
+    // Keep dialog customer type in sync with the selection made in the schedule card
+    useEffect(() => {
+        if (showBookingForm) {
+            setFormData((prev) => ({ ...prev, customerType: scheduleCustomerType }));
+        }
+    }, [showBookingForm, scheduleCustomerType]);
+
+    // Keep B2C bookings to a single vehicle entry
+    useEffect(() => {
+        if (formData.customerType !== 'b2c') return;
+        if (formData.vehicleCount === 1 && formData.vehicles.length === 1) return;
+
+        setFormData((prev) => {
+            if (prev.customerType !== 'b2c') return prev;
+            if (prev.vehicleCount === 1 && prev.vehicles.length === 1) return prev;
+
+            const primary = prev.vehicles[0] || {
+                vehicleType: '',
+                vehicleBrand: '',
+                modelName: '',
+                numberPlate: '',
+                fuelType: '',
+                vinNumber: '',
+                category: '',
+            };
+
+            return { ...prev, vehicles: [primary], vehicleCount: 1 };
+        });
+    }, [formData.customerType]);
 
     // Get calendar days for current month
     const getDaysInMonth = (date: Date) => {
@@ -110,6 +181,19 @@ export default function BookServiceList() {
         });
     };
 
+    const customerLabel = (service: any) => {
+        if (service.customerType === 'b2b') {
+            return service.companyName || service.contactName || 'Company';
+        }
+        return `${service.firstName || ''} ${service.lastName || ''}`.trim() || 'Customer';
+    };
+
+    const customerTypeBadge = (service: any) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${service.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+            {service.customerType === 'b2b' ? 'B2B' : 'B2C'}
+        </span>
+    );
+
     const timeSlots = [
         '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
         '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
@@ -145,10 +229,41 @@ export default function BookServiceList() {
     };
 
     const openBookingForm = () => {
-        setFormData({
-            ...formData,
-            jobCardNo: generateJobCardNo()
-        });
+        setFormData((prev) => ({
+            ...prev,
+            jobCardNo: generateJobCardNo(),
+            customerType: scheduleCustomerType,
+            ...(scheduleCustomerType === 'b2c'
+                ? {
+                    companyName: '',
+                    contactName: '',
+                    contactEmail: '',
+                    contactPhone: '',
+                    companyVat: '',
+                    companyCode: '',
+                    poRef: '',
+                    servicesHistory: '',
+                }
+                : {
+                    firstName: '',
+                    lastName: '',
+                    mobileNo: '',
+                    email: '',
+                }),
+            vehicles: [
+                {
+                    vehicleType: '',
+                    vehicleBrand: '',
+                    modelName: '',
+                    numberPlate: '',
+                    fuelType: '',
+                    vinNumber: '',
+                    category: '',
+                },
+            ],
+            vehicleCount: 1,
+        }));
+        setCompanySelectValue('new');
         setMulkiyaFiles([]);
         setMulkiyaPreviews([]);
         setShowBookingForm(true);
@@ -181,17 +296,44 @@ export default function BookServiceList() {
             const scheduledDateTime = new Date(selectedDate);
             scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
 
+            const primaryVehicle = formData.vehicles[0] || {
+                vehicleType: '',
+                vehicleBrand: '',
+                modelName: '',
+                numberPlate: '',
+                fuelType: '',
+                vinNumber: '',
+                category: '',
+            };
+
+            const bookingCategory = formData.customerType === 'b2b'
+                ? primaryVehicle.category
+                : formData.category;
+
             // Auto-sync customer to Customer module
-            await findOrCreateCustomer({
-                firstName: formData.firstName,
-                lastName: formData.lastName,
-                email: formData.email,
-                mobile: formData.mobileNo,
-                address: formData.address,
-                city: formData.city,
-                country: formData.country,
-                state: formData.state,
-            });
+            if (formData.customerType === 'b2c') {
+                await findOrCreateCustomer({
+                    firstName: formData.firstName,
+                    lastName: formData.lastName,
+                    email: formData.email,
+                    mobile: formData.mobileNo,
+                    address: formData.address,
+                    city: formData.city,
+                    country: formData.country,
+                    state: formData.state,
+                });
+            } else {
+                await findOrCreateCustomer({
+                    firstName: formData.contactName,
+                    lastName: formData.companyName,
+                    email: formData.contactEmail,
+                    mobile: formData.contactPhone,
+                    address: formData.address,
+                    city: formData.city,
+                    country: formData.country,
+                    state: formData.state,
+                });
+            }
 
             let mulkiyaUrl = '';
             if (mulkiyaFiles.length) {
@@ -205,15 +347,25 @@ export default function BookServiceList() {
                 mulkiyaUrl = JSON.stringify(urls);
             }
 
+            const vehicleCount = Number(formData.vehicleCount) || 1;
+
             await addDoc(collection(db, 'bookedServices'), {
                 ...formData,
+                category: bookingCategory,
+                vehicleCount,
+                vehicleType: primaryVehicle.vehicleType,
+                vehicleBrand: primaryVehicle.vehicleBrand,
+                modelName: primaryVehicle.modelName,
+                numberPlate: primaryVehicle.numberPlate,
+                fuelType: primaryVehicle.fuelType,
+                vinNumber: primaryVehicle.vinNumber,
+                vehicles: formData.vehicles,
                 scheduledDate: Timestamp.fromDate(scheduledDateTime),
                 preInspection: {
                     message: '',
                     images: [],
                     videos: [],
                 },
-                vinNumber: formData.vinNumber,
                 mulkiyaUrl,
                 status: 'pending',
                 quotationStatus: 'not_created',
@@ -228,20 +380,35 @@ export default function BookServiceList() {
             setFormData({
                 jobCardNo: '',
                 category: '',
+                customerType: 'b2c',
                 firstName: '',
                 lastName: '',
                 mobileNo: '',
                 email: '',
+                companyName: '',
+                contactName: '',
+                contactEmail: '',
+                contactPhone: '',
+                companyVat: '',
+                companyCode: '',
+                poRef: '',
+                servicesHistory: '',
                 country: '',
                 state: '',
                 city: '',
                 address: '',
-                vehicleType: '',
-                vehicleBrand: '',
-                modelName: '',
-                numberPlate: '',
-                fuelType: '',
-                vinNumber: '',
+                vehicles: [
+                    {
+                        vehicleType: '',
+                        vehicleBrand: '',
+                        modelName: '',
+                        numberPlate: '',
+                        fuelType: '',
+                        vinNumber: '',
+                        category: '',
+                    },
+                ],
+                vehicleCount: 1,
             });
             setMulkiyaFiles([]);
             setMulkiyaPreviews([]);
@@ -256,8 +423,69 @@ export default function BookServiceList() {
         }
     };
 
-    const updateFormField = (field: string, value: string) => {
+    const updateFormField = (field: string, value: any) => {
         setFormData({ ...formData, [field]: value });
+    };
+
+    const updateVehicle = (idx: number, field: string, value: string) => {
+        setFormData((prev) => {
+            const vehicles = [...prev.vehicles];
+            vehicles[idx] = { ...vehicles[idx], [field]: value };
+            return { ...prev, vehicles, vehicleCount: vehicles.length };
+        });
+    };
+
+    const setVehicleCount = (value: number | string) => {
+        const count = Math.max(1, Number(value) || 1);
+        setFormData((prev) => {
+            const current = prev.vehicles.length;
+            let vehicles = [...prev.vehicles];
+
+            if (count > current) {
+                const toAdd = count - current;
+                const additions = Array.from({ length: toAdd }, () => ({
+                    vehicleType: '',
+                    vehicleBrand: '',
+                    modelName: '',
+                    numberPlate: '',
+                    fuelType: '',
+                    vinNumber: '',
+                    category: '',
+                }));
+                vehicles = [...vehicles, ...additions];
+            } else if (count < current) {
+                vehicles = vehicles.slice(0, count);
+            }
+
+            return { ...prev, vehicleCount: count, vehicles };
+        });
+    };
+
+    const addVehicleForm = () => {
+        setFormData((prev) => ({
+            ...prev,
+            vehicles: [
+                ...prev.vehicles,
+                {
+                    vehicleType: '',
+                    vehicleBrand: '',
+                    modelName: '',
+                    numberPlate: '',
+                    fuelType: '',
+                    vinNumber: '',
+                    category: '',
+                },
+            ],
+            vehicleCount: prev.vehicles.length + 1,
+        }));
+    };
+
+    const removeVehicleForm = (idx: number) => {
+        setFormData((prev) => {
+            if (prev.vehicles.length <= 1) return prev;
+            const vehicles = prev.vehicles.filter((_, i) => i !== idx);
+            return { ...prev, vehicles, vehicleCount: vehicles.length };
+        });
     };
 
     const handleSort = (field: 'jobCardNo' | 'scheduledDate') => {
@@ -372,7 +600,7 @@ export default function BookServiceList() {
                                         : 'bg-blue-500'
                                     }`}
                             >
-                                {service.firstName}
+                                {customerLabel(service)}
                             </div>
                         ))}
                         {dayServices.length > 2 && (
@@ -486,7 +714,10 @@ export default function BookServiceList() {
                                                 >
                                                     <div className="flex justify-between items-start">
                                                         <div>
-                                                            <div className="font-semibold text-sm">{service.firstName} {service.lastName}</div>
+                                                            <div className="flex items-center gap-2 font-semibold text-sm">
+                                                                <span className="truncate">{customerLabel(service)}</span>
+                                                                {customerTypeBadge(service)}
+                                                            </div>
                                                             <div className="text-xs text-gray-600 mt-1">{service.category}</div>
                                                             <div className="text-xs text-gray-500 mt-1">
                                                                 {service.scheduledDate?.toDate
@@ -534,6 +765,31 @@ export default function BookServiceList() {
                                             day: 'numeric'
                                         })}
                                     </p>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-3 mb-4">
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-800">Customer Type</p>
+                                        <p className="text-xs text-gray-500">Pick before opening the booking form</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            type="button"
+                                            variant={scheduleCustomerType === 'b2c' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setScheduleCustomerType('b2c')}
+                                        >
+                                            B2C
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant={scheduleCustomerType === 'b2b' ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setScheduleCustomerType('b2b')}
+                                        >
+                                            B2B
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 <div>
@@ -588,7 +844,10 @@ export default function BookServiceList() {
                                                     className="text-xs p-2 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
                                                     onClick={() => router.push(`/admin/book-service/${service.id}`)}
                                                 >
-                                                    <div className="font-semibold">{service.firstName} {service.lastName}</div>
+                                                    <div className="flex items-center gap-2 font-semibold">
+                                                        <span className="truncate">{customerLabel(service)}</span>
+                                                        {customerTypeBadge(service)}
+                                                    </div>
                                                     <div className="text-gray-600">{service.category}</div>
                                                 </div>
                                             ))}
@@ -694,7 +953,12 @@ export default function BookServiceList() {
                                         return (
                                             <tr key={service.id} className="border-b hover:bg-gray-50">
                                                 <td className="px-6 py-4 text-sm">{service.jobCardNo}</td>
-                                                <td className="px-6 py-4 text-sm">{service.firstName} {service.lastName}</td>
+                                                <td className="px-6 py-4 text-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="truncate">{customerLabel(service)}</span>
+                                                        {customerTypeBadge(service)}
+                                                    </div>
+                                                </td>
                                                 <td className="px-6 py-4 text-sm">{service.category}</td>
                                                 <td className="px-6 py-4 text-sm">
                                                     {formatDateTime(service.scheduledDate)}
@@ -777,225 +1041,475 @@ export default function BookServiceList() {
                                         className="bg-gray-50"
                                     />
                                 </div>
-                                <div className="col-span-2">
-                                    <Label htmlFor="category">Category*</Label>
-                                    <Select value={formData.category} onValueChange={(val) => updateFormField('category', val)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select Repair Category" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="car-wash">Car Wash</SelectItem>
-                                            <SelectItem value="car-polishing">Car Polishing</SelectItem>
-                                            <SelectItem value="ceramic-coating">Ceramic Coating</SelectItem>
-                                            <SelectItem value="ppf-wrapping">PPF Wrapping</SelectItem>
-                                            <SelectItem value="car-tinting">Car Tinting</SelectItem>
-                                            <SelectItem value="pre-purchase-inspection">Pre-Purchase Inspection</SelectItem>
-                                            <SelectItem value="car-passing">Car Passing</SelectItem>
-                                            <SelectItem value="car-insurance">Car Insurance</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                {formData.customerType === 'b2c' && (
+                                    <div className="col-span-2">
+                                        <Label htmlFor="category">Category*</Label>
+                                        <Select value={formData.category} onValueChange={(val) => updateFormField('category', val)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select Repair Category" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="car-wash">Car Wash</SelectItem>
+                                                <SelectItem value="car-polishing">Car Polishing</SelectItem>
+                                                <SelectItem value="ceramic-coating">Ceramic Coating</SelectItem>
+                                                <SelectItem value="ppf-wrapping">PPF Wrapping</SelectItem>
+                                                <SelectItem value="car-tinting">Car Tinting</SelectItem>
+                                                <SelectItem value="pre-purchase-inspection">Pre-Purchase Inspection</SelectItem>
+                                                <SelectItem value="car-passing">Car Passing</SelectItem>
+                                                <SelectItem value="car-insurance">Car Insurance</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         {/* Customer Details */}
                         <div>
-                            <h3 className="text-lg font-semibold mb-3">CUSTOMER DETAILS</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="flex items-center justify-between mb-4 gap-3">
                                 <div>
-                                    <Label htmlFor="firstName">First Name*</Label>
-                                    <Input
-                                        id="firstName"
-                                        value={formData.firstName}
-                                        onChange={(e) => updateFormField('firstName', e.target.value)}
-                                        required
-                                    />
+                                    <p className="text-sm font-semibold text-gray-800 mt-2">Customer Type</p>
+                                    <p className="text-xs text-gray-500">Preselected from Schedule Service (change there if needed)</p>
                                 </div>
-                                <div>
-                                    <Label htmlFor="lastName">Last Name*</Label>
-                                    <Input
-                                        id="lastName"
-                                        value={formData.lastName}
-                                        onChange={(e) => updateFormField('lastName', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="mobileNo">Mobile No.*</Label>
-                                    <Input
-                                        id="mobileNo"
-                                        value={formData.mobileNo}
-                                        onChange={(e) => updateFormField('mobileNo', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="email">Email*</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        value={formData.email}
-                                        onChange={(e) => updateFormField('email', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="country">Country*</Label>
-                                    <Input
-                                        id="country"
-                                        value={formData.country}
-                                        onChange={(e) => updateFormField('country', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="state">State</Label>
-                                    <Input
-                                        id="state"
-                                        value={formData.state}
-                                        onChange={(e) => updateFormField('state', e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="city">Town/City</Label>
-                                    <Input
-                                        id="city"
-                                        value={formData.city}
-                                        onChange={(e) => updateFormField('city', e.target.value)}
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="address">Address*</Label>
-                                    <Input
-                                        id="address"
-                                        value={formData.address}
-                                        onChange={(e) => updateFormField('address', e.target.value)}
-                                        required
-                                    />
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant={formData.customerType === 'b2c' ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="min-w-[72px]"
+                                        disabled
+                                    >
+                                        B2C
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant={formData.customerType === 'b2b' ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="min-w-[72px]"
+                                        disabled
+                                    >
+                                        B2B
+                                    </Button>
                                 </div>
                             </div>
+
+                            <div className="flex items-center justify-between mb-3 gap-2">
+                                <h3 className="text-lg font-semibold">CUSTOMER DETAILS</h3>
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${formData.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                                    {formData.customerType === 'b2b' ? 'B2B selected in Schedule' : 'B2C selected in Schedule'}
+                                </span>
+                            </div>
+
+                            {formData.customerType === 'b2c' ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <Label htmlFor="firstName">First Name*</Label>
+                                        <Input
+                                            id="firstName"
+                                            value={formData.firstName}
+                                            onChange={(e) => updateFormField('firstName', e.target.value)}
+                                            required={formData.customerType === 'b2c'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="lastName">Last Name*</Label>
+                                        <Input
+                                            id="lastName"
+                                            value={formData.lastName}
+                                            onChange={(e) => updateFormField('lastName', e.target.value)}
+                                            required={formData.customerType === 'b2c'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="mobileNo">Mobile No.*</Label>
+                                        <Input
+                                            id="mobileNo"
+                                            value={formData.mobileNo}
+                                            onChange={(e) => updateFormField('mobileNo', e.target.value)}
+                                            required={formData.customerType === 'b2c'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="email">Email*</Label>
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            value={formData.email}
+                                            onChange={(e) => updateFormField('email', e.target.value)}
+                                            required={formData.customerType === 'b2c'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="country">Country*</Label>
+                                        <Input
+                                            id="country"
+                                            value={formData.country}
+                                            onChange={(e) => updateFormField('country', e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="state">State</Label>
+                                        <Input
+                                            id="state"
+                                            value={formData.state}
+                                            onChange={(e) => updateFormField('state', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="city">Town/City</Label>
+                                        <Input
+                                            id="city"
+                                            value={formData.city}
+                                            onChange={(e) => updateFormField('city', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="address">Address*</Label>
+                                        <Input
+                                            id="address"
+                                            value={formData.address}
+                                            onChange={(e) => updateFormField('address', e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="sm:col-span-2">
+                                        <Label htmlFor="companyName">Company *</Label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <Select
+                                                value={companySelectValue}
+                                                onValueChange={(val) => {
+                                                    setCompanySelectValue(val as 'new' | string);
+                                                    if (val === 'new') {
+                                                        setFormData({
+                                                            ...formData,
+                                                            companyName: '',
+                                                            contactName: '',
+                                                            contactEmail: '',
+                                                            contactPhone: '',
+                                                            companyVat: '',
+                                                            companyCode: '',
+                                                            address: '',
+                                                            city: '',
+                                                            country: '',
+                                                        });
+                                                        return;
+                                                    }
+                                                    const selected = companyOptions.find((c) => c.name === val);
+                                                    if (selected) {
+                                                        setFormData({
+                                                            ...formData,
+                                                            companyName: selected.name,
+                                                            contactName: selected.contactName,
+                                                            contactEmail: selected.contactEmail,
+                                                            contactPhone: selected.contactPhone,
+                                                            companyVat: selected.companyVat,
+                                                            companyCode: selected.companyCode,
+                                                            address: selected.address,
+                                                            city: selected.city,
+                                                            country: selected.country,
+                                                        });
+                                                    } else {
+                                                        setFormData({ ...formData, companyName: val });
+                                                    }
+                                                }}
+                                            >
+                                                <SelectTrigger id="companyName">
+                                                    <SelectValue placeholder="Select company or add new" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {companyOptions.map((c) => (
+                                                        <SelectItem key={c.name} value={c.name}>
+                                                            {c.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                    <SelectItem value="new">+ Create new company</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <Input
+                                                className="sm:col-span-2"
+                                                placeholder="Enter company name"
+                                                value={formData.companyName}
+                                                onChange={(e) => {
+                                                    setCompanySelectValue('new');
+                                                    updateFormField('companyName', e.target.value);
+                                                }}
+                                                required={formData.customerType === 'b2b'}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="vehicleCount">Number of Vehicles*</Label>
+                                        <Input
+                                            id="vehicleCount"
+                                            type="number"
+                                            min={1}
+                                            value={formData.vehicleCount}
+                                            onChange={(e) => setVehicleCount(e.target.value)}
+                                            required={formData.customerType === 'b2b'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="contactName">Contact Person*</Label>
+                                        <Input
+                                            id="contactName"
+                                            value={formData.contactName}
+                                            onChange={(e) => updateFormField('contactName', e.target.value)}
+                                            required={formData.customerType === 'b2b'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="contactPhone">Contact Phone*</Label>
+                                        <Input
+                                            id="contactPhone"
+                                            value={formData.contactPhone}
+                                            onChange={(e) => updateFormField('contactPhone', e.target.value)}
+                                            required={formData.customerType === 'b2b'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="contactEmail">Contact Email*</Label>
+                                        <Input
+                                            id="contactEmail"
+                                            type="email"
+                                            value={formData.contactEmail}
+                                            onChange={(e) => updateFormField('contactEmail', e.target.value)}
+                                            required={formData.customerType === 'b2b'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="companyVat">VAT / TRN</Label>
+                                        <Input
+                                            id="companyVat"
+                                            value={formData.companyVat}
+                                            onChange={(e) => updateFormField('companyVat', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="country">Country*</Label>
+                                        <Input
+                                            id="country"
+                                            value={formData.country}
+                                            onChange={(e) => updateFormField('country', e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="state">State</Label>
+                                        <Input
+                                            id="state"
+                                            value={formData.state}
+                                            onChange={(e) => updateFormField('state', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="city">Town/City</Label>
+                                        <Input
+                                            id="city"
+                                            value={formData.city}
+                                            onChange={(e) => updateFormField('city', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="address">Address*</Label>
+                                        <Input
+                                            id="address"
+                                            value={formData.address}
+                                            onChange={(e) => updateFormField('address', e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Vehicle Details */}
                         <div>
-                            <h3 className="text-lg font-semibold mb-3">VEHICLE DETAILS</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="col-span-1">
-                                    <Label htmlFor="vehicleType">Vehicle Type*</Label>
-                                    <Select value={formData.vehicleType} onValueChange={(val) => updateFormField('vehicleType', val)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select vehicle type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="sedan">Sedan</SelectItem>
-                                            <SelectItem value="suv">SUV</SelectItem>
-                                            <SelectItem value="hatchback">Hatchback</SelectItem>
-                                            <SelectItem value="truck">Truck</SelectItem>
-                                            <SelectItem value="van">Van</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="col-span-1">
-                                    <Label htmlFor="fuelType">Fuel Type*</Label>
-                                    <Select value={formData.fuelType} onValueChange={(val) => updateFormField('fuelType', val)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select fuel type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="petrol">Petrol</SelectItem>
-                                            <SelectItem value="diesel">Diesel</SelectItem>
-                                            <SelectItem value="electric">Electric</SelectItem>
-                                            <SelectItem value="hybrid">Hybrid</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="col-span-1 sm:col-span-2">
-                                    <Label htmlFor="vehicleBrand">Vehicle Brand*</Label>
-                                    <Input
-                                        id="vehicleBrand"
-                                        value={formData.vehicleBrand}
-                                        onChange={(e) => updateFormField('vehicleBrand', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div className="col-span-1">
-                                    <Label htmlFor="numberPlate">Number Plate*</Label>
-                                    <Input
-                                        id="numberPlate"
-                                        value={formData.numberPlate}
-                                        onChange={(e) => updateFormField('numberPlate', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div className="col-span-1">
-                                    <Label htmlFor="vinNumber">VIN (optional)</Label>
-                                    <Input
-                                        id="vinNumber"
-                                        value={formData.vinNumber}
-                                        onChange={(e) => updateFormField('vinNumber', e.target.value)}
-                                        placeholder="Enter VIN"
-                                    />
-                                </div>
-                                <div className="col-span-1 sm:col-span-2">
-                                    <Label htmlFor="modelName">Model Name*</Label>
-                                    <Input
-                                        id="modelName"
-                                        value={formData.modelName}
-                                        onChange={(e) => updateFormField('modelName', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                                <div className="col-span-1 sm:col-span-2">
-                                    <Label htmlFor="mulkiyaUpload">Mulkiya (optional)</Label>
-                                    <Input
-                                        id="mulkiyaUpload"
-                                        className='cursor-pointer'
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        ref={mulkiyaInputRef}
-                                        onChange={async (e) => {
-                                            const fileList = e.target.files;
-                                            if (!fileList || fileList.length === 0) return;
-                                            const newFiles = Array.from(fileList);
-                                            setMulkiyaFiles((prev) => [...prev, ...newFiles]);
-                                            const readers = newFiles.map((file) =>
-                                                new Promise<string>((resolve) => {
-                                                    const reader = new FileReader();
-                                                    reader.onloadend = () => resolve(reader.result as string);
-                                                    reader.readAsDataURL(file);
-                                                })
-                                            );
-                                            const results = await Promise.all(readers);
-                                            setMulkiyaPreviews((prev) => [...prev, ...results]);
-                                            if (mulkiyaInputRef.current) mulkiyaInputRef.current.value = '';
-                                        }}
-                                    />
-                                    {mulkiyaPreviews.length > 0 && (
-                                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                            {mulkiyaPreviews.map((src, idx) => (
-                                                <div key={idx} className="relative">
-                                                    <img
-                                                        src={src}
-                                                        alt={`Mulkiya preview ${idx + 1}`}
-                                                        className="w-full h-24 object-cover rounded border cursor-pointer"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        aria-label="Remove image"
-                                                        onClick={() => {
-                                                            setMulkiyaFiles((prev) => prev.filter((_, i) => i !== idx));
-                                                            setMulkiyaPreviews((prev) => prev.filter((_, i) => i !== idx));
-                                                        }}
-                                                        className="absolute -top-2 -right-2 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black"
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </div>
-                                            ))}
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-lg font-semibold">VEHICLE DETAILS</h3>
+                                {formData.customerType === 'b2b' && (
+                                    <Button type="button" variant="outline" size="sm" onClick={addVehicleForm}>
+                                        + Add Vehicle
+                                    </Button>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                {(formData.customerType === 'b2b' ? formData.vehicles : formData.vehicles.slice(0, 1)).map((vehicle, idx) => (
+                                    <div key={idx} className="border rounded-lg p-4 bg-gray-50">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-orange-600 text-white text-xs font-bold">
+                                                    {idx + 1}
+                                                </span>
+                                                <span className="font-semibold text-sm">Vehicle {idx + 1}</span>
+                                            </div>
+                                            {formData.customerType === 'b2b' && formData.vehicles.length > 1 && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-red-600"
+                                                    onClick={() => removeVehicleForm(idx)}
+                                                >
+                                                    Remove
+                                                </Button>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="col-span-1">
+                                                <Label htmlFor={`vehicleType-${idx}`}>Vehicle Type*</Label>
+                                                <Select
+                                                    value={vehicle.vehicleType}
+                                                    onValueChange={(val) => updateVehicle(idx, 'vehicleType', val)}
+                                                >
+                                                    <SelectTrigger id={`vehicleType-${idx}`}>
+                                                        <SelectValue placeholder="Select vehicle type" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="sedan">Sedan</SelectItem>
+                                                        <SelectItem value="suv">SUV</SelectItem>
+                                                        <SelectItem value="hatchback">Hatchback</SelectItem>
+                                                        <SelectItem value="truck">Truck</SelectItem>
+                                                        <SelectItem value="van">Van</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="col-span-1">
+                                                <Label htmlFor={`fuelType-${idx}`}>Fuel Type*</Label>
+                                                <Select
+                                                    value={vehicle.fuelType}
+                                                    onValueChange={(val) => updateVehicle(idx, 'fuelType', val)}
+                                                >
+                                                    <SelectTrigger id={`fuelType-${idx}`}>
+                                                        <SelectValue placeholder="Select fuel type" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="petrol">Petrol</SelectItem>
+                                                        <SelectItem value="diesel">Diesel</SelectItem>
+                                                        <SelectItem value="electric">Electric</SelectItem>
+                                                        <SelectItem value="hybrid">Hybrid</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="col-span-1 sm:col-span-2">
+                                                <Label htmlFor={`vehicleBrand-${idx}`}>Vehicle Brand*</Label>
+                                                <Input
+                                                    id={`vehicleBrand-${idx}`}
+                                                    value={vehicle.vehicleBrand}
+                                                    onChange={(e) => updateVehicle(idx, 'vehicleBrand', e.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                                {formData.customerType === 'b2b' && (
+                                                    <div className="col-span-1 sm:col-span-2">
+                                                        <Label htmlFor={`vehicleCategory-${idx}`}>Category*</Label>
+                                                        <Select
+                                                            value={vehicle.category}
+                                                            onValueChange={(val) => updateVehicle(idx, 'category', val)}
+                                                        >
+                                                            <SelectTrigger id={`vehicleCategory-${idx}`}>
+                                                                <SelectValue placeholder="Select Repair Category" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="car-wash">Car Wash</SelectItem>
+                                                                <SelectItem value="car-polishing">Car Polishing</SelectItem>
+                                                                <SelectItem value="ceramic-coating">Ceramic Coating</SelectItem>
+                                                                <SelectItem value="ppf-wrapping">PPF Wrapping</SelectItem>
+                                                                <SelectItem value="car-tinting">Car Tinting</SelectItem>
+                                                                <SelectItem value="pre-purchase-inspection">Pre-Purchase Inspection</SelectItem>
+                                                                <SelectItem value="car-passing">Car Passing</SelectItem>
+                                                                <SelectItem value="car-insurance">Car Insurance</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
+                                            <div className="col-span-1">
+                                                <Label htmlFor={`numberPlate-${idx}`}>Number Plate*</Label>
+                                                <Input
+                                                    id={`numberPlate-${idx}`}
+                                                    value={vehicle.numberPlate}
+                                                    onChange={(e) => updateVehicle(idx, 'numberPlate', e.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="col-span-1">
+                                                <Label htmlFor={`vinNumber-${idx}`}>VIN (optional)</Label>
+                                                <Input
+                                                    id={`vinNumber-${idx}`}
+                                                    value={vehicle.vinNumber}
+                                                    onChange={(e) => updateVehicle(idx, 'vinNumber', e.target.value)}
+                                                    placeholder="Enter VIN"
+                                                />
+                                            </div>
+                                            <div className="col-span-1 sm:col-span-2">
+                                                <Label htmlFor={`modelName-${idx}`}>Model Name*</Label>
+                                                <Input
+                                                    id={`modelName-${idx}`}
+                                                    value={vehicle.modelName}
+                                                    onChange={(e) => updateVehicle(idx, 'modelName', e.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="col-span-1 sm:col-span-2 mt-4">
+                                <Label htmlFor="mulkiyaUpload">Mulkiya (optional)</Label>
+                                <Input
+                                    id="mulkiyaUpload"
+                                    className='cursor-pointer'
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    ref={mulkiyaInputRef}
+                                    onChange={async (e) => {
+                                        const fileList = e.target.files;
+                                        if (!fileList || fileList.length === 0) return;
+                                        const newFiles = Array.from(fileList);
+                                        setMulkiyaFiles((prev) => [...prev, ...newFiles]);
+                                        const readers = newFiles.map((file) =>
+                                            new Promise<string>((resolve) => {
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => resolve(reader.result as string);
+                                                reader.readAsDataURL(file);
+                                            })
+                                        );
+                                        const results = await Promise.all(readers);
+                                        setMulkiyaPreviews((prev) => [...prev, ...results]);
+                                        if (mulkiyaInputRef.current) mulkiyaInputRef.current.value = '';
+                                    }}
+                                />
+                                {mulkiyaPreviews.length > 0 && (
+                                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                        {mulkiyaPreviews.map((src, idx) => (
+                                            <div key={idx} className="relative">
+                                                <img
+                                                    src={src}
+                                                    alt={`Mulkiya preview ${idx + 1}`}
+                                                    className="w-full h-24 object-cover rounded border cursor-pointer"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    aria-label="Remove image"
+                                                    onClick={() => {
+                                                        setMulkiyaFiles((prev) => prev.filter((_, i) => i !== idx));
+                                                        setMulkiyaPreviews((prev) => prev.filter((_, i) => i !== idx));
+                                                    }}
+                                                    className="absolute -top-2 -right-2 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
 

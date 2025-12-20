@@ -46,6 +46,13 @@ export default function BookServiceDetails() {
   const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
   const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
   const [editForm, setEditForm] = useState({
+    companyName: '',
+    contactName: '',
+    contactPhone: '',
+    contactEmail: '',
+    poRef: '',
+    companyVat: '',
+    servicesHistory: '',
     firstName: '',
     lastName: '',
     mobileNo: '',
@@ -62,6 +69,17 @@ export default function BookServiceDetails() {
     fuelType: '',
     vinNumber: '',
     mulkiyaUrl: '',
+  });
+  const [editingVehicleIndex, setEditingVehicleIndex] = useState<number | null>(null);
+  const [savingVehicleIndex, setSavingVehicleIndex] = useState<number | null>(null);
+  const [vehicleEditForm, setVehicleEditForm] = useState({
+    vehicleType: '',
+    vehicleBrand: '',
+    modelName: '',
+    numberPlate: '',
+    fuelType: '',
+    vinNumber: '',
+    category: '',
   });
 
   // Helper functions
@@ -205,6 +223,13 @@ export default function BookServiceDetails() {
         }
         // pre-fill edit form
         setEditForm({
+          companyName: data.companyName || '',
+          contactName: data.contactName || '',
+          contactPhone: data.contactPhone || '',
+          contactEmail: data.contactEmail || '',
+          poRef: data.poRef || '',
+          companyVat: data.companyVat || '',
+          servicesHistory: data.servicesHistory || '',
           firstName: data.firstName || '',
           lastName: data.lastName || '',
           mobileNo: data.mobileNo || '',
@@ -525,6 +550,11 @@ export default function BookServiceDetails() {
 
       // Create invoice document
       const invoiceData = {
+        customerType: service.customerType || 'b2c',
+        companyName: service.companyName || '',
+        contactName: service.contactName || '',
+        contactEmail: service.contactEmail || '',
+        contactPhone: service.contactPhone || '',
         invoiceNumber,
         serviceBookingId: id,
         jobCardNo: service.jobCardNo || '',
@@ -688,27 +718,45 @@ export default function BookServiceDetails() {
 
       const mulkiyaUrlString = uploadedMulkiyaUrls.length > 0 ? JSON.stringify(uploadedMulkiyaUrls) : '';
 
-      await updateDoc(doc(db, 'bookedServices', id!), {
-        firstName: editForm.firstName,
-        lastName: editForm.lastName,
-        mobileNo: editForm.mobileNo,
-        email: editForm.email,
+      const isB2b = service?.customerType === 'b2b';
+      const commonFields = {
         country: editForm.country,
         state: editForm.state,
         city: editForm.city,
         address: editForm.address,
         source: editForm.source,
+        mulkiyaUrl: mulkiyaUrlString,
+        updatedAt: Timestamp.now(),
+        updatedByName: currentAdminName,
+      };
+
+      const b2cFields = {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        mobileNo: editForm.mobileNo,
+        email: editForm.email,
         vehicleType: editForm.vehicleType,
         vehicleBrand: editForm.vehicleBrand,
         modelName: editForm.modelName,
         numberPlate: editForm.numberPlate,
         fuelType: editForm.fuelType,
         vinNumber: editForm.vinNumber,
-        mulkiyaUrl: mulkiyaUrlString,
-        updatedAt: Timestamp.now(),
-        updatedByName: currentAdminName,
-      });
-      setService({ ...service, ...editForm, mulkiyaUrl: mulkiyaUrlString, updatedAt: Timestamp.now(), updatedByName: currentAdminName });
+      };
+
+      const b2bFields = {
+        companyName: editForm.companyName,
+        contactName: editForm.contactName,
+        contactPhone: editForm.contactPhone,
+        contactEmail: editForm.contactEmail,
+        poRef: editForm.poRef,
+        companyVat: editForm.companyVat,
+        servicesHistory: editForm.servicesHistory,
+      };
+
+      const payload = isB2b ? { ...b2bFields, ...commonFields } : { ...b2cFields, ...commonFields };
+
+      await updateDoc(doc(db, 'bookedServices', id!), payload);
+      setService((prev: any) => prev ? { ...prev, ...payload } : prev);
       setStatus('✓ Details updated successfully');
       setEditing(false);
       setTimeout(() => setStatus(null), 3000);
@@ -722,9 +770,106 @@ export default function BookServiceDetails() {
     }
   }
 
+  function resetVehicleEditForm() {
+    setVehicleEditForm({
+      vehicleType: '',
+      vehicleBrand: '',
+      modelName: '',
+      numberPlate: '',
+      fuelType: '',
+      vinNumber: '',
+      category: '',
+    });
+  }
+
+  function startVehicleEdit(index: number) {
+    if (service?.customerType !== 'b2b') return;
+    const vehicle = vehiclesList[index];
+    if (!vehicle) return;
+    setVehicleEditForm({
+      vehicleType: vehicle.vehicleType || '',
+      vehicleBrand: vehicle.vehicleBrand || '',
+      modelName: vehicle.modelName || '',
+      numberPlate: vehicle.numberPlate || '',
+      fuelType: vehicle.fuelType || '',
+      vinNumber: vehicle.vinNumber || '',
+      category: vehicle.category || '',
+    });
+    setEditingVehicleIndex(index);
+  }
+
+  function cancelVehicleEdit() {
+    setEditingVehicleIndex(null);
+    resetVehicleEditForm();
+  }
+
+  async function saveVehicleEdit() {
+    if (editingVehicleIndex === null || !id) return;
+    if (service?.customerType !== 'b2b') return;
+    setSavingVehicleIndex(editingVehicleIndex);
+    setStatus('Updating vehicle...');
+
+    try {
+      const now = Timestamp.now();
+      const actorId = user?.uid || 'unknown';
+      const actorEmail = user?.email || 'unknown';
+
+      const updatedVehicles = vehiclesList.map((vehicle: any, idx: number) => {
+        if (idx !== editingVehicleIndex) return vehicle;
+        return {
+          ...vehicle,
+          vehicleType: vehicleEditForm.vehicleType,
+          vehicleBrand: vehicleEditForm.vehicleBrand,
+          modelName: vehicleEditForm.modelName,
+          numberPlate: vehicleEditForm.numberPlate,
+          fuelType: vehicleEditForm.fuelType,
+          vinNumber: vehicleEditForm.vinNumber,
+          category: vehicleEditForm.category,
+        };
+      });
+
+      const firstVehicle = updatedVehicles[0] || {};
+
+      const payload = {
+        vehicles: updatedVehicles,
+        vehicleCount: updatedVehicles.length,
+        vehicleType: firstVehicle.vehicleType || '',
+        vehicleBrand: firstVehicle.vehicleBrand || '',
+        modelName: firstVehicle.modelName || '',
+        numberPlate: firstVehicle.numberPlate || '',
+        fuelType: firstVehicle.fuelType || '',
+        vinNumber: firstVehicle.vinNumber || '',
+        category: firstVehicle.category || service?.category || '',
+        updatedAt: now,
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: currentAdminName,
+      };
+
+      await updateDoc(doc(db, 'bookedServices', id!), payload);
+      setService((prev: any) => (prev ? { ...prev, ...payload } : prev));
+      setStatus('✓ Vehicle updated successfully');
+      setEditingVehicleIndex(null);
+      resetVehicleEditForm();
+      setTimeout(() => setStatus(null), 3000);
+    } catch (err: any) {
+      safeConsoleError('Vehicle update error', err);
+      setStatus('Failed to update vehicle');
+    } finally {
+      setSavingVehicleIndex(null);
+    }
+  }
+
   function cancelEdit() {
     const detectedSource = service.source || (service.sourceLeadId ? 'lead' : 'direct');
     setEditForm({
+      companyName: service.companyName || '',
+      contactName: service.contactName || '',
+      contactPhone: service.contactPhone || '',
+      contactEmail: service.contactEmail || '',
+      poRef: service.poRef || '',
+      companyVat: service.companyVat || '',
+      servicesHistory: service.servicesHistory || '',
       firstName: service.firstName || '',
       lastName: service.lastName || '',
       mobileNo: service.mobileNo || '',
@@ -758,6 +903,33 @@ export default function BookServiceDetails() {
   };
   const sourceLabel = derivedSource ? (sourceLabelMap[derivedSource] || derivedSource) : 'Direct booking';
   const isCancelled = service?.status === 'cancelled';
+  const customerType = service?.customerType === 'b2b' ? 'b2b' : 'b2c';
+  const customerTypeBadgeClass = customerType === 'b2b'
+    ? 'bg-blue-100 text-blue-800'
+    : 'bg-green-100 text-green-800';
+  const vehiclesList = service
+    ? (Array.isArray(service.vehicles) && service.vehicles.length > 0
+      ? service.vehicles
+      : [{
+        vehicleType: service.vehicleType || '',
+        vehicleBrand: service.vehicleBrand || '',
+        modelName: service.modelName || '',
+        numberPlate: service.numberPlate || '',
+        fuelType: service.fuelType || '',
+        vinNumber: service.vinNumber || '',
+        category: service.category || '',
+      }])
+    : [];
+  const mulkiyaUrls = (() => {
+    if (!service?.mulkiyaUrl) return [] as string[];
+    try {
+      const parsed = JSON.parse(service.mulkiyaUrl);
+      if (Array.isArray(parsed)) return parsed as string[];
+      return parsed ? [parsed as string] : [];
+    } catch {
+      return service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
+    }
+  })();
   const progressSteps = [
     { key: 'booking', label: 'Booking Created', done: true },
     // Pre-inspection is optional; it should not block subsequent steps
@@ -784,6 +956,11 @@ export default function BookServiceDetails() {
   const canInvoice = quotationStatus === 'accepted';
   const rescheduleDisabled = !!quotation;
   const quotationSeed = service ? {
+    customerType: service.customerType || 'b2c',
+    companyName: service.companyName || '',
+    contactName: service.contactName || '',
+    contactEmail: service.contactEmail || service.email || '',
+    contactPhone: service.contactPhone || service.mobileNo || '',
     customerName: `${service.firstName || ''} ${service.lastName || ''}`.trim(),
     customerEmail: service.email || '',
     customerMobile: service.mobileNo || '',
@@ -1006,6 +1183,12 @@ export default function BookServiceDetails() {
                   {service.status || 'pending'}
                 </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Customer Type:</span>
+                <span className={`px-2 py-1 rounded text-xs font-semibold ${customerTypeBadgeClass}`}>
+                  {customerType === 'b2b' ? 'B2B' : 'B2C'}
+                </span>
+              </div>
             </div>
           </Card>
 
@@ -1026,130 +1209,323 @@ export default function BookServiceDetails() {
             </div>
             <div className="space-y-3 text-sm">
               {editing ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
+                customerType === 'b2b' ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Company Name</label>
+                        <input
+                          type="text"
+                          value={editForm.companyName}
+                          onChange={(e) => setEditForm({ ...editForm, companyName: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Contact Person</label>
+                        <input
+                          type="text"
+                          value={editForm.contactName}
+                          onChange={(e) => setEditForm({ ...editForm, contactName: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Contact Phone</label>
+                        <input
+                          type="text"
+                          value={editForm.contactPhone}
+                          onChange={(e) => setEditForm({ ...editForm, contactPhone: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Contact Email</label>
+                        <input
+                          type="email"
+                          value={editForm.contactEmail}
+                          onChange={(e) => setEditForm({ ...editForm, contactEmail: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      {/* <div>
+                        <label className="block text-xs text-gray-600 mb-1">PO / Ref</label>
+                        <input
+                          type="text"
+                          value={editForm.poRef}
+                          onChange={(e) => setEditForm({ ...editForm, poRef: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div> */}
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">VAT / TRN</label>
+                        <input
+                          type="text"
+                          value={editForm.companyVat}
+                          onChange={(e) => setEditForm({ ...editForm, companyVat: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                    </div>
+                    {/* <div>
+                      <label className="block text-xs text-gray-600 mb-1">Notes</label>
+                      <textarea
+                        value={editForm.servicesHistory}
+                        onChange={(e) => setEditForm({ ...editForm, servicesHistory: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                        rows={2}
+                      />
+                    </div> */}
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">First Name</label>
+                      <label className="block text-xs text-gray-600 mb-1">Source</label>
+                      <select
+                        value={editForm.source}
+                        onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Select Source</option>
+                        <option value="lead">Lead</option>
+                        <option value="direct">Direct Booking</option>
+                        <option value="referral">Referral</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Country</label>
+                        <input
+                          type="text"
+                          value={editForm.country}
+                          onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">State</label>
+                        <input
+                          type="text"
+                          value={editForm.state}
+                          onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">City</label>
+                        <input
+                          type="text"
+                          value={editForm.city}
+                          onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Address</label>
+                        <input
+                          type="text"
+                          value={editForm.address}
+                          onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button size="sm" onClick={handleUpdate} className="flex-1 bg-green-600 hover:bg-green-700">
+                        💾 Save Changes
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEdit} className="flex-1">
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">First Name</label>
+                        <input
+                          type="text"
+                          value={editForm.firstName}
+                          onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Last Name</label>
+                        <input
+                          type="text"
+                          value={editForm.lastName}
+                          onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Mobile</label>
                       <input
                         type="text"
-                        value={editForm.firstName}
-                        onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                        value={editForm.mobileNo}
+                        onChange={(e) => setEditForm({ ...editForm, mobileNo: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Last Name</label>
+                      <label className="block text-xs text-gray-600 mb-1">Email</label>
                       <input
-                        type="text"
-                        value={editForm.lastName}
-                        onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                        type="email"
+                        value={editForm.email}
+                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Mobile</label>
-                    <input
-                      type="text"
-                      value={editForm.mobileNo}
-                      onChange={(e) => setEditForm({ ...editForm, mobileNo: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={editForm.email}
-                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Source</label>
-                    <select
-                      value={editForm.source}
-                      onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    >
-                      <option value="">Select Source</option>
-                      <option value="lead">Lead</option>
-                      <option value="direct">Direct Booking</option>
-                      <option value="referral">Referral</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Country</label>
-                    <input
-                      type="text"
-                      value={editForm.country}
-                      onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">State</label>
-                    <input
-                      type="text"
-                      value={editForm.state}
-                      onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">City</label>
-                    <input
-                      type="text"
-                      value={editForm.city}
-                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">Address</label>
-                    <input
-                      type="text"
-                      value={editForm.address}
-                      onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                      className="w-full border rounded px-2 py-1 text-sm"
-                    />
-                  </div>
-                </>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Source</label>
+                      <select
+                        value={editForm.source}
+                        onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Select Source</option>
+                        <option value="lead">Lead</option>
+                        <option value="direct">Direct Booking</option>
+                        <option value="referral">Referral</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Country</label>
+                      <input
+                        type="text"
+                        value={editForm.country}
+                        onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">State</label>
+                      <input
+                        type="text"
+                        value={editForm.state}
+                        onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">City</label>
+                      <input
+                        type="text"
+                        value={editForm.city}
+                        onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Address</label>
+                      <input
+                        type="text"
+                        value={editForm.address}
+                        onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  </>
+                )
               ) : (
                 <>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Name:</span>
-                    <span className="font-medium">{service.firstName} {service.lastName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Mobile:</span>
-                    <span className="font-medium">{service.mobileNo}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Email:</span>
-                    <span className="font-medium">{service.email}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Source:</span>
-                    <span className="font-medium">{sourceLabel}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Country:</span>
-                    <span className="font-medium">{service.country}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">State:</span>
-                    <span className="font-medium">{service.state || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">City:</span>
-                    <span className="font-medium">{service.city || '-'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Address:</span>
-                    <span className="font-medium">{service.address}</span>
-                  </div>
+                  {customerType === 'b2b' ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Customer Type:</span>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${customerTypeBadgeClass}`}>B2B</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Company:</span>
+                        <span className="font-medium">{service.companyName || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Contact Person:</span>
+                        <span className="font-medium">{service.contactName || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Contact Phone:</span>
+                        <span className="font-medium">{service.contactPhone || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Contact Email:</span>
+                        <span className="font-medium">{service.contactEmail || '-'}</span>
+                      </div>
+                      {/* <div className="flex justify-between">
+                        <span className="text-gray-600">PO / Ref:</span>
+                        <span className="font-medium">{service.poRef || '-'}</span>
+                      </div> */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">VAT / TRN:</span>
+                        <span className="font-medium">{service.companyVat || '-'}</span>
+                      </div>
+                      {/* <div className="flex justify-between">
+                        <span className="text-gray-600">Notes:</span>
+                        <span className="font-medium truncate max-w-[220px]">{service.servicesHistory || '-'}</span>
+                      </div> */}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Source:</span>
+                        <span className="font-medium">{sourceLabel}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Country:</span>
+                        <span className="font-medium">{service.country}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">State:</span>
+                        <span className="font-medium">{service.state || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">City:</span>
+                        <span className="font-medium">{service.city || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Address:</span>
+                        <span className="font-medium">{service.address}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Customer Type:</span>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${customerTypeBadgeClass}`}>B2C</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Name:</span>
+                        <span className="font-medium">{service.firstName} {service.lastName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Mobile:</span>
+                        <span className="font-medium">{service.mobileNo}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Email:</span>
+                        <span className="font-medium">{service.email}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Source:</span>
+                        <span className="font-medium">{sourceLabel}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Country:</span>
+                        <span className="font-medium">{service.country}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">State:</span>
+                        <span className="font-medium">{service.state || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">City:</span>
+                        <span className="font-medium">{service.city || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Address:</span>
+                        <span className="font-medium">{service.address}</span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1159,7 +1535,7 @@ export default function BookServiceDetails() {
           <Card className="p-6">
             <h2 className="text-xl font-semibold mb-4">Vehicle Details</h2>
             <div className="space-y-3 text-sm">
-              {editing ? (
+              {editing && customerType === 'b2c' ? (
                 <>
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
@@ -1328,53 +1704,180 @@ export default function BookServiceDetails() {
                   </div>
                 </>
               ) : (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Type:</span>
-                    <span className="font-medium">{service.vehicleType}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Brand:</span>
-                    <span className="font-medium">{service.vehicleBrand}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Model:</span>
-                    <span className="font-medium">{service.modelName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Number Plate:</span>
-                    <span className="font-medium">{service.numberPlate}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">VIN:</span>
-                    <span className="font-medium">{service.vinNumber || '-'}</span>
-                  </div>
-                  <div className="flex justify-between items-center gap-3">
-                    <span className="text-gray-600">Mulkiya:</span>
-                    {(() => {
-                      let urls: string[] = [];
-                      try {
-                        urls = JSON.parse(service.mulkiyaUrl || '[]');
-                      } catch {
-                        urls = service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
-                      }
-                      return urls.length > 0 ? (
-                        <span className="font-medium text-orange-600">{urls.length} image(s)</span>
+                customerType === 'b2b' ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Number of Vehicles:</span>
+                      <span className="font-medium">{service.vehicleCount || vehiclesList.length || 1}</span>
+                    </div>
+                    <div className="space-y-4">
+                      {vehiclesList.map((vehicle: any, idx: number) => {
+                        const isEditingVehicle = editingVehicleIndex === idx;
+                        return (
+                          <div
+                            key={`${vehicle.numberPlate || vehicle.vinNumber || idx}-${idx}`}
+                            className="rounded-lg border border-gray-100 bg-gray-50/60 p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-800">Vehicle {idx + 1}</span>
+                                {vehicle.category ? (
+                                  <span className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-800">Category: {vehicle.category}</span>
+                                ) : null}
+                              </div>
+                              {service.status !== 'cancelled' ? (
+                                isEditingVehicle ? (
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={saveVehicleEdit}
+                                      disabled={savingVehicleIndex === idx}
+                                      className="bg-green-600 hover:bg-green-700 text-white"
+                                    >
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={cancelVehicleEdit}
+                                      disabled={savingVehicleIndex === idx}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => startVehicleEdit(idx)}
+                                  >
+                                    ✏️ Edit
+                                  </Button>
+                                )
+                              ) : null}
+                            </div>
+
+                            {isEditingVehicle ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
+                                  <select
+                                    value={vehicleEditForm.vehicleType}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, vehicleType: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  >
+                                    <option value="">Select Type</option>
+                                    <option value="sedan">Sedan</option>
+                                    <option value="suv">SUV</option>
+                                    <option value="hatchback">Hatchback</option>
+                                    <option value="coupe">Coupe</option>
+                                    <option value="truck">Truck</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Brand</label>
+                                  <input
+                                    type="text"
+                                    value={vehicleEditForm.vehicleBrand}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, vehicleBrand: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Model</label>
+                                  <input
+                                    type="text"
+                                    value={vehicleEditForm.modelName}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, modelName: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Number Plate</label>
+                                  <input
+                                    type="text"
+                                    value={vehicleEditForm.numberPlate}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, numberPlate: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
+                                  <select
+                                    value={vehicleEditForm.fuelType}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, fuelType: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  >
+                                    <option value="">Select Fuel</option>
+                                    <option value="petrol">Petrol</option>
+                                    <option value="diesel">Diesel</option>
+                                    <option value="electric">Electric</option>
+                                    <option value="hybrid">Hybrid</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">VIN (optional)</label>
+                                  <input
+                                    type="text"
+                                    value={vehicleEditForm.vinNumber}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, vinNumber: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                    placeholder="Enter VIN"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Category (optional)</label>
+                                  <input
+                                    type="text"
+                                    value={vehicleEditForm.category}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, category: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Type:</span>
+                                  <span className="font-medium">{vehicle.vehicleType || '-'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Brand:</span>
+                                  <span className="font-medium">{vehicle.vehicleBrand || '-'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Model:</span>
+                                  <span className="font-medium">{vehicle.modelName || '-'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Number Plate:</span>
+                                  <span className="font-medium">{vehicle.numberPlate || '-'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">Fuel Type:</span>
+                                  <span className="font-medium">{vehicle.fuelType || '-'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">VIN:</span>
+                                  <span className="font-medium">{vehicle.vinNumber || '-'}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between items-center gap-3 pt-1">
+                      <span className="text-gray-600">Mulkiya:</span>
+                      {mulkiyaUrls.length > 0 ? (
+                        <span className="font-medium text-orange-600">{mulkiyaUrls.length} image(s)</span>
                       ) : (
                         <span className="font-medium">-</span>
-                      );
-                    })()}
-                  </div>
-                  {(() => {
-                    let urls: string[] = [];
-                    try {
-                      urls = JSON.parse(service.mulkiyaUrl || '[]');
-                    } catch {
-                      urls = service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
-                    }
-                    return urls.length > 0 ? (
+                      )}
+                    </div>
+                    {mulkiyaUrls.length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                        {urls.map((url, idx) => (
+                        {mulkiyaUrls.map((url, idx) => (
                           <button
                             key={idx}
                             onClick={() => setSelectedMulkiyaIndex(idx)}
@@ -1384,13 +1887,57 @@ export default function BookServiceDetails() {
                           </button>
                         ))}
                       </div>
-                    ) : null;
-                  })()}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Fuel Type:</span>
-                    <span className="font-medium">{service.fuelType}</span>
-                  </div>
-                </>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Type:</span>
+                      <span className="font-medium">{service.vehicleType}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Brand:</span>
+                      <span className="font-medium">{service.vehicleBrand}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Model:</span>
+                      <span className="font-medium">{service.modelName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Number Plate:</span>
+                      <span className="font-medium">{service.numberPlate}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">VIN:</span>
+                      <span className="font-medium">{service.vinNumber || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-center gap-3">
+                      <span className="text-gray-600">Mulkiya:</span>
+                      {mulkiyaUrls.length > 0 ? (
+                        <span className="font-medium text-orange-600">{mulkiyaUrls.length} image(s)</span>
+                      ) : (
+                        <span className="font-medium">-</span>
+                      )}
+                    </div>
+                    {mulkiyaUrls.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {mulkiyaUrls.map((url, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedMulkiyaIndex(idx)}
+                            className="border rounded overflow-hidden hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          >
+                            <img src={url} alt={`Mulkiya ${idx + 1}`} className="w-full h-20 object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Fuel Type:</span>
+                      <span className="font-medium">{service.fuelType}</span>
+                    </div>
+                  </>
+                )
               )}
             </div>
           </Card>
@@ -1729,14 +2276,17 @@ export default function BookServiceDetails() {
                   {quotation ? 'Update Quotation' : 'Create Quotation'}
                 </Button>
                 {quotation?.id && (
-                  <Button
-                    variant="outline"
-                    className={`flex-1 ${isCancelled ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    onClick={() => router.push(`/admin/quotation/${quotation.id}`)}
-                    disabled={isCancelled}
+                  <a
+                    href={`/admin/quotation/${quotation.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex-1 px-4 py-2 border rounded text-center text-sm font-medium ${isCancelled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    tabIndex={isCancelled ? -1 : 0}
+                    aria-disabled={isCancelled}
+                    style={isCancelled ? { pointerEvents: 'none' } : {}}
                   >
                     View Quotation
-                  </Button>
+                  </a>
                 )}
               </div>
             </div>
@@ -2055,6 +2605,7 @@ export default function BookServiceDetails() {
               <QuotationForm
                 quotation={quotation || quotationSeed}
                 serviceBookingId={service.id}
+                vehiclesList={service?.customerType === 'b2b' ? (Array.isArray(service.vehicles) ? service.vehicles : []) : undefined}
                 onCreated={(quoteId, meta) => {
                   setShowQuotationModal(false);
                   setStatus('Quotation saved');

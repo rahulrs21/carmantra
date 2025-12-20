@@ -16,6 +16,11 @@ export default function InvoiceForm({
   onCreated?: (id: string) => void; 
   onCancel?: () => void; 
 }) {
+  const [customerType, setCustomerType] = useState<'b2c' | 'b2b'>('b2c');
+  const [companyName, setCompanyName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactMobile, setContactMobile] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
@@ -37,6 +42,11 @@ export default function InvoiceForm({
   // Populate form when editing
   useEffect(() => {
     if (invoice) {
+      setCustomerType(invoice.customerType === 'b2b' ? 'b2b' : 'b2c');
+      setCompanyName(invoice.companyName || '');
+      setContactName(invoice.contactName || '');
+      setContactEmail(invoice.contactEmail || '');
+      setContactMobile(invoice.contactPhone || invoice.customerMobile || '');
       setCustomerName(invoice.customerName || '');
       setCustomerEmail(invoice.customerEmail || '');
       setCustomerMobile(invoice.customerMobile || '');
@@ -82,7 +92,12 @@ export default function InvoiceForm({
     if (e) e.preventDefault();
     setMessage(null);
     
-    if (!customerName) return setMessage('Enter customer name');
+    if (customerType === 'b2b') {
+      if (!companyName) return setMessage('Enter company name');
+      if (!contactName) return setMessage('Enter contact person');
+    } else {
+      if (!customerName) return setMessage('Enter customer name');
+    }
     
     const hasEmptyItems = items.some(item => !item.description || item.rate === 0);
     if (hasEmptyItems) {
@@ -94,10 +109,21 @@ export default function InvoiceForm({
     const totals = calculateTotals();
     
     try {
+      const normalizedCustomerName = customerType === 'b2b'
+        ? (companyName || contactName || customerName)
+        : customerName;
+      const normalizedEmail = customerType === 'b2b' ? (contactEmail || customerEmail) : customerEmail;
+      const normalizedMobile = customerType === 'b2b' ? (contactMobile || customerMobile) : customerMobile;
+
       const invoiceData = {
-        customerName,
-        customerEmail,
-        customerMobile,
+        customerType,
+        companyName,
+        contactName,
+        contactEmail,
+        contactPhone: contactMobile,
+        customerName: normalizedCustomerName,
+        customerEmail: normalizedEmail,
+        customerMobile: normalizedMobile,
         vehicleDetails: {
           type: vehicleType,
           brand: vehicleBrand,
@@ -136,6 +162,11 @@ export default function InvoiceForm({
         setMessage(`Invoice created: ${docRef.id}`);
         
         // Reset form
+        setCustomerType('b2c');
+        setCompanyName('');
+        setContactName('');
+        setContactEmail('');
+        setContactMobile('');
         setCustomerName(''); 
         setCustomerEmail(''); 
         setCustomerMobile('');
@@ -202,37 +233,101 @@ export default function InvoiceForm({
 
       {/* Customer Information */}
       <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-        <h3 className="font-semibold text-gray-900 mb-3">Customer Information</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center justify-between gap-3 mb-1">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={customerName} 
-              onChange={e => setCustomerName(e.target.value)} 
-              placeholder="Enter customer name"
-            />
+            <h3 className="font-semibold text-gray-900">Customer Information</h3>
+            <p className="text-xs text-gray-500">Switch B2C/B2B and fill the relevant fields</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={customerMobile} 
-              onChange={e => setCustomerMobile(e.target.value)}
-              placeholder="Enter mobile number"
-            />
+          <div className="flex gap-2 text-xs">
+            <button
+              type="button"
+              className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
+              onClick={() => setCustomerType('b2c')}
+            >
+              B2C
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
+              onClick={() => setCustomerType('b2b')}
+            >
+              B2B
+            </button>
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input 
-            type="email"
-            className="w-full border border-gray-300 p-2 rounded" 
-            value={customerEmail} 
-            onChange={e => setCustomerEmail(e.target.value)}
-            placeholder="Enter email address"
-          />
-        </div>
+
+        {customerType === 'b2b' ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+              <input
+                className="w-full border border-gray-300 p-2 rounded"
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                placeholder="Enter company name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
+              <input
+                className="w-full border border-gray-300 p-2 rounded"
+                value={contactName}
+                onChange={e => setContactName(e.target.value)}
+                placeholder="Enter contact person"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Mobile</label>
+              <input
+                className="w-full border border-gray-300 p-2 rounded"
+                value={contactMobile}
+                onChange={e => setContactMobile(e.target.value)}
+                placeholder="e.g., +971 50 123 4567"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+              <input
+                type="email"
+                className="w-full border border-gray-300 p-2 rounded"
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
+                placeholder="contact@company.com"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
+              <input 
+                className="w-full border border-gray-300 p-2 rounded" 
+                value={customerName} 
+                onChange={e => setCustomerName(e.target.value)} 
+                placeholder="Enter customer name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+              <input 
+                className="w-full border border-gray-300 p-2 rounded" 
+                value={customerMobile} 
+                onChange={e => setCustomerMobile(e.target.value)}
+                placeholder="Enter mobile number"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input 
+                type="email"
+                className="w-full border border-gray-300 p-2 rounded" 
+                value={customerEmail} 
+                onChange={e => setCustomerEmail(e.target.value)}
+                placeholder="Enter email address"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Vehicle Details */}

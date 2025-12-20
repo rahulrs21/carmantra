@@ -13,12 +13,19 @@ export default function QuotationForm({
   onCreated, 
   onCancel,
   serviceBookingId,
+  vehiclesList,
 }: { 
   quotation?: any; 
   onCreated?: (id: string, meta?: { status?: string }) => void; 
   onCancel?: () => void;
   serviceBookingId?: string;
+  vehiclesList?: any[];
 }) {
+  const [customerType, setCustomerType] = useState<'b2c' | 'b2b'>('b2c');
+  const [companyName, setCompanyName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactMobile, setContactMobile] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
@@ -42,6 +49,11 @@ export default function QuotationForm({
   // Populate form when editing
   useEffect(() => {
     if (quotation) {
+      setCustomerType(quotation.customerType === 'b2b' ? 'b2b' : 'b2c');
+      setCompanyName(quotation.companyName || '');
+      setContactName(quotation.contactName || '');
+      setContactEmail(quotation.contactEmail || '');
+      setContactMobile(quotation.contactPhone || quotation.customerMobile || '');
       setCustomerName(quotation.customerName || '');
       setCustomerEmail(quotation.customerEmail || '');
       setCustomerMobile(quotation.customerMobile || '');
@@ -51,7 +63,7 @@ export default function QuotationForm({
       setVehiclePlate(quotation.vehicleDetails?.plate || '');
       setVehicleVin(quotation.vehicleDetails?.vin || '');
       setServiceCategory(quotation.serviceCategory || '');
-      
+
       const quotationItems = quotation.items || [{ description: '', quantity: 1, rate: 0, amount: 0 }];
       setItems(quotationItems.map((item: any) => ({
         description: item.description || '',
@@ -59,14 +71,23 @@ export default function QuotationForm({
         rate: item.rate || 0,
         amount: item.amount || 0
       })));
-      
+
       setLaborCharges(quotation.laborCharges || 0);
       setDiscount(quotation.discount || 0);
       setValidityDays(quotation.validityDays || 30);
       setNotes(quotation.notes || '');
       setStatus(quotation.status || 'pending');
+    } else if (customerType === 'b2b' && vehiclesList && vehiclesList.length > 0) {
+      // Auto-add service items for each vehicle's category (B2B only, when creating new)
+      const autoItems = vehiclesList.map((v: any) => ({
+        description: v.category || '',
+        quantity: 1,
+        rate: 0,
+        amount: 0
+      }));
+      setItems(autoItems.length > 0 ? autoItems : [{ description: '', quantity: 1, rate: 0, amount: 0 }]);
     }
-  }, [quotation]);
+  }, [quotation, customerType, vehiclesList]);
 
   function calculateTotals() {
     const itemsTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -85,18 +106,36 @@ export default function QuotationForm({
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     setMessage(null);
-    
-    if (!customerName) return setMessage('Enter customer name');
-    
+
+    if (customerType === 'b2b') {
+      if (!companyName) return setMessage('Enter company name');
+      if (!contactName) return setMessage('Enter contact person');
+    } else {
+      if (!customerName) return setMessage('Enter customer name');
+    }
+
     const hasEmptyItems = items.some(item => !item.description || item.rate === 0);
     if (hasEmptyItems) {
       return setMessage('Please fill all service items with description and rate');
     }
-    
+
     setLoading(true);
-    
+
     const totals = calculateTotals();
-    
+
+    let bookingVehicles = [];
+    if (customerType === 'b2b' && linkedServiceId) {
+      try {
+        const bookingDoc = await import('firebase/firestore').then(m => m.getDoc(m.doc(db, 'bookedServices', linkedServiceId)));
+        if (bookingDoc && bookingDoc.exists && bookingDoc.exists()) {
+          const data = bookingDoc.data();
+          bookingVehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
+        }
+      } catch (err) {
+        // Ignore booking fetch error, fallback to empty array
+      }
+    }
+
     try {
       const auth = getAuth();
       if (!auth.currentUser) throw new Error('Not authenticated');
@@ -104,11 +143,23 @@ export default function QuotationForm({
       const actorId = auth.currentUser.uid;
       const actorName = auth.currentUser.displayName || 'Admin';
 
+      const normalizedCustomerName = customerType === 'b2b'
+        ? (companyName || contactName || customerName)
+        : customerName;
+      const normalizedEmail = customerType === 'b2b' ? (contactEmail || customerEmail) : customerEmail;
+      const normalizedMobile = customerType === 'b2b' ? (contactMobile || customerMobile) : customerMobile;
+
       const quotationData: any = {
         ownerId: auth.currentUser.uid,
-        customerName,
-        customerEmail,
-        customerMobile,
+        ...(customerType === 'b2b' ? { vehicles: bookingVehicles } : {}),
+        customerType,
+        companyName,
+        contactName,
+        contactEmail,
+        contactPhone: contactMobile,
+        customerName: normalizedCustomerName,
+        customerEmail: normalizedEmail,
+        customerMobile: normalizedMobile,
         vehicleDetails: {
           type: vehicleType,
           brand: vehicleBrand,
@@ -186,6 +237,14 @@ export default function QuotationForm({
         setValidityDays(30);
         setNotes('');
         setStatus('pending');
+        setCustomerType('b2c');
+        setCompanyName('');
+        setContactName('');
+        setContactEmail('');
+        setContactMobile('');
+        setCustomerEmail('');
+        setCustomerMobile('');
+        setCustomerName('');
         
         if (onCreated) onCreated(docRef.id, { status });
       }
@@ -237,108 +296,235 @@ export default function QuotationForm({
 
       {/* Customer Information */}
       <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-        <h3 className="font-semibold text-gray-900 mb-3">Customer Information</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center justify-between gap-3 mb-1">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={customerName} 
-              onChange={e => setCustomerName(e.target.value)} 
-              placeholder="Enter customer name"
-            />
+            <h3 className="font-semibold text-gray-900">Customer Information</h3>
+            <p className="text-xs text-gray-500">Toggle B2C or B2B and fill the matching fields</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={customerMobile} 
-              onChange={e => setCustomerMobile(e.target.value)}
-              placeholder="e.g., +971 50 123 4567"
-            />
+          <div className="flex gap-2 text-xs">
+            <button
+              type="button"
+              className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
+              onClick={() => setCustomerType('b2c')}
+            >
+              B2C
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
+              onClick={() => setCustomerType('b2b')}
+            >
+              B2B
+            </button>
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input 
-            type="email"
-            className="w-full border border-gray-300 p-2 rounded" 
-            value={customerEmail} 
-            onChange={e => setCustomerEmail(e.target.value)}
-            placeholder="customer@example.com"
-          />
-        </div>
+
+        {customerType === 'b2b' ? (
+          <div className="grid grid-cols-2 gap-3 opacity-80 select-none pointer-events-none">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+              <input
+                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                value={companyName}
+                readOnly
+                tabIndex={-1}
+                placeholder="Enter company name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
+              <input
+                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                value={contactName}
+                readOnly
+                tabIndex={-1}
+                placeholder="Enter contact person"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Mobile</label>
+              <input
+                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                value={contactMobile}
+                readOnly
+                tabIndex={-1}
+                placeholder="e.g., +971 50 123 4567"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+              <input
+                type="email"
+                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                value={contactEmail}
+                readOnly
+                tabIndex={-1}
+                placeholder="contact@company.com"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
+              <input 
+                className="w-full border border-gray-300 p-2 rounded" 
+                value={customerName} 
+                onChange={e => setCustomerName(e.target.value)} 
+                placeholder="Enter customer name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+              <input 
+                className="w-full border border-gray-300 p-2 rounded" 
+                value={customerMobile} 
+                onChange={e => setCustomerMobile(e.target.value)}
+                placeholder="e.g., +971 50 123 4567"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input 
+                type="email"
+                className="w-full border border-gray-300 p-2 rounded" 
+                value={customerEmail} 
+                onChange={e => setCustomerEmail(e.target.value)}
+                placeholder="customer@example.com"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Vehicle Information */}
       <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-        <h3 className="font-semibold text-gray-900 mb-3">Vehicle Information</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
-            <select 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehicleType} 
-              onChange={e => setVehicleType(e.target.value)}
-            >
-              <option value="">Select Type</option>
-              <option value="sedan">Sedan</option>
-              <option value="suv">SUV</option>
-              <option value="hatchback">Hatchback</option>
-              <option value="coupe">Coupe</option>
-              <option value="truck">Truck</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehicleBrand} 
-              onChange={e => setVehicleBrand(e.target.value)}
-              placeholder="e.g., Toyota"
-            />
-          </div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">Vehicle Information</h3>
+          {customerType === 'b2b' && vehiclesList && vehiclesList.length > 0 && (
+            <span className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+              {vehiclesList.length} vehicle{vehiclesList.length > 1 ? 's' : ''} added
+            </span>
+          )}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehicleModel} 
-              onChange={e => setVehicleModel(e.target.value)}
-              placeholder="e.g., Camry"
-            />
+        {customerType === 'b2b' ? (
+          <div className="space-y-4">
+            {vehiclesList && vehiclesList.length > 0 ? (
+              <>
+                <div className="mb-2 text-sm text-gray-700 font-medium">
+                  Number of Vehicles: <span className="font-bold">{vehiclesList.length}</span>
+                </div>
+                {vehiclesList.map((vehicle, idx) => (
+                  <div key={idx} className="rounded-lg border border-gray-100 bg-gray-50/60 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-800">Vehicle {idx + 1}</span>
+                      {vehicle.category ? (
+                        <span className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-800 ml-2">Category: {vehicle.category}</span>
+                      ) : null}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Type:</span>
+                        <span className="font-semibold">{vehicle.vehicleType || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Brand:</span>
+                        <span className="font-semibold">{vehicle.vehicleBrand || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Model:</span>
+                        <span className="font-semibold">{vehicle.modelName || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Number Plate:</span>
+                        <span className="font-semibold">{vehicle.numberPlate || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Fuel Type:</span>
+                        <span className="font-semibold">{vehicle.fuelType || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">VIN:</span>
+                        <span className="font-semibold">{vehicle.vinNumber || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">No vehicles added.</div>
+            )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Plate Number</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehiclePlate} 
-              onChange={e => setVehiclePlate(e.target.value)}
-              placeholder="e.g., ABC-1234"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
-            <input
-              className="w-full border border-gray-300 p-2 rounded"
-              value={vehicleVin}
-              onChange={e => setVehicleVin(e.target.value)}
-              placeholder="Enter VIN"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={serviceCategory} 
-              onChange={e => setServiceCategory(e.target.value)}
-              placeholder="e.g., Car Wash, Oil Change"
-            />
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
+                <select 
+                  className="w-full border border-gray-300 p-2 rounded" 
+                  value={vehicleType} 
+                  onChange={e => setVehicleType(e.target.value)}
+                >
+                  <option value="">Select Type</option>
+                  <option value="sedan">Sedan</option>
+                  <option value="suv">SUV</option>
+                  <option value="hatchback">Hatchback</option>
+                  <option value="coupe">Coupe</option>
+                  <option value="truck">Truck</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                <input 
+                  className="w-full border border-gray-300 p-2 rounded" 
+                  value={vehicleBrand} 
+                  onChange={e => setVehicleBrand(e.target.value)}
+                  placeholder="e.g., Toyota"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                <input 
+                  className="w-full border border-gray-300 p-2 rounded" 
+                  value={vehicleModel} 
+                  onChange={e => setVehicleModel(e.target.value)}
+                  placeholder="e.g., Camry"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Plate Number</label>
+                <input 
+                  className="w-full border border-gray-300 p-2 rounded" 
+                  value={vehiclePlate} 
+                  onChange={e => setVehiclePlate(e.target.value)}
+                  placeholder="e.g., ABC-1234"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
+                <input
+                  className="w-full border border-gray-300 p-2 rounded"
+                  value={vehicleVin}
+                  onChange={e => setVehicleVin(e.target.value)}
+                  placeholder="Enter VIN"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
+                <input 
+                  className="w-full border border-gray-300 p-2 rounded" 
+                  value={serviceCategory} 
+                  onChange={e => setServiceCategory(e.target.value)}
+                  placeholder="e.g., Car Wash, Oil Change"
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Service Items */}

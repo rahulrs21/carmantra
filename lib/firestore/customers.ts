@@ -6,7 +6,7 @@ import type { Customer, Vehicle, Note, ServiceBooking, InvoiceDoc, ID } from '@/
 const customersCol = collection(db, 'customers');
 
 // Auto-sync: find or create customer from email/mobile
-export async function findOrCreateCustomer(data: { firstName?: string; lastName?: string; email?: string; mobile?: string; address?: string; city?: string; country?: string; state?: string; }): Promise<ID | null> {
+export async function findOrCreateCustomer(data: { firstName?: string; lastName?: string; email?: string; mobile?: string; address?: string; city?: string; country?: string; state?: string; customerType?: 'b2c' | 'b2b'; companyName?: string; contactName?: string; contactEmail?: string; contactPhone?: string; servicesHistory?: string; }): Promise<ID | null> {
   if (!data.email && !data.mobile) return null;
   
   // Try to find existing by exact email or mobile match
@@ -37,6 +37,12 @@ export async function findOrCreateCustomer(data: { firstName?: string; lastName?
     if (data.address && !c.address) updates.address = data.address;
     if (data.city && !c.city) updates.city = data.city;
     if (data.country && !c.country) updates.country = data.country;
+    if (data.customerType && !c.customerType) updates.customerType = data.customerType;
+    if (data.companyName && !c.companyName) updates.companyName = data.companyName;
+    if (data.contactName && !c.contactName) updates.contactName = data.contactName;
+    if (data.contactEmail && !c.contactEmail) updates.contactEmail = data.contactEmail;
+    if (data.contactPhone && !c.contactPhone) updates.contactPhone = data.contactPhone;
+    if (data.servicesHistory && !c.servicesHistory) updates.servicesHistory = data.servicesHistory;
     if (Object.keys(updates).length > 0) {
       await updateCustomer(c.id!, updates);
     }
@@ -45,6 +51,12 @@ export async function findOrCreateCustomer(data: { firstName?: string; lastName?
   
   // Create new customer
   const newCust: Omit<Customer, 'id'|'createdAt'|'updatedAt'> = {
+    customerType: data.customerType,
+    companyName: data.companyName,
+    contactName: data.contactName,
+    contactEmail: data.contactEmail,
+    contactPhone: data.contactPhone,
+    servicesHistory: data.servicesHistory,
     firstName: data.firstName || '',
     lastName: data.lastName || '',
     email: data.email || '',

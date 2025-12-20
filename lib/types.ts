@@ -2,6 +2,12 @@ export type ID = string;
 
 export interface Customer {
   id?: ID;
+  customerType?: 'b2c' | 'b2b';
+  companyName?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  servicesHistory?: string;
   firstName: string;
   lastName?: string;
   email: string;
@@ -42,6 +48,12 @@ export interface Note {
 
 export interface ServiceBooking {
   id?: ID;
+  customerType?: 'b2c' | 'b2b';
+  companyName?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  servicesHistory?: string;
   jobCardNo?: string;
   category?: string;
   firstName?: string;
@@ -59,12 +71,28 @@ export interface ServiceBooking {
   numberPlate?: string;
   fuelType?: string;
   vehicleType?: string;
+  vinNumber?: string;
+  vehicleCount?: number;
+  vehicles?: Array<{
+    vehicleType?: string;
+    vehicleBrand?: string;
+    modelName?: string;
+    numberPlate?: string;
+    fuelType?: string;
+    vinNumber?: string;
+    category?: string;
+  }>;
 }
-
 export interface InvoiceDoc {
   id?: ID;
+  customerType?: 'b2c' | 'b2b';
+  companyName?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
   customerName?: string;
   customerEmail?: string;
+  customerMobile?: string;
   total?: number;
   createdAt?: any;
   vehicleDetails?: {
@@ -72,6 +100,7 @@ export interface InvoiceDoc {
     brand?: string;
     model?: string;
     plate?: string;
+    vin?: string;
   };
 }
 
