@@ -23,6 +23,7 @@ export default function InvoiceForm({
   const [vehicleBrand, setVehicleBrand] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
+  const [vehicleVin, setVehicleVin] = useState('');
   const [serviceCategory, setServiceCategory] = useState('');
   const [items, setItems] = useState<Item[]>([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
   const [laborCharges, setLaborCharges] = useState(0);
@@ -43,6 +44,7 @@ export default function InvoiceForm({
       setVehicleBrand(invoice.vehicleDetails?.brand || '');
       setVehicleModel(invoice.vehicleDetails?.model || '');
       setVehiclePlate(invoice.vehicleDetails?.plate || '');
+      setVehicleVin(invoice.vehicleDetails?.vin || '');
       setServiceCategory(invoice.serviceCategory || '');
       
       // Ensure items always have valid values
@@ -101,6 +103,7 @@ export default function InvoiceForm({
           brand: vehicleBrand,
           model: vehicleModel,
           plate: vehiclePlate,
+          vin: vehicleVin,
         },
         serviceCategory,
         items,
@@ -140,6 +143,7 @@ export default function InvoiceForm({
         setVehicleBrand('');
         setVehicleModel('');
         setVehiclePlate('');
+        setVehicleVin('');
         setServiceCategory('');
         setItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]); 
         setLaborCharges(0);
@@ -280,14 +284,25 @@ export default function InvoiceForm({
             />
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
-          <input 
-            className="w-full border border-gray-300 p-2 rounded" 
-            value={serviceCategory} 
-            onChange={e => setServiceCategory(e.target.value)}
-            placeholder="e.g., Car Wash, Oil Change"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
+            <input
+              className="w-full border border-gray-300 p-2 rounded"
+              value={vehicleVin}
+              onChange={e => setVehicleVin(e.target.value)}
+              placeholder="Enter VIN"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
+            <input 
+              className="w-full border border-gray-300 p-2 rounded" 
+              value={serviceCategory} 
+              onChange={e => setServiceCategory(e.target.value)}
+              placeholder="e.g., Car Wash, Oil Change"
+            />
+          </div>
         </div>
       </div>
 

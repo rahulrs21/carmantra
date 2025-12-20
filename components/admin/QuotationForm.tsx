@@ -26,6 +26,7 @@ export default function QuotationForm({
   const [vehicleBrand, setVehicleBrand] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
   const [vehiclePlate, setVehiclePlate] = useState('');
+  const [vehicleVin, setVehicleVin] = useState('');
   const [serviceCategory, setServiceCategory] = useState('');
   const [items, setItems] = useState<Item[]>([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
   const [laborCharges, setLaborCharges] = useState(0);
@@ -48,6 +49,7 @@ export default function QuotationForm({
       setVehicleBrand(quotation.vehicleDetails?.brand || '');
       setVehicleModel(quotation.vehicleDetails?.model || '');
       setVehiclePlate(quotation.vehicleDetails?.plate || '');
+      setVehicleVin(quotation.vehicleDetails?.vin || '');
       setServiceCategory(quotation.serviceCategory || '');
       
       const quotationItems = quotation.items || [{ description: '', quantity: 1, rate: 0, amount: 0 }];
@@ -99,6 +101,9 @@ export default function QuotationForm({
       const auth = getAuth();
       if (!auth.currentUser) throw new Error('Not authenticated');
 
+      const actorId = auth.currentUser.uid;
+      const actorName = auth.currentUser.displayName || 'Admin';
+
       const quotationData: any = {
         ownerId: auth.currentUser.uid,
         customerName,
@@ -109,6 +114,7 @@ export default function QuotationForm({
           brand: vehicleBrand,
           model: vehicleModel,
           plate: vehiclePlate,
+          vin: vehicleVin,
         },
         serviceCategory,
         items,
@@ -131,7 +137,13 @@ export default function QuotationForm({
 
       if (quotation?.id) {
         // Update existing quotation
-        await updateDoc(doc(db, 'quotations', quotation.id), quotationData);
+        const isAccepted = status === 'accepted';
+        await updateDoc(doc(db, 'quotations', quotation.id), {
+          ...quotationData,
+          updatedBy: actorId,
+          updatedByName: actorName,
+          ...(isAccepted ? { acceptedAt: Timestamp.now(), acceptedBy: actorId, acceptedByName: actorName } : {}),
+        });
         if (linkedServiceId) {
           await updateDoc(doc(db, 'bookedServices', linkedServiceId), {
             quotationId: quotation.id,
@@ -147,6 +159,8 @@ export default function QuotationForm({
           ...quotationData,
           quotationNumber,
           createdAt: Timestamp.now(),
+          createdBy: actorId,
+          createdByName: actorName,
         });
         if (linkedServiceId) {
           await updateDoc(doc(db, 'bookedServices', linkedServiceId), {
@@ -164,6 +178,7 @@ export default function QuotationForm({
         setVehicleBrand('');
         setVehicleModel('');
         setVehiclePlate('');
+        setVehicleVin('');
         setServiceCategory('');
         setItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
         setLaborCharges(0);
@@ -304,14 +319,25 @@ export default function QuotationForm({
             />
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
-          <input 
-            className="w-full border border-gray-300 p-2 rounded" 
-            value={serviceCategory} 
-            onChange={e => setServiceCategory(e.target.value)}
-            placeholder="e.g., Car Wash, Oil Change"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
+            <input
+              className="w-full border border-gray-300 p-2 rounded"
+              value={vehicleVin}
+              onChange={e => setVehicleVin(e.target.value)}
+              placeholder="Enter VIN"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
+            <input 
+              className="w-full border border-gray-300 p-2 rounded" 
+              value={serviceCategory} 
+              onChange={e => setServiceCategory(e.target.value)}
+              placeholder="e.g., Car Wash, Oil Change"
+            />
+          </div>
         </div>
       </div>
 

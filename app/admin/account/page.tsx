@@ -181,7 +181,7 @@ export default function AccountPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Branding</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Update CRM name and logo for all users.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Update CRM name and logo for only admins.</p>
             </div>
             {brandLogoUrl ? (
               <img src={brandLogoUrl} alt={brandName} className="w-12 h-12 rounded border object-cover" />

@@ -179,6 +179,10 @@ export default function QuotationDetailPage() {
         pdf.text(`Plate: ${veh.plate}`, leftMargin, yPos);
         yPos += 5;
       }
+      if (veh.vin) {
+        pdf.text(`VIN: ${veh.vin}`, leftMargin, yPos);
+        yPos += 5;
+      }
     }
     
     // Service Items Table
@@ -531,6 +535,7 @@ export default function QuotationDetailPage() {
                   )}
                   {quotation.vehicleDetails.type && <p className="text-gray-600">Type: {quotation.vehicleDetails.type}</p>}
                   {quotation.vehicleDetails.plate && <p className="text-gray-600">Plate: {quotation.vehicleDetails.plate}</p>}
+                  {quotation.vehicleDetails.vin && <p className="text-gray-600">VIN: {quotation.vehicleDetails.vin}</p>}
                 </div>
               </div>
             )}

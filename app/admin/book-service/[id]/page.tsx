@@ -16,13 +16,14 @@ export default function BookServiceDetails() {
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
-  const { displayName } = useUser();
+  const { displayName, user } = useUser();
   const [service, setService] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
   const [newScheduleDate, setNewScheduleDate] = useState<string>('');
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [selectedMulkiyaIndex, setSelectedMulkiyaIndex] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
@@ -41,6 +42,9 @@ export default function BookServiceDetails() {
   const [preVideoPreview, setPreVideoPreview] = useState<string[]>([]);
   const [savingPreInspection, setSavingPreInspection] = useState(false);
   const [showPreInspectionList, setShowPreInspectionList] = useState(false);
+  const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
+  const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
+  const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
   const [editForm, setEditForm] = useState({
     firstName: '',
     lastName: '',
@@ -59,8 +63,6 @@ export default function BookServiceDetails() {
     vinNumber: '',
     mulkiyaUrl: '',
   });
-  const [mulkiyaFile, setMulkiyaFile] = useState<File | null>(null);
-  const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
 
   // Helper functions
   function getMinDateTime(): string {
@@ -75,7 +77,7 @@ export default function BookServiceDetails() {
     }
     now.setSeconds(0);
     now.setMilliseconds(0);
-    
+
     // Format as datetime-local string
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -85,50 +87,70 @@ export default function BookServiceDetails() {
     return `${year}-${month}-${date}T${hours}:${mins}`;
   }
 
+  const handleMulkiyaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setMulkiyaFiles(prev => [...prev, ...files]);
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setMulkiyaPreview(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  function removeMulkiya(idx: number) {
+    setMulkiyaFiles(prev => prev.filter((_, i) => i !== idx));
+    setMulkiyaPreview(prev => prev.filter((_, i) => i !== idx));
+  }
+
   function isValidDateTime(dateTimeString: string): boolean {
     if (!dateTimeString) return false;
     const selectedDate = new Date(dateTimeString);
     const day = selectedDate.getDay();
-    
+
     // Disable weekends (0 = Sunday, 6 = Saturday)
     if (day === 0 || day === 6) {
       return false;
     }
-    
+
     // Disable past times
     const now = new Date();
     if (selectedDate < now) {
       return false;
     }
-    
+
     // Disable time outside business hours (before 9 AM or after 6 PM)
     const hours = selectedDate.getHours();
     if (hours < 9 || hours >= 18) {
       return false;
     }
-    
+
     return true;
   }
 
   function getDateTimeError(dateTimeString: string): string | null {
     if (!dateTimeString) return null;
-    
+
     const selectedDate = new Date(dateTimeString);
     const day = selectedDate.getDay();
     const hours = selectedDate.getHours();
-    
+
     if (day === 0 || day === 6) {
       return 'Bookings not available on weekends';
     }
-    
+
     if (selectedDate < new Date()) {
       return 'Cannot book past times';
     }
-    
+
     if (hours < 9 || hours >= 18) {
       return 'Bookings available only 9 AM - 6 PM';
     }
-    
+
     return null;
   }
 
@@ -227,11 +249,18 @@ export default function BookServiceDetails() {
     return () => unsubscribe();
   }, [id]);
 
+  // Close reschedule panel when a quotation is present
+  useEffect(() => {
+    if (quotation) {
+      setRescheduling(false);
+    }
+  }, [quotation]);
+
   // Image popup handlers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedImageIndex === null) return;
-      
+
       if (e.key === 'Escape') {
         setSelectedImageIndex(null);
       } else if (e.key === 'ArrowRight') {
@@ -273,11 +302,35 @@ export default function BookServiceDetails() {
     setStatus('Rescheduling...');
     try {
       const newDate = new Date(newScheduleDate);
+      const now = Timestamp.now();
+      const actorId = user?.uid || 'unknown';
+      const actorEmail = user?.email || 'unknown';
+      const newDateTimestamp = Timestamp.fromDate(newDate);
+
       await updateDoc(doc(db, 'bookedServices', id!), {
-        scheduledDate: Timestamp.fromDate(newDate),
+        scheduledDate: newDateTimestamp,
+        rescheduledAt: now,
+        rescheduledBy: actorId,
+        rescheduledByEmail: actorEmail,
+        rescheduledByName: currentAdminName,
+        updatedAt: now,
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: currentAdminName,
       });
-      setService({ ...service, scheduledDate: Timestamp.fromDate(newDate) });
-      setStatus('Service rescheduled successfully');
+      setService({
+        ...service,
+        scheduledDate: newDateTimestamp,
+        rescheduledAt: now,
+        rescheduledBy: actorId,
+        rescheduledByEmail: actorEmail,
+        rescheduledByName: currentAdminName,
+        updatedAt: now,
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: currentAdminName,
+      });
+      setStatus(`Service rescheduled to ${formatDateTime12(newDate)}`);
       setRescheduling(false);
     } catch (err: any) {
       safeConsoleError('Reschedule error', err);
@@ -300,11 +353,11 @@ export default function BookServiceDetails() {
     // Pre-fill billing with accepted quotation values
     const quotedItems = Array.isArray(quotation.items) && quotation.items.length > 0
       ? quotation.items.map((item: any) => ({
-          description: item.description || service.category || 'Service',
-          quantity: Number(item.quantity) || 1,
-          rate: Number(item.rate) || 0,
-          amount: Number(item.amount) || (Number(item.quantity) || 1) * (Number(item.rate) || 0),
-        }))
+        description: item.description || service.category || 'Service',
+        quantity: Number(item.quantity) || 1,
+        rate: Number(item.rate) || 0,
+        amount: Number(item.amount) || (Number(item.quantity) || 1) * (Number(item.rate) || 0),
+      }))
       : [{ description: service.category || 'Service', quantity: 1, rate: 0, amount: 0 }];
 
     setBillingItems(quotedItems);
@@ -423,12 +476,12 @@ export default function BookServiceDetails() {
   function updateBillingItem(index: number, field: string, value: any) {
     const updated = [...billingItems];
     updated[index] = { ...updated[index], [field]: value };
-    
+
     // Auto-calculate amount
     if (field === 'quantity' || field === 'rate') {
       updated[index].amount = updated[index].quantity * updated[index].rate;
     }
-    
+
     setBillingItems(updated);
   }
 
@@ -437,7 +490,7 @@ export default function BookServiceDetails() {
     const subtotal = itemsTotal + laborCharges;
     const tax = subtotal * 0.05; // 5% VAT
     const grandTotal = subtotal + tax - discount;
-    
+
     return {
       itemsTotal,
       subtotal,
@@ -448,25 +501,28 @@ export default function BookServiceDetails() {
 
   async function handleBillingSave() {
     const totals = calculateBillingTotal();
-    
+
     // Validate
     if (totals.grandTotal === 0) {
       setStatus('Please add service charges');
       return;
     }
-    
+
     const hasEmptyItems = billingItems.some(item => !item.description || item.rate === 0);
     if (hasEmptyItems) {
       setStatus('Please fill all service items');
       return;
     }
-    
+
     setStatus('Creating invoice...');
-    
+
     try {
+      const actorId = user?.uid || 'unknown';
+      const actorEmail = user?.email || 'unknown';
+
       // Generate invoice number
       const invoiceNumber = `INV-${Date.now()}`;
-      
+
       // Create invoice document
       const invoiceData = {
         invoiceNumber,
@@ -495,27 +551,43 @@ export default function BookServiceDetails() {
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
+        createdBy: actorId,
+        createdByEmail: actorEmail,
       };
-      
+
       const docRef = await addDoc(collection(db, 'invoices'), invoiceData);
-      
+
       // Mark service as completed
       await updateDoc(doc(db, 'bookedServices', id!), {
         status: 'completed',
         invoiceId: docRef.id,
         completedAt: Timestamp.now(),
+        completedBy: actorId,
+        completedByEmail: actorEmail,
+        completedByName: currentAdminName,
         paymentStatus: 'paid',
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        updatedAt: Timestamp.now(),
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: currentAdminName,
       });
-      
+
       setService({
         ...service,
         status: 'completed',
         invoiceId: docRef.id,
+        completedBy: actorId,
+        completedByEmail: actorEmail,
+        completedByName: currentAdminName,
         paymentStatus: 'paid',
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        updatedAt: Timestamp.now(),
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: currentAdminName,
       });
       setCreatedInvoiceId(docRef.id);
       setStatus('✓ Invoice created and service marked as completed!');
@@ -529,17 +601,51 @@ export default function BookServiceDetails() {
   async function deleteService(skipPrompt = false) {
     const bookingLabel = service?.jobCardNo || service?.numberPlate || 'this booking';
     const customerName = `${service?.firstName || ''} ${service?.lastName || ''}`.trim();
+    const actorId = user?.uid || 'unknown';
+    const actorEmail = user?.email || 'unknown';
+    const actorName = currentAdminName;
+
+    let cancelReason = 'No reason provided';
+    if (typeof window !== 'undefined') {
+      const reasonInput = window.prompt('What is the reason for cancelling?');
+      if (reasonInput === null) return; // User aborted
+      cancelReason = reasonInput.trim() || 'No reason provided';
+    }
+
     const message = `Cancel ${bookingLabel}${customerName ? ` for ${customerName}` : ''}? This cannot be undone.`;
     if (!skipPrompt) {
       const shouldCancel = typeof window !== 'undefined' ? window.confirm(message) : false;
       if (!shouldCancel) return;
     }
-    setStatus('Deleting...');
+
+    setStatus('Cancelling...');
+    const now = Timestamp.now();
     try {
       await updateDoc(doc(db, 'bookedServices', id!), {
         status: 'cancelled',
+        cancelReason,
+        cancelledAt: now,
+        cancelledBy: actorId,
+        cancelledByEmail: actorEmail,
+        cancelledByName: actorName,
+        updatedAt: now,
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: actorName,
       });
-      setService({ ...service, status: 'cancelled' });
+      setService({
+        ...service,
+        status: 'cancelled',
+        cancelReason,
+        cancelledAt: now,
+        cancelledBy: actorId,
+        cancelledByEmail: actorEmail,
+        cancelledByName: actorName,
+        updatedAt: now,
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: actorName,
+      });
       setStatus('Service cancelled');
       setTimeout(() => router.push('/admin/book-service'), 2000);
     } catch (err: any) {
@@ -552,14 +658,35 @@ export default function BookServiceDetails() {
     setStatus('Updating...');
     try {
       setMulkiyaUploading(true);
-      let uploadedMulkiyaUrl = editForm.mulkiyaUrl || service.mulkiyaUrl || '';
+      let uploadedMulkiyaUrls: string[] = [];
 
-      if (mulkiyaFile) {
-        const jobCard = service.jobCardNo || service.numberPlate || service.id;
-        const storageRef = ref(storage, `mulkiya/${jobCard}/${mulkiyaFile.name}-${Date.now()}`);
-        await uploadBytes(storageRef, mulkiyaFile);
-        uploadedMulkiyaUrl = await getDownloadURL(storageRef);
+      // Parse existing mulkiya URLs from editForm or service
+      if (editForm.mulkiyaUrl) {
+        try {
+          uploadedMulkiyaUrls = JSON.parse(editForm.mulkiyaUrl);
+        } catch {
+          uploadedMulkiyaUrls = editForm.mulkiyaUrl ? [editForm.mulkiyaUrl] : [];
+        }
+      } else if (service.mulkiyaUrl) {
+        try {
+          uploadedMulkiyaUrls = JSON.parse(service.mulkiyaUrl);
+        } catch {
+          uploadedMulkiyaUrls = service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
+        }
       }
+
+      // Upload new mulkiya files (if any)
+      if (mulkiyaFiles.length > 0) {
+        const jobCard = service.jobCardNo || service.numberPlate || service.id;
+        for (const file of mulkiyaFiles) {
+          const storageRef = ref(storage, `mulkiya/${jobCard}/${file.name}-${Date.now()}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          uploadedMulkiyaUrls.push(url);
+        }
+      }
+
+      const mulkiyaUrlString = uploadedMulkiyaUrls.length > 0 ? JSON.stringify(uploadedMulkiyaUrls) : '';
 
       await updateDoc(doc(db, 'bookedServices', id!), {
         firstName: editForm.firstName,
@@ -577,9 +704,11 @@ export default function BookServiceDetails() {
         numberPlate: editForm.numberPlate,
         fuelType: editForm.fuelType,
         vinNumber: editForm.vinNumber,
-        mulkiyaUrl: uploadedMulkiyaUrl,
+        mulkiyaUrl: mulkiyaUrlString,
+        updatedAt: Timestamp.now(),
+        updatedByName: currentAdminName,
       });
-      setService({ ...service, ...editForm, mulkiyaUrl: uploadedMulkiyaUrl });
+      setService({ ...service, ...editForm, mulkiyaUrl: mulkiyaUrlString, updatedAt: Timestamp.now(), updatedByName: currentAdminName });
       setStatus('✓ Details updated successfully');
       setEditing(false);
       setTimeout(() => setStatus(null), 3000);
@@ -588,7 +717,8 @@ export default function BookServiceDetails() {
       setStatus('Failed to update details');
     } finally {
       setMulkiyaUploading(false);
-      setMulkiyaFile(null);
+      setMulkiyaFiles([]);
+      setMulkiyaPreview([]);
     }
   }
 
@@ -613,7 +743,8 @@ export default function BookServiceDetails() {
       mulkiyaUrl: service.mulkiyaUrl || '',
     });
     setEditing(false);
-    setMulkiyaFile(null);
+    setMulkiyaFiles([]);
+    setMulkiyaPreview([]);
   }
 
   const quotationStatus = quotation?.status || service?.quotationStatus || 'not_created';
@@ -651,6 +782,7 @@ export default function BookServiceDetails() {
         ? 'bg-red-100 text-red-800'
         : 'bg-gray-100 text-gray-700';
   const canInvoice = quotationStatus === 'accepted';
+  const rescheduleDisabled = !!quotation;
   const quotationSeed = service ? {
     customerName: `${service.firstName || ''} ${service.lastName || ''}`.trim(),
     customerEmail: service.email || '',
@@ -673,28 +805,93 @@ export default function BookServiceDetails() {
 
   const currentAdminName = displayName || 'Admin';
 
+  // Cache of UID → { name, email } for fallback where older records lack *_ByName
+  const [userInfo, setUserInfo] = useState<Record<string, { name?: string; email?: string }>>({});
+
+  useEffect(() => {
+    const uids = new Set<string>();
+    if (service?.createdBy) uids.add(service.createdBy as string);
+    if (service?.updatedBy) uids.add(service.updatedBy as string);
+    if (service?.completedBy) uids.add(service.completedBy as string);
+    if (service?.cancelledBy) uids.add(service.cancelledBy as string);
+    if (quotation?.createdBy) uids.add(quotation.createdBy as string);
+    if (quotation?.updatedBy) uids.add(quotation.updatedBy as string);
+    if ((quotation as any)?.acceptedBy) uids.add(((quotation as any).acceptedBy as string));
+
+    const fetchNames = async () => {
+      const updates: Record<string, { name?: string; email?: string }> = {};
+      await Promise.all(Array.from(uids).map(async (uid) => {
+        if (!uid || userInfo[uid]) return;
+        try {
+          const snap = await getDoc(doc(db, 'users', uid));
+          const data = snap.exists() ? (snap.data() as any) : null;
+          const name = (data?.displayName as string) || undefined;
+          const email = (data?.email as string) || undefined;
+          updates[uid] = { name, email };
+        } catch {
+          updates[uid] = { name: undefined, email: undefined };
+        }
+      }));
+      if (Object.keys(updates).length) {
+        setUserInfo((prev) => ({ ...prev, ...updates }));
+      }
+    };
+
+    fetchNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service?.createdBy, service?.updatedBy, service?.completedBy, service?.cancelledBy, quotation?.createdBy, quotation?.updatedBy, (quotation as any)?.acceptedBy]);
+
+  const userLabel = (uid?: string, explicitEmail?: string): string => {
+    if (explicitEmail) return explicitEmail;
+    if (!uid) return '-';
+    const info = userInfo[uid];
+    return info?.email || uid;
+  };
+
   const historyItems = [
     service?.createdAt ? {
       label: 'Booking Created',
-      user: service?.createdByName || service?.createdBy || service?.updatedByName || service?.updatedBy || currentAdminName,
+      user: userLabel(service?.createdBy as string, (service as any)?.createdByEmail),
       time: formatHistoryDate(service.createdAt),
+    } : null,
+    service?.rescheduledAt ? {
+      label: 'Service Rescheduled',
+      user: userLabel(service?.rescheduledBy as string, (service as any)?.rescheduledByEmail),
+      time: formatHistoryDate((service as any)?.rescheduledAt),
+      detail: `Rescheduled to ${formatDateTime12(service?.scheduledDate)}`,
+    } : null,
+    quotation?.createdAt ? {
+      label: 'Quotation Created',
+      user: userLabel(quotation?.createdBy as string, (quotation as any)?.createdByEmail) || userLabel(service?.createdBy as string, (service as any)?.createdByEmail),
+      time: formatHistoryDate(quotation?.createdAt),
+    } : null,
+    quotation?.updatedAt ? {
+      label: 'Quotation Updated',
+      user: userLabel(quotation?.updatedBy as string, (quotation as any)?.updatedByEmail),
+      time: formatHistoryDate((quotation as any)?.updatedAt),
     } : null,
     quotation?.status === 'accepted' ? {
       label: 'Quotation Accepted',
-      user: quotation?.updatedByName || quotation?.updatedBy || quotation?.createdByName || quotation?.createdBy || currentAdminName,
-      time: formatHistoryDate((quotation as any)?.updatedAt || (quotation as any)?.acceptedAt || quotation?.createdAt),
+      user: userLabel((quotation as any)?.acceptedBy as string, (quotation as any)?.acceptedByEmail),
+      time: formatHistoryDate((quotation as any)?.acceptedAt),
     } : null,
     service?.invoiceId ? {
       label: 'Invoice Generated',
-      user: service?.completedByName || service?.completedBy || service?.updatedByName || service?.updatedBy || currentAdminName,
+      user: userLabel(service?.completedBy as string, (service as any)?.completedByEmail),
       time: formatHistoryDate(service?.completedAt || service?.updatedAt),
     } : null,
     service?.status === 'completed' ? {
       label: 'Work Completed',
-      user: service?.completedByName || service?.completedBy || service?.updatedByName || service?.updatedBy || currentAdminName,
+      user: userLabel(service?.completedBy as string, (service as any)?.completedByEmail),
       time: formatHistoryDate(service?.completedAt || service?.updatedAt),
     } : null,
-  ].filter((item) => item && item.time) as Array<{ label: string; user: string; time: string }>;
+    service?.status === 'cancelled' ? {
+      label: 'Booking Cancelled',
+      user: userLabel(service?.cancelledBy as string, (service as any)?.cancelledByEmail),
+      time: formatHistoryDate((service as any)?.cancelledAt || service?.updatedAt),
+      detail: `Reason: ${(service as any)?.cancelReason || 'No reason provided'}`,
+    } : null,
+  ].filter((item) => item && item.time) as Array<{ label: string; user: string; time: string; detail?: string }>;
 
   if (loading) return <div className="p-6 text-center">Loading...</div>;
   if (!service) return <div className="p-6 text-center text-red-600">Service not found</div>;
@@ -791,7 +988,7 @@ export default function BookServiceDetails() {
                 <span className="text-gray-600">Scheduled Date:</span>
                 <span className="font-medium">{formatDateTime12(service.scheduledDate)}</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Quotation:</span>
                 {quotationLoading ? (
@@ -836,7 +1033,7 @@ export default function BookServiceDetails() {
                       <input
                         type="text"
                         value={editForm.firstName}
-                        onChange={(e) => setEditForm({...editForm, firstName: e.target.value})}
+                        onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
                     </div>
@@ -845,7 +1042,7 @@ export default function BookServiceDetails() {
                       <input
                         type="text"
                         value={editForm.lastName}
-                        onChange={(e) => setEditForm({...editForm, lastName: e.target.value})}
+                        onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
                         className="w-full border rounded px-2 py-1 text-sm"
                       />
                     </div>
@@ -855,7 +1052,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.mobileNo}
-                      onChange={(e) => setEditForm({...editForm, mobileNo: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, mobileNo: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -864,7 +1061,7 @@ export default function BookServiceDetails() {
                     <input
                       type="email"
                       value={editForm.email}
-                      onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -872,7 +1069,7 @@ export default function BookServiceDetails() {
                     <label className="block text-xs text-gray-600 mb-1">Source</label>
                     <select
                       value={editForm.source}
-                      onChange={(e) => setEditForm({...editForm, source: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     >
                       <option value="">Select Source</option>
@@ -887,7 +1084,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.country}
-                      onChange={(e) => setEditForm({...editForm, country: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, country: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -896,7 +1093,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.state}
-                      onChange={(e) => setEditForm({...editForm, state: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -905,7 +1102,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.city}
-                      onChange={(e) => setEditForm({...editForm, city: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -914,7 +1111,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.address}
-                      onChange={(e) => setEditForm({...editForm, address: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -968,7 +1165,7 @@ export default function BookServiceDetails() {
                     <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
                     <select
                       value={editForm.vehicleType}
-                      onChange={(e) => setEditForm({...editForm, vehicleType: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, vehicleType: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     >
                       <option value="">Select Type</option>
@@ -984,7 +1181,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.vehicleBrand}
-                      onChange={(e) => setEditForm({...editForm, vehicleBrand: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, vehicleBrand: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -993,7 +1190,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.modelName}
-                      onChange={(e) => setEditForm({...editForm, modelName: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, modelName: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -1002,7 +1199,7 @@ export default function BookServiceDetails() {
                     <input
                       type="text"
                       value={editForm.numberPlate}
-                      onChange={(e) => setEditForm({...editForm, numberPlate: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, numberPlate: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     />
                   </div>
@@ -1010,7 +1207,7 @@ export default function BookServiceDetails() {
                     <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
                     <select
                       value={editForm.fuelType}
-                      onChange={(e) => setEditForm({...editForm, fuelType: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, fuelType: e.target.value })}
                       className="w-full border rounded px-2 py-1 text-sm"
                     >
                       <option value="">Select Fuel</option>
@@ -1030,32 +1227,87 @@ export default function BookServiceDetails() {
                       placeholder="Enter VIN"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="block text-xs text-gray-600 mb-1">Mulkiya (optional)</label>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Mulkiya Images (optional)</label>
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={(e) => setMulkiyaFile(e.target.files?.[0] || null)}
-                      className="w-full border rounded px-2 py-1 text-sm bg-white"
+                      multiple
+                      onChange={handleMulkiyaUpload}
+                      className="w-full border rounded px-3 py-2 text-sm bg-white cursor-pointer"
                     />
-                    {(mulkiyaUploading || mulkiyaFile) && (
-                      <p className="text-[11px] text-gray-600">
-                        {mulkiyaUploading ? 'Uploading mulkiya…' : mulkiyaFile ? mulkiyaFile.name : ''}
-                      </p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      💡 To select multiple images: Hold <strong>Ctrl</strong> (Windows) or <strong>Cmd</strong> (Mac) while clicking images
+                    </p>
+                    {mulkiyaUploading && (
+                      <p className="text-[11px] text-gray-600 mt-1">Uploading mulkiya images…</p>
                     )}
-                    {editForm.mulkiyaUrl && (
-                      <div className="flex items-center gap-3 text-xs text-gray-700">
-                        <span className="font-semibold">Current:</span>
-                        <a
-                          href={editForm.mulkiyaUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-orange-600 underline"
-                        >
-                          View Mulkiya
-                        </a>
+
+                    {mulkiyaPreview.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-600 mb-2">Selected Images ({mulkiyaPreview.length}):</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {mulkiyaPreview.map((preview, idx) => (
+                            <div key={idx} className="relative group">
+                              <img
+                                src={preview}
+                                alt={`Mulkiya ${idx + 1}`}
+                                className="w-full h-24 object-cover rounded border"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeMulkiya(idx)}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
+
+                    {editForm.mulkiyaUrl && (() => {
+                      let urls: string[] = [];
+                      try {
+                        urls = JSON.parse(editForm.mulkiyaUrl);
+                      } catch {
+                        urls = editForm.mulkiyaUrl ? [editForm.mulkiyaUrl] : [];
+                      }
+                      return urls.length > 0 ? (
+                        <div className="mt-3">
+                          <p className="text-xs text-gray-600 mb-2">Existing Images ({urls.length}):</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {urls.map((url, idx) => (
+                              <div key={idx} className="relative group">
+                                <img
+                                  src={url}
+                                  alt={`Mulkiya ${idx + 1}`}
+                                  className="w-full h-24 object-cover rounded border"
+                                />
+                                <button
+                                  type="button"
+                                  aria-label="Remove image"
+                                  onClick={() => {
+                                    let arr: string[] = [];
+                                    try {
+                                      arr = JSON.parse(editForm.mulkiyaUrl);
+                                    } catch {
+                                      arr = editForm.mulkiyaUrl ? [editForm.mulkiyaUrl] : [];
+                                    }
+                                    const newArr = arr.filter((_, i) => i !== idx);
+                                    setEditForm({ ...editForm, mulkiyaUrl: newArr.length ? JSON.stringify(newArr) : '' });
+                                  }}
+                                  className="absolute top-1 right-1 bg-black/70 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                   <div className="flex gap-2 pt-3">
                     <Button
@@ -1063,7 +1315,7 @@ export default function BookServiceDetails() {
                       onClick={handleUpdate}
                       className="flex-1 bg-green-600 hover:bg-green-700"
                     >
-                      💾 {mulkiyaUploading ? 'Saving…' : 'Save Changes'}
+                      💾 Save Changes
                     </Button>
                     <Button
                       size="sm"
@@ -1099,19 +1351,41 @@ export default function BookServiceDetails() {
                   </div>
                   <div className="flex justify-between items-center gap-3">
                     <span className="text-gray-600">Mulkiya:</span>
-                    {service.mulkiyaUrl ? (
-                      <a
-                        href={service.mulkiyaUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-orange-600 font-medium underline break-all"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      <span className="font-medium">-</span>
-                    )}
+                    {(() => {
+                      let urls: string[] = [];
+                      try {
+                        urls = JSON.parse(service.mulkiyaUrl || '[]');
+                      } catch {
+                        urls = service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
+                      }
+                      return urls.length > 0 ? (
+                        <span className="font-medium text-orange-600">{urls.length} image(s)</span>
+                      ) : (
+                        <span className="font-medium">-</span>
+                      );
+                    })()}
                   </div>
+                  {(() => {
+                    let urls: string[] = [];
+                    try {
+                      urls = JSON.parse(service.mulkiyaUrl || '[]');
+                    } catch {
+                      urls = service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
+                    }
+                    return urls.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {urls.map((url, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedMulkiyaIndex(idx)}
+                            className="border rounded overflow-hidden hover:border-orange-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          >
+                            <img src={url} alt={`Mulkiya ${idx + 1}`} className="w-full h-20 object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Fuel Type:</span>
                     <span className="font-medium">{service.fuelType}</span>
@@ -1180,7 +1454,7 @@ export default function BookServiceDetails() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-800">Upload Videos </label>
-                  <input type="file" accept="video/*"  className='border border-gray-50 bg-white p-1 rounded cursor-pointer' multiple onChange={handlePreVideoUpload} />
+                  <input type="file" accept="video/*" className='border border-gray-50 bg-white p-1 rounded cursor-pointer' multiple onChange={handlePreVideoUpload} />
                   {(preVideoPreview.length > 0) && (
                     <div className="space-y-2">
                       {preVideoPreview.map((src, idx) => (
@@ -1245,6 +1519,28 @@ export default function BookServiceDetails() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <h3 className="text-sm font-semibold text-gray-700">Notes</h3>
+                      {service.status !== 'completed' && service.status !== 'cancelled' && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await updateDoc(doc(db, 'bookedServices', service.id), {
+                                'preInspection.message': ''
+                              });
+                              setService({
+                                ...service,
+                                preInspection: { ...(service.preInspection || {}), message: '' }
+                              });
+                              setStatus('Removed pre-inspection note');
+                            } catch (err) {
+                              safeConsoleError('Remove pre-inspection note error', err);
+                            }
+                          }}
+                          className="ml-auto text-xs text-red-600 underline hover:text-red-700"
+                        >
+                          Remove Note
+                        </button>
+                      )}
                     </div>
                     <p className="text-sm text-gray-800 bg-gradient-to-r from-orange-50 to-gray-50 p-4 rounded-lg border border-orange-100 leading-relaxed whitespace-pre-wrap">
                       {service.preInspection.message}
@@ -1267,15 +1563,18 @@ export default function BookServiceDetails() {
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                       {service.preInspection.images.map((url: string, idx: number) => (
-                        <button
-                          key={idx} 
+                        <div
+                          key={idx}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setSelectedImageIndex(idx)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedImageIndex(idx); }}
                           className="group relative block overflow-hidden rounded-lg border-2 border-gray-200 hover:border-orange-500 transition-all duration-300 shadow-sm hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                         >
                           <div className="aspect-square relative">
-                            <img 
-                              src={url} 
-                              alt={`Pre-inspection image ${idx + 1}`} 
+                            <img
+                              src={url}
+                              alt={`Pre-inspection image ${idx + 1}`}
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                               loading="lazy"
                             />
@@ -1284,11 +1583,35 @@ export default function BookServiceDetails() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
                               </svg>
                             </div>
+                            {service.status !== 'completed' && service.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const newImages = service.preInspection.images.filter((_: string, i: number) => i !== idx);
+                                    await updateDoc(doc(db, 'bookedServices', service.id), {
+                                      'preInspection.images': newImages
+                                    });
+                                    setService({
+                                      ...service,
+                                      preInspection: { ...(service.preInspection || {}), images: newImages }
+                                    });
+                                    setStatus('Removed pre-inspection image');
+                                  } catch (err) {
+                                    safeConsoleError('Remove pre-inspection image error', err);
+                                  }
+                                }}
+                                className="absolute top-2 right-2 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black"
+                              >
+                                ×
+                              </button>
+                            )}
                           </div>
                           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                             <p className="text-xs text-white font-medium">Image {idx + 1}</p>
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1309,9 +1632,9 @@ export default function BookServiceDetails() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {service.preInspection.videos.map((url: string, idx: number) => (
                         <div key={idx} className="group relative border-2 border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-lg hover:border-orange-500 transition-all duration-300 bg-black">
-                          <video 
-                            src={url} 
-                            controls 
+                          <video
+                            src={url}
+                            controls
                             preload="metadata"
                             className="w-full aspect-video object-contain bg-black"
                           >
@@ -1321,9 +1644,9 @@ export default function BookServiceDetails() {
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-medium text-gray-700">Video {idx + 1}</span>
                               <div className="flex gap-2">
-                                <a 
-                                  href={url} 
-                                  target="_blank" 
+                                <a
+                                  href={url}
+                                  target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium transition-colors"
                                 >
@@ -1332,8 +1655,8 @@ export default function BookServiceDetails() {
                                   </svg>
                                   Open
                                 </a>
-                                <a 
-                                  href={url} 
+                                <a
+                                  href={url}
                                   download
                                   className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium transition-colors"
                                 >
@@ -1342,6 +1665,32 @@ export default function BookServiceDetails() {
                                   </svg>
                                   Download
                                 </a>
+                                {service.status !== 'completed' && service.status !== 'cancelled' && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const newVideos = service.preInspection.videos.filter((_: string, i: number) => i !== idx);
+                                        await updateDoc(doc(db, 'bookedServices', service.id), {
+                                          'preInspection.videos': newVideos
+                                        });
+                                        setService({
+                                          ...service,
+                                          preInspection: { ...(service.preInspection || {}), videos: newVideos }
+                                        });
+                                        setStatus('Removed pre-inspection video');
+                                      } catch (err) {
+                                        safeConsoleError('Remove pre-inspection video error', err);
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 font-medium transition-colors"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Remove
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1373,16 +1722,18 @@ export default function BookServiceDetails() {
               <p className="text-xs text-gray-500">Invoice unlocks after the quotation is accepted.</p>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
+                  className={`flex-1 ${isCancelled ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}
                   onClick={() => setShowQuotationModal(true)}
+                  disabled={isCancelled}
                 >
                   {quotation ? 'Update Quotation' : 'Create Quotation'}
                 </Button>
                 {quotation?.id && (
                   <Button
                     variant="outline"
-                    className="flex-1"
+                    className={`flex-1 ${isCancelled ? 'opacity-60 cursor-not-allowed' : ''}`}
                     onClick={() => router.push(`/admin/quotation/${quotation.id}`)}
+                    disabled={isCancelled}
                   >
                     View Quotation
                   </Button>
@@ -1398,8 +1749,13 @@ export default function BookServiceDetails() {
                 <>
                   <Button
                     variant={rescheduling ? 'default' : 'outline'}
-                    className="w-full"
-                    onClick={() => setRescheduling(!rescheduling)}
+                    className={`w-full ${rescheduleDisabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`}
+                    onClick={() => {
+                      if (rescheduleDisabled) return;
+                      setRescheduling(!rescheduling);
+                    }}
+                    disabled={rescheduleDisabled}
+                    title={rescheduleDisabled ? 'Rescheduling disabled after a quotation is created' : undefined}
                   >
                     {rescheduling ? 'Close' : 'Reschedule'}
                   </Button>
@@ -1418,7 +1774,7 @@ export default function BookServiceDetails() {
               )}
               <Button
                 variant="destructive"
-                className="w-full"
+                className={`w-full ${service.status === 'completed' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
                 onClick={() => deleteService()}
                 disabled={service.status === 'cancelled' || service.status === 'completed'}
               >
@@ -1428,25 +1784,6 @@ export default function BookServiceDetails() {
                     ? 'Work is Completed'
                     : 'Cancel Booking'}
               </Button>
-              {service.status === 'completed' && (
-                <div className="text-[11px] text-gray-600 space-y-2">
-                  <p className="leading-snug">Work is completed. Do you still want to cancel? This will run the cancel flow.</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-red-200 text-red-700 hover:bg-red-50"
-                    onClick={() => {
-                      const confirmMessage = 'Work is completed. Are you sure you want to cancel this booking?';
-                      if (window.confirm(confirmMessage)) {
-                        deleteService(true);
-                      }
-                    }}
-                    disabled={service.status === 'cancelled'}
-                  >
-                    Cancel Booking
-                  </Button>
-                </div>
-              )}
               <Button
                 variant="outline"
                 className="w-full"
@@ -1513,7 +1850,10 @@ export default function BookServiceDetails() {
                       <div className="w-2 h-2 rounded-full bg-green-500" aria-hidden />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{item.label}</p>
-                        <p className="text-xs text-gray-600 truncate">Updated By: {item.user}</p>
+                        <p className="text-xs text-gray-600 truncate">By: {item.user}</p>
+                        {item.detail && (
+                          <p className="text-xs text-gray-700 break-words">{item.detail}</p>
+                        )}
                       </div>
                     </div>
                     <div className="text-xs text-gray-500 sm:text-right sm:min-w-[160px]">{item.time}</div>
@@ -1524,7 +1864,7 @@ export default function BookServiceDetails() {
           </Card>
 
           {/* Reschedule Form */}
-          {rescheduling && service.status !== 'completed' && service.status !== 'cancelled' && (
+          {rescheduling && !rescheduleDisabled && service.status !== 'completed' && service.status !== 'cancelled' && (
             <Card className="p-6 bg-blue-50">
               <h3 className="font-semibold mb-3">Reschedule Service</h3>
               <div className="space-y-3">
@@ -1551,7 +1891,7 @@ export default function BookServiceDetails() {
 
       {/* Image Lightbox Popup */}
       {selectedImageIndex !== null && service?.preInspection?.images && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black bg-opacity-95 flex items-center justify-center p-4"
           onClick={() => setSelectedImageIndex(null)}
         >
@@ -1586,8 +1926,8 @@ export default function BookServiceDetails() {
           </button>
 
           <div className="max-w-7xl max-h-full w-full h-full flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
-            <img 
-              src={service.preInspection.images[selectedImageIndex]} 
+            <img
+              src={service.preInspection.images[selectedImageIndex]}
               alt={`Pre-inspection image ${selectedImageIndex + 1}`}
               className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
             />
@@ -1595,9 +1935,9 @@ export default function BookServiceDetails() {
               <p className="text-white text-sm font-medium">
                 Image {selectedImageIndex + 1} of {service.preInspection.images.length}
               </p>
-              <a 
-                href={service.preInspection.images[selectedImageIndex]} 
-                target="_blank" 
+              <a
+                href={service.preInspection.images[selectedImageIndex]}
+                target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-2 text-orange-500 hover:text-orange-400 text-sm mt-2 transition-colors"
@@ -1612,9 +1952,92 @@ export default function BookServiceDetails() {
         </div>
       )}
 
+      {/* Mulkiya Image Lightbox Popup */}
+      {selectedMulkiyaIndex !== null && service?.mulkiyaUrl && (() => {
+        let urls: string[] = [];
+        try {
+          urls = JSON.parse(service.mulkiyaUrl);
+        } catch {
+          urls = service.mulkiyaUrl ? [service.mulkiyaUrl] : [];
+        }
+
+        const handlePrevMulkiya = () => {
+          setSelectedMulkiyaIndex((prev) =>
+            prev === null || prev === 0 ? urls.length - 1 : (prev as number) - 1
+          );
+        };
+
+        const handleNextMulkiya = () => {
+          setSelectedMulkiyaIndex((prev) =>
+            prev === null ? 0 : ((prev as number) + 1) % urls.length
+          );
+        };
+
+        return urls.length > 0 ? (
+          <div
+            className="fixed inset-0 z-50 bg-black bg-opacity-95 flex items-center justify-center p-4"
+            onClick={() => setSelectedMulkiyaIndex(null)}
+          >
+            <button
+              onClick={() => setSelectedMulkiyaIndex(null)}
+              className="absolute top-4 right-4 text-white hover:text-orange-500 transition-colors z-10 p-2 rounded-full hover:bg-white/10"
+              aria-label="Close"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <button
+              onClick={(e) => { e.stopPropagation(); handlePrevMulkiya(); }}
+              className="absolute left-4 text-white hover:text-orange-500 transition-colors z-10 p-2 rounded-full hover:bg-white/10"
+              aria-label="Previous image"
+            >
+              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <button
+              onClick={(e) => { e.stopPropagation(); handleNextMulkiya(); }}
+              className="absolute right-4 text-white hover:text-orange-500 transition-colors z-10 p-2 rounded-full hover:bg-white/10"
+              aria-label="Next image"
+            >
+              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+
+            <div className="max-w-7xl max-h-full w-full h-full flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={urls[selectedMulkiyaIndex!]}
+                alt={`Mulkiya image ${(selectedMulkiyaIndex as number) + 1}`}
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              />
+              <div className="mt-4 text-center">
+                <p className="text-white text-sm font-medium">
+                  Mulkiya Image {(selectedMulkiyaIndex as number) + 1} of {urls.length}
+                </p>
+                <a
+                  href={urls[selectedMulkiyaIndex!]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-2 text-orange-500 hover:text-orange-400 text-sm mt-2 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Open original
+                </a>
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
+
       {/* Quotation Modal */}
-      {showQuotationModal && service && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {showQuotationModal && service && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowQuotationModal(false)} />
           <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full z-10 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
@@ -1653,8 +2076,8 @@ export default function BookServiceDetails() {
           <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full z-10 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">Create Invoice & Complete Service</h2>
-              <button 
-                className="text-gray-500 hover:text-gray-700" 
+              <button
+                className="text-gray-500 hover:text-gray-700"
                 onClick={() => setShowBilling(false)}
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1708,7 +2131,7 @@ export default function BookServiceDetails() {
                       + Add Item
                     </button>
                   </div>
-                  
+
                   {/* Column Headers */}
                   <div className="grid grid-cols-12 gap-2 mb-2 px-3">
                     <div className="col-span-5 text-xs font-semibold text-gray-600 uppercase">Description</div>
@@ -1880,11 +2303,10 @@ export default function BookServiceDetails() {
                 </div>
 
                 {status && (
-                  <div className={`p-3 rounded text-sm ${
-                    status.includes('Failed') || status.includes('Please') 
-                      ? 'bg-red-50 text-red-700 border border-red-200' 
+                  <div className={`p-3 rounded text-sm ${status.includes('Failed') || status.includes('Please')
+                      ? 'bg-red-50 text-red-700 border border-red-200'
                       : 'bg-green-50 text-green-700 border border-green-200'
-                  }`}>
+                    }`}>
                     {status}
                   </div>
                 )}

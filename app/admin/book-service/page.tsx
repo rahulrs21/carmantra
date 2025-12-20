@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, query, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
@@ -28,7 +29,9 @@ export default function BookServiceList() {
     const [submitting, setSubmitting] = useState(false);
     const [sortField, setSortField] = useState<'jobCardNo' | 'scheduledDate' | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-    const [mulkiyaFile, setMulkiyaFile] = useState<File | null>(null);
+    const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
+    const [mulkiyaPreviews, setMulkiyaPreviews] = useState<string[]>([]);
+    const mulkiyaInputRef = useRef<HTMLInputElement>(null);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -146,7 +149,8 @@ export default function BookServiceList() {
             ...formData,
             jobCardNo: generateJobCardNo()
         });
-        setMulkiyaFile(null);
+        setMulkiyaFiles([]);
+        setMulkiyaPreviews([]);
         setShowBookingForm(true);
     };
 
@@ -168,6 +172,11 @@ export default function BookServiceList() {
 
         setSubmitting(true);
         try {
+            const auth = getAuth();
+            if (!auth.currentUser) throw new Error('Not authenticated');
+            const actorId = auth.currentUser.uid;
+            const actorName = auth.currentUser.displayName || 'Admin';
+
             const [hours, minutes] = selectedTime.split(':');
             const scheduledDateTime = new Date(selectedDate);
             scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
@@ -185,10 +194,15 @@ export default function BookServiceList() {
             });
 
             let mulkiyaUrl = '';
-            if (mulkiyaFile) {
-                const storageRef = ref(storage, `mulkiya/${formData.jobCardNo || 'booking'}/${mulkiyaFile.name}-${Date.now()}`);
-                await uploadBytes(storageRef, mulkiyaFile);
-                mulkiyaUrl = await getDownloadURL(storageRef);
+            if (mulkiyaFiles.length) {
+                const urls: string[] = [];
+                for (const file of mulkiyaFiles) {
+                    const storageRef = ref(storage, `mulkiya/${formData.jobCardNo || 'booking'}/${file.name}-${Date.now()}`);
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    urls.push(url);
+                }
+                mulkiyaUrl = JSON.stringify(urls);
             }
 
             await addDoc(collection(db, 'bookedServices'), {
@@ -204,7 +218,9 @@ export default function BookServiceList() {
                 status: 'pending',
                 quotationStatus: 'not_created',
                 quotationId: null,
-                createdAt: Timestamp.now()
+                createdAt: Timestamp.now(),
+                createdBy: actorId,
+                createdByName: actorName,
             });
 
             setShowBookingForm(false);
@@ -227,7 +243,9 @@ export default function BookServiceList() {
                 fuelType: '',
                 vinNumber: '',
             });
-            setMulkiyaFile(null);
+            setMulkiyaFiles([]);
+            setMulkiyaPreviews([]);
+            if (mulkiyaInputRef.current) mulkiyaInputRef.current.value = '';
             // Pre-inspection will be captured after vehicle arrival
             alert('Booking created successfully!');
         } catch (err: any) {
@@ -733,9 +751,11 @@ export default function BookServiceList() {
                         <DialogTitle className="text-2xl font-bold">Book Services</DialogTitle>
                     </DialogHeader>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Service Details */}
-                        <div>
+                                        <form onSubmit={handleSubmit} className="space-y-6">
+                                                <div className="relative">
+                                                    <div className={submitting ? "pointer-events-none filter blur-sm" : ""}>
+                                                {/* Service Details */}
+                                                <div>
                             <h3 className="text-lg font-semibold mb-3">SERVICE DETAILS</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
@@ -929,12 +949,51 @@ export default function BookServiceList() {
                                     <Label htmlFor="mulkiyaUpload">Mulkiya (optional)</Label>
                                     <Input
                                         id="mulkiyaUpload"
+                                        className='cursor-pointer'
                                         type="file"
                                         accept="image/*"
-                                        onChange={(e) => setMulkiyaFile(e.target.files?.[0] || null)}
+                                        multiple
+                                        ref={mulkiyaInputRef}
+                                        onChange={async (e) => {
+                                            const fileList = e.target.files;
+                                            if (!fileList || fileList.length === 0) return;
+                                            const newFiles = Array.from(fileList);
+                                            setMulkiyaFiles((prev) => [...prev, ...newFiles]);
+                                            const readers = newFiles.map((file) =>
+                                                new Promise<string>((resolve) => {
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => resolve(reader.result as string);
+                                                    reader.readAsDataURL(file);
+                                                })
+                                            );
+                                            const results = await Promise.all(readers);
+                                            setMulkiyaPreviews((prev) => [...prev, ...results]);
+                                            if (mulkiyaInputRef.current) mulkiyaInputRef.current.value = '';
+                                        }}
                                     />
-                                    {mulkiyaFile && (
-                                        <p className="text-xs text-gray-600 mt-1">Selected: {mulkiyaFile.name}</p>
+                                    {mulkiyaPreviews.length > 0 && (
+                                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {mulkiyaPreviews.map((src, idx) => (
+                                                <div key={idx} className="relative">
+                                                    <img
+                                                        src={src}
+                                                        alt={`Mulkiya preview ${idx + 1}`}
+                                                        className="w-full h-24 object-cover rounded border cursor-pointer"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Remove image"
+                                                        onClick={() => {
+                                                            setMulkiyaFiles((prev) => prev.filter((_, i) => i !== idx));
+                                                            setMulkiyaPreviews((prev) => prev.filter((_, i) => i !== idx));
+                                                        }}
+                                                        className="absolute -top-2 -right-2 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -948,13 +1007,8 @@ export default function BookServiceList() {
                             </p>
                         </div>
 
-
-
-
-
-
-                        {/* Submit Button */}
-                        <div className="flex flex-col sm:flex-row gap-3">
+                                                {/* Submit Button */}
+                                                <div className="flex flex-col sm:flex-row gap-3">
                             <Button
                                 type="submit"
                                 className="flex-1 bg-orange-600 hover:bg-orange-700"
@@ -965,11 +1019,22 @@ export default function BookServiceList() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setShowBookingForm(false)}
+                                                                onClick={() => setShowBookingForm(false)}
+                                                                disabled={submitting}
                             >
                                 Close
                             </Button>
                         </div>
+                                                    </div>
+                                                    {submitting && (
+                                                        <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+                                                            <div className="flex flex-col items-center">
+                                                                <div className="h-10 w-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                                                                <p className="mt-3 text-sm font-semibold text-orange-700">Booking...</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                     </form>
                 </DialogContent>
             </Dialog>

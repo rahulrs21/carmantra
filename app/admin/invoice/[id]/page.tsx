@@ -123,6 +123,9 @@ export default function InvoiceDetails() {
       doc.setTextColor(75, 85, 99);
       doc.text(`Type: ${invoice.vehicleDetails.type || ''}`, 144, startY + 19);
       doc.text(`Plate: ${invoice.vehicleDetails.plate || ''}`, 144, startY + 25);
+      if (invoice.vehicleDetails.vin) {
+        doc.text(`VIN: ${invoice.vehicleDetails.vin}`, 144, startY + 31);
+      }
     }
     
     // Service Category Banner
@@ -394,6 +397,9 @@ export default function InvoiceDetails() {
         doc.setTextColor(75, 85, 99);
         doc.text(`Type: ${invoice.vehicleDetails.type || ''}`, 144, startY + 19);
         doc.text(`Plate: ${invoice.vehicleDetails.plate || ''}`, 144, startY + 25);
+        if (invoice.vehicleDetails.vin) {
+          doc.text(`VIN: ${invoice.vehicleDetails.vin}`, 144, startY + 31);
+        }
       }
       
       // Service Category Banner
@@ -689,6 +695,9 @@ export default function InvoiceDetails() {
                 )}
                 {invoice.vehicleDetails.plate && (
                   <p className="text-gray-600">Plate: {invoice.vehicleDetails.plate}</p>
+                )}
+                {invoice.vehicleDetails.vin && (
+                  <p className="text-gray-600">VIN: {invoice.vehicleDetails.vin}</p>
                 )}
               </div>
             </div>

@@ -87,7 +87,8 @@ export default function InvoicesPage() {
         (inv.customerName || '').toLowerCase().includes(t) ||
         (inv.customerEmail || '').toLowerCase().includes(t) ||
         (inv.customerMobile || '').toLowerCase().includes(t) ||
-        (inv.invoiceNumber || '').toLowerCase().includes(t)
+        (inv.invoiceNumber || '').toLowerCase().includes(t) ||
+        (inv.vehicleDetails?.vin || '').toLowerCase().includes(t)
       ));
     }
 
@@ -362,6 +363,9 @@ export default function InvoicesPage() {
                       <div className="text-sm font-medium mt-1 break-words">{inv.customerName || 'Unknown'}</div>
                       <div className="text-xs text-gray-500 break-words">{inv.customerEmail}</div>
                       <div className="text-xs text-gray-400 break-words">{inv.customerMobile}</div>
+                      {inv.vehicleDetails?.vin && (
+                        <div className="text-xs text-gray-500 break-words">VIN: {inv.vehicleDetails.vin}</div>
+                      )}
                     </div>
                     <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
                       inv.paymentStatus === 'paid'
@@ -460,6 +464,9 @@ export default function InvoicesPage() {
                       <td className="px-4 py-3">
                         <div className="font-medium">{inv.customerName}</div>
                         <div className="text-xs text-gray-500">{inv.invoiceNumber}</div>
+                        {inv.vehicleDetails?.vin && (
+                          <div className="text-xs text-gray-500">VIN: {inv.vehicleDetails.vin}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-medium">AED {(inv.total || 0).toFixed(2)}</td>
                       <td className="px-4 py-3">

@@ -87,7 +87,8 @@ export default function QuotationsPage() {
         (qt.customerName || '').toLowerCase().includes(t) ||
         (qt.customerEmail || '').toLowerCase().includes(t) ||
         (qt.customerMobile || '').toLowerCase().includes(t) ||
-        (qt.quotationNumber || '').toLowerCase().includes(t)
+        (qt.quotationNumber || '').toLowerCase().includes(t) ||
+        (qt.vehicleDetails?.vin || '').toLowerCase().includes(t)
       ));
     }
 
@@ -364,6 +365,9 @@ export default function QuotationsPage() {
                       <div className="text-sm font-medium mt-1 break-words">{qt.customerName || 'Unknown'}</div>
                       <div className="text-xs text-gray-500 break-words">{qt.customerEmail}</div>
                       <div className="text-xs text-gray-400 break-words">{qt.customerMobile}</div>
+                      {qt.vehicleDetails?.vin && (
+                        <div className="text-xs text-gray-500 break-words">VIN: {qt.vehicleDetails.vin}</div>
+                      )}
                     </div>
                     <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
                       qt.status === 'accepted'
@@ -464,6 +468,9 @@ export default function QuotationsPage() {
                       <td className="px-4 py-3">
                         <div className="font-medium">{qt.customerName}</div>
                         <div className="text-xs text-gray-500">{qt.quotationNumber}</div>
+                        {qt.vehicleDetails?.vin && (
+                          <div className="text-xs text-gray-500">VIN: {qt.vehicleDetails.vin}</div>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-medium">AED {(qt.total || 0).toFixed(2)}</td>
                       <td className="px-4 py-3">

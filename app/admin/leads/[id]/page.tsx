@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc, updateDoc, addDoc, collection, Timestamp, query, where, getDocs, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -42,6 +43,8 @@ export default function LeadDetailsPage() {
     modelName: '',
     numberPlate: '',
     fuelType: '',
+    vinNumber: '',
+    mulkiyaUrl: '',
     country: '',
     state: '',
     city: '',
@@ -50,9 +53,12 @@ export default function LeadDetailsPage() {
   const [bookingStatus, setBookingStatus] = useState<string | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
-  const [selectedTime, setSelectedTime] = useState('09:00');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTime, setSelectedTime] = useState('');
   const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
+  const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
+  const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -113,6 +119,27 @@ export default function LeadDetailsPage() {
   function generateJobCardNo() {
     return 'J' + Date.now().toString().slice(-6);
   }
+
+  const handleMulkiyaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newFiles = Array.from(files);
+    setMulkiyaFiles((prev) => [...prev, ...newFiles]);
+
+    newFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setMulkiyaPreview((prev) => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeMulkiya = (index: number) => {
+    setMulkiyaFiles((prev) => prev.filter((_, i) => i !== index));
+    setMulkiyaPreview((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const timeSlots = [
     '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -281,6 +308,23 @@ export default function LeadDetailsPage() {
       // Create booking
       const jobCardNo = generateJobCardNo();
       
+      // Upload mulkiya images if provided
+      let uploadedMulkiyaUrls: string[] = [];
+      if (mulkiyaFiles.length > 0) {
+        setMulkiyaUploading(true);
+        setBookingStatus('Uploading mulkiya images...');
+        
+        for (const file of mulkiyaFiles) {
+          const storageRef = ref(storage, `mulkiya/${jobCardNo}/${file.name}-${Date.now()}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          uploadedMulkiyaUrls.push(url);
+        }
+        
+        setMulkiyaUploading(false);
+        setBookingStatus('Creating booking...');
+      }
+      
       const bookingRef = await addDoc(collection(db, 'bookedServices'), {
         jobCardNo,
         category: bookingForm.category,
@@ -298,6 +342,8 @@ export default function LeadDetailsPage() {
         modelName: bookingForm.modelName,
         numberPlate: bookingForm.numberPlate,
         fuelType: bookingForm.fuelType,
+        vinNumber: bookingForm.vinNumber,
+        mulkiyaUrl: uploadedMulkiyaUrls.length > 0 ? JSON.stringify(uploadedMulkiyaUrls) : bookingForm.mulkiyaUrl,
         preInspection: {
           message: '',
           images: [],
@@ -527,141 +573,214 @@ export default function LeadDetailsPage() {
                           </div>
                         </div>
                       </div>
-
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Service Category *</label>
-                        <select
-                          required
-                          value={bookingForm.category}
-                          onChange={(e) => setBookingForm({...bookingForm, category: e.target.value})}
-                          className="w-full border rounded px-3 py-2 text-sm"
-                        >
-                          <option value="">Select Service</option>
-                          <option value="ppf-wrapping">PPF Wrapping</option>
-                          <option value="ceramic-coating">Ceramic Coating</option>
-                          <option value="car-tinting">Car Tinting</option>
-                          <option value="car-wash">Car Wash</option>
-                          <option value="car-polishing">Car Polishing</option>
-                          <option value="car-insurance">Car Insurance</option>
-                          <option value="car-passing">Car Passing</option>
-                          <option value="pre-purchase-inspection">Pre-Purchase Inspection</option>
-                          <option value="instant-help">Instant Help</option>
-                        </select>
-                      </div>
                     </div>
 
-                    {/* Vehicle Details */}
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-sm text-gray-700">Vehicle Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Show remaining fields only after date and time are selected */}
+                    {selectedDate && selectedTime ? (
+                      <>
                         <div>
-                          <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
+                          <label className="block text-xs text-gray-600 mb-1">Service Category *</label>
                           <select
-                            value={bookingForm.vehicleType}
-                            onChange={(e) => setBookingForm({...bookingForm, vehicleType: e.target.value})}
+                            required
+                            value={bookingForm.category}
+                            onChange={(e) => setBookingForm({...bookingForm, category: e.target.value})}
                             className="w-full border rounded px-3 py-2 text-sm"
                           >
-                            <option value="">Select Type</option>
-                            <option value="sedan">Sedan</option>
-                            <option value="suv">SUV</option>
-                            <option value="hatchback">Hatchback</option>
-                            <option value="coupe">Coupe</option>
-                            <option value="truck">Truck</option>
+                            <option value="">Select Service</option>
+                            <option value="ppf-wrapping">PPF Wrapping</option>
+                            <option value="ceramic-coating">Ceramic Coating</option>
+                            <option value="car-tinting">Car Tinting</option>
+                            <option value="car-wash">Car Wash</option>
+                            <option value="car-polishing">Car Polishing</option>
+                            <option value="car-insurance">Car Insurance</option>
+                            <option value="car-passing">Car Passing</option>
+                            <option value="pre-purchase-inspection">Pre-Purchase Inspection</option>
+                            <option value="instant-help">Instant Help</option>
                           </select>
                         </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Brand</label>
-                          <input
-                            type="text"
-                            value={bookingForm.vehicleBrand}
-                            onChange={(e) => setBookingForm({...bookingForm, vehicleBrand: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="e.g., BMW, Toyota"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Model</label>
-                          <input
-                            type="text"
-                            value={bookingForm.modelName}
-                            onChange={(e) => setBookingForm({...bookingForm, modelName: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="e.g., X5, Camry"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Number Plate</label>
-                          <input
-                            type="text"
-                            value={bookingForm.numberPlate}
-                            onChange={(e) => setBookingForm({...bookingForm, numberPlate: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="e.g., ABC123"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
-                          <select
-                            value={bookingForm.fuelType}
-                            onChange={(e) => setBookingForm({...bookingForm, fuelType: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                          >
-                            <option value="">Select Fuel</option>
-                            <option value="petrol">Petrol</option>
-                            <option value="diesel">Diesel</option>
-                            <option value="electric">Electric</option>
-                            <option value="hybrid">Hybrid</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Address Details */}
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-sm text-gray-700">Address Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Country</label>
-                          <input
-                            type="text"
-                            value={bookingForm.country}
-                            onChange={(e) => setBookingForm({...bookingForm, country: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="e.g., United Arab Emirates"
-                          />
+                        {/* Vehicle Details */}
+                        <div className="space-y-3">
+                          <h3 className="font-semibold text-sm text-gray-700">Vehicle Details</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
+                              <select
+                                value={bookingForm.vehicleType}
+                                onChange={(e) => setBookingForm({...bookingForm, vehicleType: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                              >
+                                <option value="">Select Type</option>
+                                <option value="sedan">Sedan</option>
+                                <option value="suv">SUV</option>
+                                <option value="hatchback">Hatchback</option>
+                                <option value="coupe">Coupe</option>
+                                <option value="truck">Truck</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Brand</label>
+                              <input
+                                type="text"
+                                value={bookingForm.vehicleBrand}
+                                onChange={(e) => setBookingForm({...bookingForm, vehicleBrand: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., BMW, Toyota"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Model</label>
+                              <input
+                                type="text"
+                                value={bookingForm.modelName}
+                                onChange={(e) => setBookingForm({...bookingForm, modelName: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., X5, Camry"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Number Plate</label>
+                              <input
+                                type="text"
+                                value={bookingForm.numberPlate}
+                                onChange={(e) => setBookingForm({...bookingForm, numberPlate: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., ABC123"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
+                              <select
+                                value={bookingForm.fuelType}
+                                onChange={(e) => setBookingForm({...bookingForm, fuelType: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                              >
+                                <option value="">Select Fuel</option>
+                                <option value="petrol">Petrol</option>
+                                <option value="diesel">Diesel</option>
+                                <option value="electric">Electric</option>
+                                <option value="hybrid">Hybrid</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">VIN (optional)</label>
+                              <input
+                                type="text"
+                                value={bookingForm.vinNumber}
+                                onChange={(e) => setBookingForm({ ...bookingForm, vinNumber: e.target.value })}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="Enter VIN"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-xs text-gray-600 mb-1">Mulkiya Images (optional)</label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleMulkiyaUpload}
+                                className="w-full border rounded px-3 py-2 text-sm bg-white"
+                              />
+                              {mulkiyaUploading && (
+                                <p className="text-[11px] text-gray-600 mt-1">Uploading mulkiya images…</p>
+                              )}
+                              
+                              {/* Preview uploaded images */}
+                              {mulkiyaPreview.length > 0 && (
+                                <div className="mt-3">
+                                  <p className="text-xs text-gray-600 mb-2">Selected Images ({mulkiyaPreview.length}):</p>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {mulkiyaPreview.map((preview, idx) => (
+                                      <div key={idx} className="relative group">
+                                        <img
+                                          src={preview}
+                                          alt={`Mulkiya ${idx + 1}`}
+                                          className="w-full h-24 object-cover rounded border"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => removeMulkiya(idx)}
+                                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {bookingForm.mulkiyaUrl && (
+                                <div className="flex items-center gap-3 text-xs text-gray-700 mt-2">
+                                  <span className="font-semibold">Current:</span>
+                                  <a
+                                    href={bookingForm.mulkiyaUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-orange-600 underline"
+                                  >
+                                    View Mulkiya
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">State</label>
-                          <input
-                            type="text"
-                            value={bookingForm.state}
-                            onChange={(e) => setBookingForm({...bookingForm, state: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="e.g., Dubai"
-                          />
+
+                        {/* Address Details */}
+                        <div className="space-y-3">
+                          <h3 className="font-semibold text-sm text-gray-700">Address Details</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Country</label>
+                              <input
+                                type="text"
+                                value={bookingForm.country}
+                                onChange={(e) => setBookingForm({...bookingForm, country: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., United Arab Emirates"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">State</label>
+                              <input
+                                type="text"
+                                value={bookingForm.state}
+                                onChange={(e) => setBookingForm({...bookingForm, state: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., Dubai"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">City</label>
+                              <input
+                                type="text"
+                                value={bookingForm.city}
+                                onChange={(e) => setBookingForm({...bookingForm, city: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., Dubai"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-xs text-gray-600 mb-1">Address</label>
+                              <input
+                                type="text"
+                                value={bookingForm.address}
+                                onChange={(e) => setBookingForm({...bookingForm, address: e.target.value})}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="Full address"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">City</label>
-                          <input
-                            type="text"
-                            value={bookingForm.city}
-                            onChange={(e) => setBookingForm({...bookingForm, city: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="e.g., Dubai"
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <label className="block text-xs text-gray-600 mb-1">Address</label>
-                          <input
-                            type="text"
-                            value={bookingForm.address}
-                            onChange={(e) => setBookingForm({...bookingForm, address: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="Full address"
-                          />
-                        </div>
+                      </>
+                    ) : (
+                      <div className="p-4 border-2 border-dashed border-orange-300 rounded-lg bg-orange-50 text-center">
+                        <p className="text-sm text-orange-800 font-medium">
+                          📅 Please select a date and time to continue
+                        </p>
                       </div>
-                    </div>
+                    )}
 
                     {/* Pre-Inspection is captured on the booking detail page after scheduling. */}
 
