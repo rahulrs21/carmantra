@@ -52,8 +52,18 @@ export default function UsersPage() {
       setLoading(false);
     });
 
+    // Set current user as online
+    if (currentUser?.uid) {
+      updateDoc(doc(db, 'users', currentUser.uid), {
+        isOnline: true,
+        lastLogin: Timestamp.now(),
+      }).catch(() => {
+        // User doc might not exist yet
+      });
+    }
+
     return () => unsubscribe();
-  }, []);
+  }, [currentUser?.uid]);
 
   const handleOpenDialog = (user?: UserAccount) => {
     if (user) {
@@ -151,6 +161,7 @@ export default function UsersPage() {
             displayName: formData.displayName,
             role: formData.role,
             status: 'pending',
+            isOnline: false,
             permissions: useCustomPermissions ? formData.customPermissions : DEFAULT_PERMISSIONS[formData.role],
             inviteToken,
             inviteExpires,
@@ -181,6 +192,7 @@ export default function UsersPage() {
               displayName: formData.displayName,
               role: formData.role,
               status: 'active',
+              isOnline: true,
               permissions: DEFAULT_PERMISSIONS[formData.role],
               createdAt: Timestamp.now(),
               createdBy: currentUser?.uid,
@@ -365,9 +377,34 @@ export default function UsersPage() {
                 {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-gray-900">{user.displayName || 'No name'}</div>
-                        <div className="text-sm text-gray-500">{user.email}</div>
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className="relative">
+                          {user.photoURL ? (
+                            <img
+                              src={user.photoURL}
+                              alt={user.displayName || user.email}
+                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-200"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-semibold text-sm">
+                              {(user.displayName || user.email)
+                                .split(' ')
+                                .map((n) => n[0])
+                                .join('')
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </div>
+                          )}
+                          {/* Online Status Indicator - Only show when online */}
+                          {user.isOnline && (
+                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{user.displayName || 'No name'}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">

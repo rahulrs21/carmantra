@@ -1,4 +1,5 @@
 "use client";
+import React from 'react';
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -11,8 +12,12 @@ import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import QuotationForm from '@/components/admin/QuotationForm';
 import { useUser } from '@/lib/userContext';
+import { saveContactPerson, listCustomers } from '@/lib/firestore/customers';
 
 export default function BookServiceDetails() {
+    const [paymentStatus, setPaymentStatus] = React.useState('full');
+    const [partialPaidAmount, setPartialPaidAmount] = React.useState('');
+      const [partialPaymentNotes, setPartialPaymentNotes] = React.useState('');
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
@@ -32,6 +37,47 @@ export default function BookServiceDetails() {
   const [discount, setDiscount] = useState(0);
   const [paymentTerms, setPaymentTerms] = useState('cash');
   const [paymentTermsOther, setPaymentTermsOther] = useState('');
+
+  // --- Billing Modal Persistence ---
+  const BILLING_STATE_KEY = `billingState-${service?.id || ''}`;
+  useEffect(() => {
+    if (!service?.id) return;
+    const saved = localStorage.getItem(BILLING_STATE_KEY);
+    if (saved) {
+      try {
+        const state = JSON.parse(saved);
+        if (typeof state.showBilling === 'boolean') setShowBilling(state.showBilling);
+        if (Array.isArray(state.billingItems)) setBillingItems(state.billingItems);
+        if (typeof state.laborCharges === 'number') setLaborCharges(state.laborCharges);
+        if (typeof state.discount === 'number') setDiscount(state.discount);
+        if (typeof state.paymentTerms === 'string') setPaymentTerms(state.paymentTerms);
+        if (typeof state.paymentStatus === 'string') setPaymentStatus(state.paymentStatus);
+        if (typeof state.partialPaidAmount === 'string') setPartialPaidAmount(state.partialPaidAmount);
+        if (typeof state.paymentTermsOther === 'string') setPaymentTermsOther(state.paymentTermsOther);
+        if (typeof state.partialPaymentNotes === 'string') setPartialPaymentNotes(state.partialPaymentNotes);
+      } catch {}
+    }
+  }, [service?.id]);
+
+  useEffect(() => {
+    if (!service?.id) return;
+    const state = {
+      showBilling,
+      billingItems,
+      laborCharges,
+      discount,
+      paymentTerms,
+      paymentStatus,
+      partialPaidAmount,
+      paymentTermsOther,
+      partialPaymentNotes,
+    };
+    localStorage.setItem(BILLING_STATE_KEY, JSON.stringify(state));
+  }, [showBilling, billingItems, laborCharges, discount, paymentTerms, paymentStatus, partialPaidAmount, paymentTermsOther, partialPaymentNotes, service?.id]);
+
+  const clearBillingState = () => {
+    if (service?.id) localStorage.removeItem(BILLING_STATE_KEY);
+  };
   const [quotation, setQuotation] = useState<any | null>(null);
   const [quotationLoading, setQuotationLoading] = useState(true);
   const [showQuotationModal, setShowQuotationModal] = useState(false);
@@ -45,7 +91,32 @@ export default function BookServiceDetails() {
   const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
   const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
   const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
-  const [editForm, setEditForm] = useState({
+  type EditFormType = {
+    companyName: string;
+    contactName: string;
+    contactPhone: string;
+    contactEmail: string;
+    poRef: string;
+    companyVat: string;
+    servicesHistory: string;
+    firstName: string;
+    lastName: string;
+    mobileNo: string;
+    email: string;
+    country: string;
+    state: string;
+    city: string;
+    address: string;
+    source: string;
+    vehicleType: string;
+    vehicleBrand: string;
+    modelName: string;
+    numberPlate: string;
+    fuelType: string;
+    vinNumber: string;
+    mulkiyaUrl: string;
+  };
+  const [editForm, setEditForm] = useState<EditFormType>({
     companyName: '',
     contactName: '',
     contactPhone: '',
@@ -152,24 +223,124 @@ export default function BookServiceDetails() {
 
   function getDateTimeError(dateTimeString: string): string | null {
     if (!dateTimeString) return null;
-
     const selectedDate = new Date(dateTimeString);
     const day = selectedDate.getDay();
     const hours = selectedDate.getHours();
-
     if (day === 0 || day === 6) {
       return 'Bookings not available on weekends';
     }
-
     if (selectedDate < new Date()) {
       return 'Cannot book past times';
     }
-
     if (hours < 9 || hours >= 18) {
       return 'Bookings available only 9 AM - 6 PM';
     }
-
     return null;
+  }
+
+  // Save invoice as pending (partial payment)
+  async function handleBillingSavePending() {
+    const totals = calculateBillingTotal();
+
+    // Validate
+    if (totals.grandTotal === 0) {
+      setStatus('Please add service charges');
+      return;
+    }
+
+    const hasEmptyItems = billingItems.some(item => !item.description || item.rate === 0);
+    if (hasEmptyItems) {
+      setStatus('Please fill all service items');
+      return;
+    }
+
+    if (partialPaidAmount === '' || isNaN(Number(partialPaidAmount)) || Number(partialPaidAmount) < 100) {
+      setStatus('Please enter a valid partial paid amount (min 100 AED)');
+      return;
+    }
+
+    setStatus('Creating pending invoice...');
+
+    try {
+      const actorId = user?.uid || 'unknown';
+      const actorEmail = user?.email || 'unknown';
+
+      // Generate invoice number
+      const invoiceNumber = `INV-${Date.now()}`;
+
+      // Create invoice document with partial payment
+      const invoiceData = {
+        isB2B: service.customerType?.toLowerCase() === 'b2b',
+        customerType: service.customerType || 'b2c',
+        companyName: service.companyName || '',
+        contactName: service.contactName || '',
+        contactEmail: service.contactEmail || '',
+        contactPhone: service.contactPhone || '',
+        invoiceNumber,
+        serviceBookingId: id,
+        jobCardNo: service.jobCardNo || '',
+        customerName: `${service.firstName} ${service.lastName}`,
+        customerEmail: service.email || '',
+        customerMobile: service.mobileNo || '',
+        vehicleDetails: {
+          type: service.vehicleType || '',
+          brand: service.vehicleBrand || '',
+          model: service.modelName || '',
+          plate: service.numberPlate || '',
+        },
+        vehicles: service.customerType?.toLowerCase() === 'b2b' && Array.isArray(service.vehicles) ? service.vehicles : [],
+        serviceCategory: service.category || '',
+        items: billingItems,
+        laborCharges,
+        itemsTotal: totals.itemsTotal,
+        subtotal: totals.subtotal,
+        taxRate: 5,
+        taxAmount: totals.tax,
+        discount,
+        total: totals.grandTotal,
+        paymentStatus: 'partial',
+        paymentTerms,
+        paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        partialPaidAmount: Number(partialPaidAmount),
+        notes: partialPaymentNotes || '',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        createdBy: actorId,
+        createdByEmail: actorEmail,
+      };
+
+      const docRef = await addDoc(collection(db, 'invoices'), invoiceData);
+
+      // Mark service as pending (not completed)
+      await updateDoc(doc(db, 'bookedServices', id!), {
+        status: 'pending',
+        invoiceId: docRef.id,
+        paymentStatus: 'partial',
+        paymentTerms,
+        paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        partialPaidAmount: Number(partialPaidAmount),
+        updatedAt: Timestamp.now(),
+        updatedBy: actorId,
+        updatedByEmail: actorEmail,
+        updatedByName: currentAdminName,
+      });
+
+      setService({
+        ...service,
+        status: 'pending',
+        invoiceId: docRef.id,
+        paymentStatus: 'partial',
+        paymentTerms,
+        paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        partialPaidAmount: Number(partialPaidAmount),
+      });
+      setCreatedInvoiceId(docRef.id);
+      setStatus('✓ Pending invoice created!');
+      setShowBilling(false);
+    } catch (err: any) {
+      safeConsoleError('Billing save pending error', err);
+      setStatus('Failed to create pending invoice: ' + err.message);
+    }
   }
 
   function toDate(value: any): Date | null {
@@ -268,6 +439,24 @@ export default function BookServiceDetails() {
       (err) => {
         safeConsoleError('Quotation fetch error', err);
         setQuotationLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [id]);
+
+  // Fetch invoices for this service booking
+  useEffect(() => {
+    if (!id) return;
+    const invoiceQuery = query(collection(db, 'invoices'), where('serviceBookingId', '==', id));
+    const unsubscribe = onSnapshot(
+      invoiceQuery,
+      (snap) => {
+        const invoices = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        setService((prev: any) => prev ? { ...prev, invoices } : null);
+      },
+      (err) => {
+        safeConsoleError('Invoice fetch error', err);
       }
     );
 
@@ -388,8 +577,24 @@ export default function BookServiceDetails() {
     setBillingItems(quotedItems);
     setLaborCharges(Number(quotation.laborCharges) || 0);
     setDiscount(Number(quotation.discount) || 0);
-    setPaymentTerms('cash');
-    setPaymentTermsOther('');
+    
+    // Load payment terms from existing invoice if available
+    if (Array.isArray(service.invoices) && service.invoices.length > 0) {
+      const lastInvoice = service.invoices[service.invoices.length - 1];
+      setPaymentTerms(lastInvoice.paymentTerms || 'cash');
+      setPaymentTermsOther(lastInvoice.paymentTermsOther || '');
+      setPaymentStatus(lastInvoice.paymentStatus || 'full');
+      if (lastInvoice.partialPaidAmount) {
+        setPartialPaidAmount(lastInvoice.partialPaidAmount.toString());
+      }
+    } else {
+      // Set defaults only if no existing invoice
+      setPaymentTerms('cash');
+      setPaymentTermsOther('');
+      setPaymentStatus('full');
+      setPartialPaidAmount('');
+    }
+    
     setShowBilling(true);
   }
 
@@ -550,6 +755,7 @@ export default function BookServiceDetails() {
 
       // Create invoice document
       const invoiceData = {
+        isB2B: service.customerType?.toLowerCase() === 'b2b',
         customerType: service.customerType || 'b2c',
         companyName: service.companyName || '',
         contactName: service.contactName || '',
@@ -567,6 +773,7 @@ export default function BookServiceDetails() {
           model: service.modelName || '',
           plate: service.numberPlate || '',
         },
+        vehicles: service.customerType?.toLowerCase() === 'b2b' && Array.isArray(service.vehicles) ? service.vehicles : [],
         serviceCategory: service.category || '',
         items: billingItems,
         laborCharges,
@@ -579,6 +786,7 @@ export default function BookServiceDetails() {
         paymentStatus: 'paid',
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        notes: partialPaymentNotes || '',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         createdBy: actorId,
@@ -756,6 +964,32 @@ export default function BookServiceDetails() {
       const payload = isB2b ? { ...b2bFields, ...commonFields } : { ...b2cFields, ...commonFields };
 
       await updateDoc(doc(db, 'bookedServices', id!), payload);
+      
+      // For B2B bookings, save/update the contact person in the company customer's sub-collection
+      if (isB2b && editForm.companyName && editForm.contactName) {
+        try {
+          // Find the company customer
+          const customers = await listCustomers();
+          const companyCustomer = customers.find((c: any) => 
+            c.companyName?.toLowerCase() === editForm.companyName.toLowerCase() &&
+            c.customerType === 'b2b'
+          );
+          
+          if (companyCustomer?.id) {
+            // Save the contact person under the company customer
+            await saveContactPerson(companyCustomer.id, {
+              name: editForm.contactName,
+              email: editForm.contactEmail,
+              phone: editForm.contactPhone,
+              title: '', // Can be added to edit form later
+            });
+          }
+        } catch (err: any) {
+          safeConsoleError('Contact person save error', err);
+          // Don't fail the whole operation, just log it
+        }
+      }
+      
       setService((prev: any) => prev ? { ...prev, ...payload } : prev);
       setStatus('✓ Details updated successfully');
       setEditing(false);
@@ -1196,7 +1430,7 @@ export default function BookServiceDetails() {
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Customer Details</h2>
-              {!editing && service.status !== 'cancelled' && (
+              {!editing && service.status !== 'cancelled' && service.status !== 'completed' && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1725,7 +1959,7 @@ export default function BookServiceDetails() {
                                   <span className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-800">Category: {vehicle.category}</span>
                                 ) : null}
                               </div>
-                              {service.status !== 'cancelled' ? (
+                              {service.status !== 'cancelled' && service.status !== 'completed' ? (
                                 isEditingVehicle ? (
                                   <div className="flex items-center gap-2">
                                     <Button
@@ -2269,9 +2503,10 @@ export default function BookServiceDetails() {
               <p className="text-xs text-gray-500">Invoice unlocks after the quotation is accepted.</p>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  className={`flex-1 ${isCancelled ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}
+                  className={`flex-1 ${isCancelled || service.status === 'completed' ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}
                   onClick={() => setShowQuotationModal(true)}
-                  disabled={isCancelled}
+                  disabled={isCancelled || service.status === 'completed'}
+                  title={service.status === 'completed' ? 'Cannot update quotation - work is completed' : ''}
                 >
                   {quotation ? 'Update Quotation' : 'Create Quotation'}
                 </Button>
@@ -2315,7 +2550,7 @@ export default function BookServiceDetails() {
                     disabled={!canInvoice}
                     title={canInvoice ? 'Create invoice and mark complete' : 'Requires accepted quotation'}
                   >
-                    {canInvoice ? 'Mark Complete' : 'Mark Complete (needs quote)'}
+                    {canInvoice ? 'Create Invoice & Complete Service' : 'Mark Complete (needs quote)'}
                   </Button>
                   {!canInvoice && (
                     <p className="text-[11px] text-red-600">Accept the quotation before generating an invoice.</p>
@@ -2345,7 +2580,51 @@ export default function BookServiceDetails() {
           </Card>
 
           {/* Invoice Section */}
-          {service.invoiceId && (
+          {Array.isArray(service.invoices) && service.invoices.length > 0 && (
+            <Card className="p-0 overflow-hidden border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+              <div className="flex items-center gap-2 px-6 pt-6 pb-2">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 className="font-semibold text-gray-900">Invoices Generated</h3>
+              </div>
+              <div className="text-sm text-gray-600 px-6 pb-2">
+                {service.invoices.length} invoice{service.invoices.length > 1 ? 's' : ''} generated for this service.
+              </div>
+              <div className="divide-y divide-green-100">
+                {service.invoices.map((inv: any, idx: number) => {
+                  const paid = inv.partialPaidAmount ? parseFloat(inv.partialPaidAmount) : 0;
+                  const total = inv.total ? parseFloat(inv.total) : 0;
+                  const isPartial = inv.paymentStatus === 'partial';
+                  const date = inv.createdAt ? new Date(inv.createdAt) : null;
+                  return (
+                    <div key={inv.id || idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-6 py-4 bg-white hover:bg-green-50 transition-colors">
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                        <span className="font-medium text-gray-800 truncate">Invoice #{inv.invoiceNumber || inv.id}</span>
+                        {date && (
+                          <span className="text-xs text-gray-500">{date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        )}
+                        {isPartial && (
+                          <span className="text-xs text-yellow-800">
+                            <span className="font-semibold">Partially Paid:</span> AED {paid.toFixed(2)} | <span className="font-semibold text-orange-700">Remaining:</span> AED {(total - paid).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <a
+                        href={`/admin/invoice/${inv.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm transition-colors whitespace-nowrap"
+                      >
+                        View
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+          {!service.invoices && service.invoiceId && (
             <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
               <div className="flex items-center gap-2 mb-4">
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2357,26 +2636,19 @@ export default function BookServiceDetails() {
                 An invoice has been created for this service.
               </p>
               <div className="space-y-2">
-                <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => router.push(`/admin/invoice/${service.invoiceId}`)}
+                <a
+                  href={`/admin/invoice/${service.invoiceId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center px-4 py-2 rounded font-medium transition-colors"
+                  style={{ display: 'inline-flex' }}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                   View Invoice
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full border-green-300 text-green-700 hover:bg-green-100"
-                  onClick={() => router.push(`/admin/invoice/${service.invoiceId}`)}
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Download PDF
-                </Button>
+                </a>
               </div>
             </Card>
           )}
@@ -2646,7 +2918,23 @@ export default function BookServiceDetails() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-gray-600">Customer:</span>
-                      <p className="font-medium">{service.firstName} {service.lastName}</p>
+                      <p className="font-medium">
+                        {service.firstName && service.lastName
+                          ? `${service.firstName} ${service.lastName}`
+                          : service.companyName
+                            ? service.companyName
+                            : 'N/A'}
+                        <span
+                          className={
+                            'ml-2 px-2 py-0.5 rounded text-xs font-semibold ' +
+                            (service.customerType?.toLowerCase() === 'b2b'
+                              ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                              : 'bg-blue-100 text-blue-800 border border-blue-300')
+                          }
+                        >
+                          {service.customerType?.toUpperCase() === 'B2B' ? 'B2B' : 'B2C'}
+                        </span>
+                      </p>
                     </div>
                     <div>
                       <span className="text-gray-600">Job Card:</span>
@@ -2709,8 +2997,11 @@ export default function BookServiceDetails() {
                             type="number"
                             placeholder="Qty"
                             min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateBillingItem(index, 'quantity', parseFloat(e.target.value) || 1)}
+                            value={item.quantity === 0 ? '' : item.quantity}
+                            onChange={e => {
+                              const val = e.target.value;
+                              updateBillingItem(index, 'quantity', val === '' ? 0 : parseFloat(val));
+                            }}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                           />
                         </div>
@@ -2719,9 +3010,12 @@ export default function BookServiceDetails() {
                             type="number"
                             placeholder="Rate"
                             min="0"
-                            step="0.01"
-                            value={item.rate}
-                            onChange={(e) => updateBillingItem(index, 'rate', parseFloat(e.target.value) || 0)}
+                            step="1"
+                            value={item.rate === 0 ? '' : item.rate}
+                            onChange={e => {
+                              const val = e.target.value;
+                              updateBillingItem(index, 'rate', val === '' ? 0 : parseFloat(val));
+                            }}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                           />
                         </div>
@@ -2759,10 +3053,13 @@ export default function BookServiceDetails() {
                   <input
                     type="number"
                     placeholder="Enter labor charges"
-                    min="0"
-                    step="0.01"
-                    value={laborCharges}
-                    onChange={(e) => setLaborCharges(parseFloat(e.target.value) || 0)}
+                    min="0" 
+                    value={laborCharges === 0 ? '' : laborCharges}
+                    step="1" 
+                    onChange={e => {
+                      const val = e.target.value;
+                      setLaborCharges(val === '' ? 0 : parseFloat(val));
+                    }} 
                     className="w-full px-3 py-2 border border-gray-300 rounded"
                   />
                 </div>
@@ -2777,8 +3074,11 @@ export default function BookServiceDetails() {
                     placeholder="Enter discount amount"
                     min="0"
                     step="0.01"
-                    value={discount}
-                    onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                    value={discount === 0 ? '' : discount}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDiscount(val === '' ? 0 : parseFloat(val));
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded"
                   />
                 </div>
@@ -2793,7 +3093,6 @@ export default function BookServiceDetails() {
                     onChange={(e) => {
                       const value = e.target.value;
                       setPaymentTerms(value);
-                      // This is for billing modal - payment status is always 'unpaid' initially
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded"
                   >
@@ -2804,6 +3103,64 @@ export default function BookServiceDetails() {
                     <option value="other">Other</option>
                   </select>
                 </div>
+
+                {/* Payment Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Status
+                  </label>
+                  <select
+                    value={paymentStatus || 'full'}
+                    onChange={e => {
+                      setPaymentStatus(e.target.value);
+                      if (e.target.value === 'full') setPartialPaidAmount('');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded"
+                  >
+                    <option value="full">Full Paid</option>
+                    <option value="partial">Partial Paid</option>
+                  </select>
+                </div>
+
+                {/* Partial Paid Amount */}
+                {paymentStatus === 'partial' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount Paid (Min AED 100)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={calculateBillingTotal().grandTotal}
+                      step="1"
+                      value={partialPaidAmount}
+                      onChange={e => {
+                        // Allow clearing and typing freely
+                        setPartialPaidAmount(e.target.value);
+                      }}
+                      onBlur={e => {
+                        let val = e.target.value;
+                        if (val === '' || isNaN(Number(val))) {
+                          setPartialPaidAmount('');
+                        } else {
+                          let num = parseFloat(val);
+                          if (num < 100) num = 100;
+                          if (num > calculateBillingTotal().grandTotal) num = calculateBillingTotal().grandTotal;
+                          setPartialPaidAmount(num.toString());
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded"
+                      placeholder="Enter amount paid"
+                    />
+                    {partialPaidAmount && !isNaN(Number(partialPaidAmount)) && (
+                      <div className="mt-2 text-sm">
+                        <span className="text-green-700 font-semibold">Partial amount has been paid: AED {parseFloat(partialPaidAmount).toFixed(2)}</span><br />
+                        <span className="text-orange-700 font-semibold">Remaining balance to be paid: AED {(calculateBillingTotal().grandTotal - parseFloat(partialPaidAmount)).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                  </div>
+                )}
 
                 {paymentTerms === 'other' && (
                   <div>
@@ -2826,6 +3183,17 @@ export default function BookServiceDetails() {
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-lg border border-blue-200">
                   <h3 className="font-semibold text-gray-900 mb-4">Invoice Summary</h3>
                   <div className="space-y-3">
+                    {/* General Notes field, always visible in form */}
+                    <div className="mt-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        placeholder="Add any notes for this invoice (optional)"
+                        value={partialPaymentNotes}
+                        onChange={e => setPartialPaymentNotes(e.target.value)}
+                        rows={2}
+                      />
+                    </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Items Total:</span>
                       <span className="font-medium">AED {calculateBillingTotal().itemsTotal.toFixed(2)}</span>
@@ -2850,6 +3218,18 @@ export default function BookServiceDetails() {
                       <span className="text-gray-900">Grand Total:</span>
                       <span className="text-blue-600">AED {calculateBillingTotal().grandTotal.toFixed(2)}</span>
                     </div>
+                    {paymentStatus === 'partial' && partialPaidAmount && !isNaN(Number(partialPaidAmount)) && (
+                      <>
+                        <div className="flex justify-between text-sm mt-2">
+                          <span className="text-yellow-800 font-semibold">Partial Amount Paid:</span>
+                          <span className="text-yellow-900 font-bold">AED {parseFloat(partialPaidAmount).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm mt-1">
+                          <span className="text-orange-700 font-semibold">Remaining Balance:</span>
+                          <span className="text-orange-800 font-bold">AED {(calculateBillingTotal().grandTotal - parseFloat(partialPaidAmount)).toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2862,15 +3242,78 @@ export default function BookServiceDetails() {
                   </div>
                 )}
 
-                <button
-                  onClick={handleBillingSave}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors"
-                >
-                  Save Invoice & Mark Complete
-                </button>
+                {/* Partial Payment History */}
+                {Array.isArray(service.invoices) && service.invoices.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <h4 className="font-semibold text-gray-900 mb-3 text-sm">Partial Payment History</h4>
+                    <div className="space-y-2">
+                      {service.invoices
+                        .filter((inv: any) => inv.paymentStatus === 'partial')
+                        .map((inv: any, idx: number) => {
+                          const paid = inv.partialPaidAmount ? parseFloat(inv.partialPaidAmount) : 0;
+                          const total = inv.total ? parseFloat(inv.total) : 0;
+                          const remaining = total - paid;
+                          const date = inv.createdAt ? new Date(inv.createdAt.seconds ? inv.createdAt.seconds * 1000 : inv.createdAt) : null;
+                          return (
+                            <div key={idx} className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
+                              <div className="flex justify-between items-start gap-2 mb-1">
+                                <span className="font-medium text-yellow-900">Invoice {inv.invoiceNumber}</span>
+                                <span className="text-yellow-700">{date ? date.toLocaleDateString() : 'N/A'}</span>
+                              </div>
+                              <div className="space-y-0.5 text-yellow-800">
+                                <div className="flex justify-between">
+                                  <span>Paid:</span>
+                                  <span className="font-medium">AED {paid.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Remaining:</span>
+                                  <span className="font-medium">AED {remaining.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Terms:</span>
+                                  <span className="font-medium">{inv.paymentTerms === 'card' ? 'Card' : inv.paymentTerms === 'cash' ? 'Cash' : inv.paymentTerms === 'bank' ? 'Bank' : inv.paymentTerms === 'tabby' ? 'Tabby/Tamara' : inv.paymentTermsOther || inv.paymentTerms}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {paymentStatus === 'partial' ? (
+                  <button
+                    onClick={async () => {
+                      await handleBillingSavePending();
+                      clearBillingState();
+                    }}
+                    className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 rounded-lg transition-colors"
+                    disabled={partialPaidAmount === '' || isNaN(Number(partialPaidAmount)) || Number(partialPaidAmount) < 100}
+                    title={
+                      partialPaidAmount === '' || isNaN(Number(partialPaidAmount)) || Number(partialPaidAmount) < 100
+                        ? 'Please enter a valid partial paid amount (min 100 AED) to proceed.'
+                        : undefined
+                    }
+                  >
+                    Save Invoice (Pending)
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      await handleBillingSave();
+                      clearBillingState();
+                    }}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                  >
+                    Save Invoice & Mark Complete
+                  </button>
+                )}
 
                 <button
-                  onClick={() => setShowBilling(false)}
+                  onClick={() => {
+                    setShowBilling(false);
+                    clearBillingState();
+                  }}
                   className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition-colors"
                 >
                   Cancel
@@ -2893,20 +3336,22 @@ export default function BookServiceDetails() {
             <div className="flex-1">
               <h4 className="font-semibold text-gray-900 mb-2">Invoice Created Successfully!</h4>
               <div className="flex gap-2">
-                <button
-                  onClick={() => router.push(`/admin/invoice/${createdInvoiceId}`)}
+                <a
+                  href={`/admin/invoice/${createdInvoiceId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
                 >
                   View Invoice
-                </button>
-                <button
-                  onClick={() => {
-                    router.push(`/admin/invoice/${createdInvoiceId}`);
-                  }}
+                </a>
+                <a
+                  href={`/admin/invoice/${createdInvoiceId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-sm bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded font-medium transition-colors"
                 >
                   Download PDF
-                </button>
+                </a>
               </div>
             </div>
             <button

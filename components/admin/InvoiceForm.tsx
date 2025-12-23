@@ -34,6 +34,8 @@ export default function InvoiceForm({
   const [laborCharges, setLaborCharges] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [paymentStatus, setPaymentStatus] = useState('unpaid');
+  const [partialPaidAmount, setPartialPaidAmount] = useState('');
+  const [notes, setNotes] = useState('');
   const [paymentTerms, setPaymentTerms] = useState('cash');
   const [paymentTermsOther, setPaymentTermsOther] = useState('');
   const [loading, setLoading] = useState(false);
@@ -69,8 +71,10 @@ export default function InvoiceForm({
       setLaborCharges(invoice.laborCharges || 0);
       setDiscount(invoice.discount || 0);
       setPaymentStatus(invoice.paymentStatus || 'unpaid');
+      setPartialPaidAmount(invoice.partialPaidAmount ? String(invoice.partialPaidAmount) : '');
       setPaymentTerms(invoice.paymentTerms || 'cash');
       setPaymentTermsOther(invoice.paymentTermsOther || '');
+      setNotes(invoice.notes || invoice.partialPaymentNotes || '');
     }
   }, [invoice]);
 
@@ -105,9 +109,17 @@ export default function InvoiceForm({
     }
     
     setLoading(true);
+
+    // Partial payment validation
+    if (paymentStatus === 'partial') {
+      if (partialPaidAmount === '' || isNaN(Number(partialPaidAmount)) || Number(partialPaidAmount) < 100) {
+        setMessage('Please enter a valid partial paid amount (min 100 AED)');
+        setLoading(false);
+        return;
+      }
+    }
     
     const totals = calculateTotals();
-    
     try {
       const normalizedCustomerName = customerType === 'b2b'
         ? (companyName || contactName || customerName)
@@ -141,6 +153,8 @@ export default function InvoiceForm({
         discount,
         total: totals.grandTotal,
         paymentStatus,
+        partialPaidAmount: paymentStatus === 'partial' ? Number(partialPaidAmount) : undefined,
+        notes: notes,
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
         updatedAt: Timestamp.now(),
@@ -180,8 +194,10 @@ export default function InvoiceForm({
         setLaborCharges(0);
         setDiscount(0);
         setPaymentStatus('unpaid');
+        setPartialPaidAmount('');
         setPaymentTerms('cash');
         setPaymentTermsOther('');
+        setNotes('');
         
         if (onCreated) onCreated(docRef.id);
       }
@@ -511,11 +527,57 @@ export default function InvoiceForm({
           <select
             className="w-full border border-gray-300 p-2 rounded"
             value={paymentStatus}
-            onChange={e => setPaymentStatus(e.target.value)}
+            onChange={e => {
+              setPaymentStatus(e.target.value);
+              if (e.target.value !== 'partial') setPartialPaidAmount('');
+            }}
           >
             <option value="unpaid">Unpaid</option>
             <option value="paid">Paid</option>
+            <option value="partial">Partial Paid</option>
           </select>
+          {paymentStatus === 'partial' && (
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Amount Paid (Min AED 100)</label>
+              <input
+                type="number"
+                min={0}
+                step="1"
+                className="w-full border border-gray-300 p-2 rounded"
+                value={partialPaidAmount}
+                onChange={e => setPartialPaidAmount(e.target.value)}
+                onBlur={e => {
+                  let val = e.target.value;
+                  if (val === '' || isNaN(Number(val))) {
+                    setPartialPaidAmount('');
+                  } else {
+                    let num = parseFloat(val);
+                    if (num < 100) num = 100;
+                    if (num > totals.grandTotal) num = totals.grandTotal;
+                    setPartialPaidAmount(num.toString());
+                  }
+                }}
+                placeholder="Enter amount paid"
+              />
+              {partialPaidAmount && !isNaN(Number(partialPaidAmount)) && (
+                <div className="mt-1 text-xs">
+                  <span className="text-green-700 font-semibold">Partial amount paid: AED {parseFloat(partialPaidAmount).toFixed(2)}</span><br />
+                  <span className="text-orange-700 font-semibold">Remaining: AED {(totals.grandTotal - parseFloat(partialPaidAmount)).toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          )}
+              {/* General Notes field, always visible in form */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded"
+                  placeholder="Add any notes for this invoice (optional)"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                />
+              </div>
         </div>
       </div>
 

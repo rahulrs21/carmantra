@@ -96,7 +96,7 @@ export default function ActivityHistory({ customer }: { customer: Customer; }) {
         {items.map(it => {
           const date = formatDateTime(it.date ? new Date(it.date) : undefined);
           return (
-            <li key={`${it.type}-${it.id}`} className="relative">
+            <li key={it.key} className="relative">
               <div className="absolute -left-5 top-1 w-6 h-6 rounded-full bg-white border-2 border-gray-200 flex items-center justify-center">
                 {getIcon(it.type)}
               </div>

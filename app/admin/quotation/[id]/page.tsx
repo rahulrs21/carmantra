@@ -33,23 +33,25 @@ export default function QuotationDetailPage() {
       const docSnap = await getDoc(doc(db, 'quotations', quotationId));
       if (docSnap.exists()) {
         const data = { id: docSnap.id, ...docSnap.data() } as any;
-        setQuotation(data);
-        // If B2B and vehicles missing, fetch from booking
-        if (data.customerType === 'b2b' && (!Array.isArray(data.vehicles) || data.vehicles.length === 0) && data.serviceBookingId) {
+        // Always try to fetch vehicles from booking if serviceBookingId exists
+        if (data.serviceBookingId) {
           try {
-            const bookingSnap = await getDoc(doc(db, 'bookings', data.serviceBookingId));
+            const bookingSnap = await getDoc(doc(db, 'bookedServices', data.serviceBookingId));
             if (bookingSnap.exists()) {
               const bookingData = bookingSnap.data();
               if (Array.isArray(bookingData.vehicles) && bookingData.vehicles.length > 0) {
                 setBookingVehicles(bookingData.vehicles);
+                // If quotation.vehicles is empty, patch it for PDF and edit
+                if (!Array.isArray(data.vehicles) || data.vehicles.length === 0) {
+                  data.vehicles = bookingData.vehicles;
+                }
               }
             }
           } catch (err) {
             safeConsoleError('Load booking vehicles error', err);
           }
-        } else {
-          setBookingVehicles(null);
         }
+        setQuotation(data);
       } else {
         alert('Quotation not found');
         router.push('/admin/quotation');
@@ -99,6 +101,7 @@ export default function QuotationDetailPage() {
   };
   const derivedSource = quotation ? (quotation.source || (quotation.sourceLeadId ? 'lead' : 'direct')) : 'direct';
   const sourceLabel = sourceLabelMap[derivedSource] || 'Direct booking';
+
 
   function generatePDF() {
     if (!quotation) return;
@@ -151,140 +154,141 @@ export default function QuotationDetailPage() {
     pdf.setDrawColor(200, 200, 200);
     pdf.line(leftMargin, yPos, pageWidth - rightMargin, yPos);
 
-    // Customer Information
+    // Customer and Vehicle Information (side by side)
     yPos += 10;
+    const infoStartY = yPos;
+    // Customer Info
+    let custY = infoStartY;
     pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Customer Information', leftMargin, yPos);
-
-    yPos += 7;
+    pdf.text('Customer Information', leftMargin, custY);
+    custY += 7;
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Type: ${quotation.customerType === 'b2b' ? 'B2B' : 'B2C'}`, leftMargin, yPos);
-    yPos += 5;
-    pdf.text(`Name: ${quotation.customerName || 'N/A'}`, leftMargin, yPos);
-
+    pdf.text(`Type: ${quotation.customerType === 'b2b' ? 'B2B' : 'B2C'}`, leftMargin, custY);
+    custY += 5;
+    pdf.text(`Name: ${quotation.customerName || 'N/A'}`, leftMargin, custY);
     if (quotation.customerType === 'b2b' && quotation.companyName) {
-      yPos += 5;
-      pdf.text(`Company: ${quotation.companyName}`, leftMargin, yPos);
+      custY += 5;
+      pdf.text(`Company: ${quotation.companyName}`, leftMargin, custY);
     }
-
     if (quotation.customerType === 'b2b' && quotation.contactName) {
-      yPos += 5;
-      pdf.text(`Contact: ${quotation.contactName}`, leftMargin, yPos);
+      custY += 5;
+      pdf.text(`Contact: ${quotation.contactName}`, leftMargin, custY);
     }
-
     if (quotation.customerEmail) {
-      yPos += 5;
-      pdf.text(`Email: ${quotation.customerEmail}`, leftMargin, yPos);
+      custY += 5;
+      pdf.text(`Email: ${quotation.customerEmail}`, leftMargin, custY);
     }
-
     if (quotation.customerMobile) {
-      yPos += 5;
-      pdf.text(`Mobile: ${quotation.customerMobile}`, leftMargin, yPos);
+      custY += 5;
+      pdf.text(`Mobile: ${quotation.customerMobile}`, leftMargin, custY);
     }
 
-
-    // Vehicle Information (right-aligned, supports multiple vehicles)
-    let vehicleSectionY = yPos + 10;
-    let vehicleSectionX = pageWidth / 2 + 5;
+    // Vehicle Info (right side)
+    let vehY = infoStartY;
+    const vehX = pageWidth / 2 + 5;
     pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Vehicle Information', vehicleSectionX, vehicleSectionY);
-    vehicleSectionY += 7;
+    pdf.text('Vehicle Information', vehX, vehY);
+    vehY += 7;
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    // Prefer vehicles array, then vehicleDetails array, then single vehicleDetails object
-    let vehiclesArr = Array.isArray(quotation.vehicles) && quotation.vehicles.length > 0
-      ? quotation.vehicles
-      : (Array.isArray(quotation.vehicleDetails) && quotation.vehicleDetails.length > 0
-        ? quotation.vehicleDetails
-        : null);
-    if (vehiclesArr) {
+    // Always prefer bookingVehicles if available, then vehicles, then vehicleDetails array, then single vehicleDetails object
+    let vehiclesArr = null;
+    if (Array.isArray(bookingVehicles) && bookingVehicles.length > 0) {
+      vehiclesArr = bookingVehicles;
+    } else if (Array.isArray(quotation.vehicles) && quotation.vehicles.length > 0) {
+      vehiclesArr = quotation.vehicles;
+    } else if (Array.isArray(quotation.vehicleDetails) && quotation.vehicleDetails.length > 0) {
+      vehiclesArr = quotation.vehicleDetails;
+    }
+    if (vehiclesArr && vehiclesArr.length > 0) {
       vehiclesArr.forEach((veh: any, idx: number) => {
-        if (vehicleSectionY > 260) {
+        if (vehY > 260) {
           pdf.addPage();
-          vehicleSectionY = 20;
+          vehY = 20;
         }
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`Vehicle ${idx + 1}: ${(veh.brand || '') + ' ' + (veh.model || '')}`.trim(), vehicleSectionX, vehicleSectionY);
-        vehicleSectionY += 5;
+        // Compose plate number with all possible fallbacks
+        const plateNumber = veh.vehiclePlate || veh.numberPlate || veh.plate || '';
+        pdf.text(`Vehicle ${idx + 1}: ${(veh.vehicleBrand || veh.brand || '') + ' | ' + (veh.modelName || veh.model || '') + ' | ' + plateNumber}`.trim(), vehX, vehY);
+        vehY += 5;
         pdf.setFont('helvetica', 'normal');
-        let details = [];
-        if (veh.type) details.push(`Type: ${veh.type}`);
-        if (veh.plate) details.push(`Plate: ${veh.plate}`);
-        if (veh.vin) details.push(`VIN: ${veh.vin}`);
-        if (details.length > 0) {
-          pdf.text(details.join(' | '), vehicleSectionX + 5, vehicleSectionY);
-          vehicleSectionY += 5;
-        }
-        vehicleSectionY += 2;
+        // let details = [];
+        // if (veh.vehicleType || veh.type) details.push(`Type: ${veh.vehicleType || veh.type}`);
+        // if (veh.numberPlate || veh.vehiclePlate || veh.plate) details.push(`Plate: ${veh.numberPlate || veh.vehiclePlate || veh.plate}`);
+        // if (veh.fuelType) details.push(`Fuel: ${veh.fuelType}`);
+        // if (veh.vinNumber || veh.vin) details.push(`VIN: ${veh.vinNumber || veh.vin}`);
+        // if (details.length > 0) {
+        //   pdf.text(details.join(' | '), vehX + 5, vehY);
+        //   vehY += 5;
+        // }
+        vehY += 2;
       });
-      yPos = Math.max(yPos, vehicleSectionY - 2); // keep yPos in sync for next section
     } else if (quotation.vehicleDetails && Object.values(quotation.vehicleDetails).some(v => v)) {
       const veh = quotation.vehicleDetails;
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Vehicle:', vehicleSectionX, vehicleSectionY);
-      vehicleSectionY += 5;
+      pdf.text('Vehicle:', vehX, vehY);
+      vehY += 5;
       pdf.setFont('helvetica', 'normal');
       if (veh.brand || veh.model) {
-        pdf.text(`${veh.brand || ''} ${veh.model || ''}`.trim(), vehicleSectionX + 5, vehicleSectionY);
-        vehicleSectionY += 5;
+        pdf.text(`${veh.brand || ''} ${veh.model || ''}`.trim(), vehX + 5, vehY);
+        vehY += 5;
       }
       if (veh.type) {
-        pdf.text(`Type: ${veh.type}`, vehicleSectionX + 5, vehicleSectionY);
-        vehicleSectionY += 5;
+        pdf.text(`Type: ${veh.type}`, vehX + 5, vehY);
+        vehY += 5;
       }
       if (veh.plate) {
-        pdf.text(`Plate: ${veh.plate}`, vehicleSectionX + 5, vehicleSectionY);
-        vehicleSectionY += 5;
+        pdf.text(`Plate: ${veh.plate}`, vehX + 5, vehY);
+        vehY += 5;
       }
       if (veh.vin) {
-        pdf.text(`VIN: ${veh.vin}`, vehicleSectionX + 5, vehicleSectionY);
-        vehicleSectionY += 5;
+        pdf.text(`VIN: ${veh.vin}`, vehX + 5, vehY);
+        vehY += 5;
       }
-      yPos = Math.max(yPos, vehicleSectionY - 2);
     }
+    // Set yPos to the lower of the two sections
+    yPos = Math.max(custY, vehY);
 
-    // Service Items Table
-    yPos += 10;
-    pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Service Details', leftMargin, yPos);
 
-    yPos += 7;
+  // Service Items Table
+  yPos += 10;
+  pdf.setFontSize(12);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Service Details', leftMargin, yPos);
 
-    // Table Header
-    pdf.setFillColor(59, 130, 246); // Blue background
-    pdf.rect(leftMargin, yPos - 4, contentWidth, 8, 'F');
+  yPos += 10;
 
-    pdf.setTextColor(255, 255, 255); // White text
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Description', leftMargin + 2, yPos);
-    pdf.text('Qty', leftMargin + 105, yPos);
-    pdf.text('Rate', leftMargin + 125, yPos);
-    pdf.text('Amount', leftMargin + 150, yPos);
+  // Table Header
+  pdf.setFillColor(59, 130, 246); // Blue background
+  pdf.rect(leftMargin, yPos - 6, contentWidth, 10, 'F');
 
-    if (quotation.customerType === 'b2b' && Array.isArray(quotation.vehicles) && quotation.vehicles.length > 0) {
+  pdf.setTextColor(255, 255, 255); // White text
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Description', leftMargin + 2, yPos);
+  pdf.text('Qty', leftMargin + 105, yPos);
+  pdf.text('Rate', leftMargin + 125, yPos);
+  pdf.text('Amount', leftMargin + 150, yPos);
 
-      // Table Rows
-      pdf.setTextColor(0, 0, 0);
-      pdf.setFont('helvetica', 'normal');
-      const items = quotation.items || [];
-      items.forEach((item: any, index: number) => {
-        if (yPos > 260) {
-          pdf.addPage();
-          yPos = 20;
-        }
-        pdf.text(item.description || 'N/A', leftMargin + 2, yPos);
-        pdf.text(String(item.quantity || 0), leftMargin + 105, yPos);
-        pdf.text(`AED ${(item.rate || 0).toFixed(2)}`, leftMargin + 125, yPos);
-        pdf.text(`AED ${(item.amount || 0).toFixed(2)}`, leftMargin + 150, yPos);
-        yPos += 7;
-      });
-
-    } // ✅ CLOSES the B2B if-block properly
+  // Table Rows
+  yPos += 8;
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFont('helvetica', 'normal');
+  const items = quotation.items || [];
+  items.forEach((item: any, index: number) => {
+    if (yPos > 260) {
+      pdf.addPage();
+      yPos = 20;
+    }
+    pdf.text(item.description || 'N/A', leftMargin + 2, yPos);
+    pdf.text(String(item.quantity || 0), leftMargin + 105, yPos);
+    pdf.text(`AED ${(item.rate || 0).toFixed(2)}`, leftMargin + 125, yPos);
+    pdf.text(`AED ${(item.amount || 0).toFixed(2)}`, leftMargin + 150, yPos);
+    yPos += 8;
+  });
 
     // Totals Section
     yPos += 5;
@@ -779,6 +783,7 @@ export default function QuotationDetailPage() {
                 }}
                 onCancel={() => setShowEditModal(false)}
                 serviceBookingId={quotation?.serviceBookingId}
+                vehiclesList={bookingVehicles ?? undefined}
               />
             </div>
           </div>

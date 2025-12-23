@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, ChangeEvent } from "react";
+import { useEffect, useState, ChangeEvent, useRef } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -19,6 +19,8 @@ export default function AccountPage() {
   const [brandSaving, setBrandSaving] = useState(false);
   const [brandStatus, setBrandStatus] = useState<string | null>(null);
   const [brandUploading, setBrandUploading] = useState(false);
+  const [showLightbox, setShowLightbox] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setName(displayName || "");
@@ -129,12 +131,55 @@ export default function AccountPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Lightbox Modal */}
+      {showLightbox && avatarPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm p-4"
+          onClick={() => setShowLightbox(false)}
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[90vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={avatarPreview}
+              alt={name || "Profile"}
+              className="w-full h-auto rounded-lg shadow-2xl max-h-[80vh] object-contain"
+            />
+            <button
+              onClick={() => setShowLightbox(false)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
           {avatarPreview ? (
-            <img src={avatarPreview} alt={name || "User"} className="w-16 h-16 rounded-full object-cover border" />
+            <img
+              src={avatarPreview}
+              alt={name || "User"}
+              onClick={() => setShowLightbox(true)}
+              className="w-16 h-16 rounded-full object-cover border cursor-pointer hover:opacity-80 transition-opacity"
+            />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-orange-600 text-white flex items-center justify-center text-xl font-semibold">
+            <div
+              onClick={() => setShowLightbox(true)}
+              className="w-16 h-16 rounded-full bg-orange-600 text-white flex items-center justify-center text-xl font-semibold cursor-pointer hover:opacity-80 transition-opacity"
+            >
               {initials}
             </div>
           )}

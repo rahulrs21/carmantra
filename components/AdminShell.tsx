@@ -19,6 +19,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [showBottomNav, setShowBottomNav] = useState(true);
+  const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
   const { role, displayName, photoURL } = useUser();
   const { theme, toggleTheme } = useTheme();
   const [brandName, setBrandName] = useState('CarMantra CRM');
@@ -220,6 +221,37 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
+      {/* Profile Photo Lightbox - Circular Shape */}
+      {showPhotoLightbox && photoURL && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm p-4"
+          onClick={() => setShowPhotoLightbox(false)}
+        >
+          <div
+            className="relative max-w-2xl w-full max-h-[90vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Circular Image Container */}
+            <div className="relative w-80 h-80 flex items-center justify-center">
+              <img
+                src={photoURL}
+                alt={displayName || "Profile"}
+                className="w-full h-full rounded-full object-cover shadow-2xl border-4 border-white dark:border-gray-800"
+              />
+            </div>
+            {/* Close Button */}
+            <button
+              onClick={() => setShowPhotoLightbox(false)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 shadow-md">
         <div className="flex items-center justify-between px-4 py-3">
@@ -256,7 +288,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 <UserAvatar displayName={displayName} photoURL={photoURL} small />
               </button>
               {isProfileMenuOpen && (
-                <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
                   <a
                     href="/admin/account"
                     onClick={() => setIsProfileMenuOpen(false)}
@@ -264,6 +296,17 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   >
                     My Account
                   </a>
+                  {photoURL && (
+                    <button
+                      onClick={() => {
+                        setShowPhotoLightbox(true);
+                        setIsProfileMenuOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center gap-2"
+                    >
+                      View Photo
+                    </button>
+                  )}
                   <button
                     onClick={async () => {
                       setIsProfileMenuOpen(false);

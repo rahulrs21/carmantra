@@ -119,6 +119,8 @@ export interface UserAccount {
   email: string;
   role: UserRole;
   displayName?: string;
+  photoURL?: string;
+  isOnline?: boolean;
   status: 'active' | 'inactive' | 'pending';
   permissions?: Permission[];
   createdAt?: any;

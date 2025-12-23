@@ -77,17 +77,26 @@ export default function QuotationForm({
       setValidityDays(quotation.validityDays || 30);
       setNotes(quotation.notes || '');
       setStatus(quotation.status || 'pending');
-    } else if (customerType === 'b2b' && vehiclesList && vehiclesList.length > 0) {
+    }
+  }, [quotation]);
+
+  // Auto-populate items for B2B based on vehicles list
+  useEffect(() => {
+    if (!quotation && customerType === 'b2b' && vehiclesList && vehiclesList.length > 0) {
       // Auto-add service items for each vehicle's category (B2B only, when creating new)
       const autoItems = vehiclesList.map((v: any) => ({
-        description: v.category || '',
+        description: [
+          v.category || '',
+          v.vehicleBrand || '',
+          v.numberPlate || ''
+        ].filter(Boolean).join(' - '),
         quantity: 1,
         rate: 0,
         amount: 0
       }));
       setItems(autoItems.length > 0 ? autoItems : [{ description: '', quantity: 1, rate: 0, amount: 0 }]);
     }
-  }, [quotation, customerType, vehiclesList]);
+  }, [vehiclesList, customerType, quotation]);
 
   function calculateTotals() {
     const itemsTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -299,11 +308,12 @@ export default function QuotationForm({
         <div className="flex items-center justify-between gap-3 mb-1">
           <div>
             <h3 className="font-semibold text-gray-900">Customer Information</h3>
-            <p className="text-xs text-gray-500">Toggle B2C or B2B and fill the matching fields</p>
+            {/* <p className="text-xs text-gray-500">Toggle B2C or B2B and fill the matching fields</p> */}
           </div>
           <div className="flex gap-2 text-xs">
             <button
               type="button"
+              disabled={customerType === 'b2b'}
               className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
               onClick={() => setCustomerType('b2c')}
             >
@@ -311,6 +321,7 @@ export default function QuotationForm({
             </button>
             <button
               type="button"
+              disabled={customerType === 'b2c'}
               className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
               onClick={() => setCustomerType('b2b')}
             >
@@ -573,10 +584,13 @@ export default function QuotationForm({
                 <input 
                   type="number" 
                   className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  value={it.rate || 0} 
-                  step="0.01"
+                  value={it.rate === 0 ? '' : it.rate} 
+                  step="1"
                   min={0}
-                  onChange={e => updateItem(idx, 'rate', parseFloat(e.target.value || '0'))} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    updateItem(idx, 'rate', val === '' ? 0 : parseFloat(val));
+                  }} 
                 />
               </div>
               <div className="col-span-2">
@@ -613,10 +627,13 @@ export default function QuotationForm({
           <input 
             type="number"
             className="w-full border border-gray-300 p-2 rounded" 
-            value={laborCharges || 0}
-            step="0.01"
+            value={laborCharges === 0 ? '' : laborCharges}
+            step="1"
             min={0}
-            onChange={e => setLaborCharges(parseFloat(e.target.value || '0'))}
+            onChange={e => {
+              const val = e.target.value;
+              setLaborCharges(val === '' ? 0 : parseFloat(val));
+            }}
             placeholder="Enter labor charges"
           />
         </div>
@@ -625,10 +642,13 @@ export default function QuotationForm({
           <input 
             type="number"
             className="w-full border border-gray-300 p-2 rounded" 
-            value={discount || 0}
-            step="0.01"
+            value={discount === 0 ? '' : discount}
+            step="1"
             min={0}
-            onChange={e => setDiscount(parseFloat(e.target.value || '0'))}
+            onChange={e => {
+              const val = e.target.value;
+              setDiscount(val === '' ? 0 : parseFloat(val));
+            }}
             placeholder="Enter discount amount"
           />
         </div>

@@ -115,6 +115,7 @@ export default function CustomersPage() {
   async function remove(id?: string) {
     if (!id) return;
     if (!confirm('Delete this customer? This action cannot be undone.')) return;
+    if (!confirm('Are you sure? This is a permanent action and cannot be reversed.')) return;
     await deleteCustomer(id);
     refresh();
   }
@@ -239,9 +240,9 @@ export default function CustomersPage() {
                     </span>
                   </div>
                   <div className="flex gap-2">
-                    <button className="text-white bg-blue-500 border border-transparent hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 shadow-xs font-medium rounded text-xs px-3 py-2 focus:outline-none whitespace-nowrap" onClick={() => router.push(`/admin/customers/${c.id}`)}>
+                    <a href={`/admin/customers/${c.id}`} target="_blank" rel="noopener noreferrer" className="text-white bg-blue-500 border border-transparent hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 shadow-xs font-medium rounded text-xs px-3 py-2 focus:outline-none whitespace-nowrap inline-block">
                       View
-                    </button>
+                    </a>
                     <PermissionGate module="customers" action="delete">
                       <button className="text-red-600 border border-red-200 hover:bg-red-50 font-medium rounded text-xs px-3 py-2" onClick={() => remove(c.id)}>
                         Delete
@@ -275,7 +276,7 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex gap-2">
-                          <button className="px-2 py-1 border rounded" onClick={() => router.push(`/admin/customers/${c.id}`)}>View</button>
+                          <a href={`/admin/customers/${c.id}`} target="_blank" rel="noopener noreferrer" className="px-2 py-1 border rounded hover:bg-gray-50">View</a>
                           <PermissionGate module="customers" action="delete">
                             <button className="px-2 py-1 border rounded text-red-600" onClick={() => remove(c.id)}>Delete</button>
                           </PermissionGate>

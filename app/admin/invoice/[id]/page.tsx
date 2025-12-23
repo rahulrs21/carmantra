@@ -26,8 +26,8 @@ export default function InvoiceDetails() {
       setInvoice({ ...(snap.data() as any), id: snap.id });
     } catch (err: any) {
       safeConsoleError('Invoice fetch error', err);
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -38,86 +38,115 @@ export default function InvoiceDetails() {
   function generatePDF(): string {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
-    
+
     // Header Section with Background
     doc.setFillColor(63, 81, 181); // Indigo color
     doc.rect(0, 0, pageWidth, 45, 'F');
-    
+
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(28);
     doc.setFont('helvetica', 'bold');
     doc.text('INVOICE', 14, 25);
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Invoice #: ${invoice?.invoiceNumber || invoice?.id || ''}`, 14, 35);
     doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - 14, 35, { align: 'right' });
-    
+
     // Reset text color
     doc.setTextColor(0, 0, 0);
-    
+
     // Bill From, Bill To, and Vehicle in boxes
     let startY = 55;
     const boxWidth = 60;
     const boxHeight = 35;
-    
+
     // Bill From Box
     doc.setDrawColor(200, 200, 200);
     doc.setFillColor(249, 250, 251);
     doc.roundedRect(14, startY, boxWidth, boxHeight, 2, 2, 'FD');
-    
+
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(107, 114, 128);
     doc.text('BILL FROM', 16, startY + 6);
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
     doc.text('Car Mantra LLC', 16, startY + 13);
-    
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(75, 85, 99);
     doc.text('info@carmantra.com', 16, startY + 19);
     doc.text('+971 50 123 4567', 16, startY + 25);
-    
+
     // Bill To Box
     doc.setFillColor(249, 250, 251);
     doc.roundedRect(78, startY, boxWidth, boxHeight, 2, 2, 'FD');
-    
+
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(107, 114, 128);
     doc.text('BILL TO', 80, startY + 6);
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text(invoice?.customerName || '', 80, startY + 13);
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(75, 85, 99);
-    doc.text(invoice?.customerEmail || '', 80, startY + 19);
-    doc.text(invoice?.customerMobile || '', 80, startY + 25);
-    
-    // Vehicle Box
-    if (invoice?.vehicleDetails) {
+    if (invoice?.isB2B) {
+      doc.text(invoice?.companyName || '', 80, startY + 13);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(75, 85, 99);
+      doc.text(invoice?.contactEmail || '', 80, startY + 19);
+      doc.text(invoice?.contactPhone || '', 80, startY + 25);
+    } else {
+      doc.text(invoice?.customerName || '', 80, startY + 13);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(75, 85, 99);
+      doc.text(invoice?.customerEmail || '', 80, startY + 19);
+      doc.text(invoice?.customerMobile || '', 80, startY + 25);
+    }
+
+    // Vehicle Box - B2B or B2C
+    if (invoice?.isB2B && invoice?.vehicles && Array.isArray(invoice.vehicles) && invoice.vehicles.length > 0) {
       doc.setFillColor(249, 250, 251);
       doc.roundedRect(142, startY, boxWidth, boxHeight, 2, 2, 'FD');
-      
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(107, 114, 128);
+      doc.text(`VEHICLES (${invoice.vehicles.length})`, 144, startY + 6);
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
+      let vehicleY = startY + 13;
+      invoice.vehicles.slice(0, 2).forEach((vehicle: any) => {
+        const vehicleName = `${vehicle.vehicleBrand || vehicle.brand || ''} ${vehicle.modelName || vehicle.model || ''}`;
+        doc.text(vehicleName, 144, vehicleY);
+        doc.setTextColor(75, 85, 99);
+        doc.text(`${vehicle.numberPlate || vehicle.plate || ''}`, 144, vehicleY + 4);
+        doc.setTextColor(0, 0, 0);
+        vehicleY += 8;
+      });
+    } else if (invoice?.vehicleDetails) {
+      doc.setFillColor(249, 250, 251);
+      doc.roundedRect(142, startY, boxWidth, boxHeight, 2, 2, 'FD');
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(107, 114, 128);
       doc.text('VEHICLE', 144, startY + 6);
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       const vehicleName = `${invoice.vehicleDetails.brand || ''} ${invoice.vehicleDetails.model || ''}`;
       doc.text(vehicleName, 144, startY + 13);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(75, 85, 99);
@@ -127,7 +156,7 @@ export default function InvoiceDetails() {
         doc.text(`VIN: ${invoice.vehicleDetails.vin}`, 144, startY + 31);
       }
     }
-    
+
     // Service Category Banner
     let currentY = startY + boxHeight + 10;
     if (invoice?.serviceCategory) {
@@ -139,7 +168,7 @@ export default function InvoiceDetails() {
       doc.text(`Service: ${invoice.serviceCategory}`, 16, currentY + 5.5);
       currentY += 10;
     }
-    
+
     // Service Items Table
     currentY += 5;
     doc.setFontSize(11);
@@ -147,13 +176,13 @@ export default function InvoiceDetails() {
     doc.setTextColor(0, 0, 0);
     doc.text('SERVICE ITEMS', 14, currentY);
     currentY += 7;
-    
+
     // Table Header
     doc.setFillColor(249, 250, 251);
     doc.rect(14, currentY, pageWidth - 28, 8, 'F');
     doc.setDrawColor(229, 231, 235);
     doc.line(14, currentY + 8, pageWidth - 14, currentY + 8);
-    
+
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(75, 85, 99);
@@ -162,37 +191,37 @@ export default function InvoiceDetails() {
     doc.text('QTY', 130, currentY + 5.5, { align: 'right' });
     doc.text('RATE', 155, currentY + 5.5, { align: 'right' });
     doc.text('AMOUNT', pageWidth - 16, currentY + 5.5, { align: 'right' });
-    
+
     currentY += 8;
-    
+
     // Table Rows
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(0, 0, 0);
-    
+
     (invoice?.items || []).forEach((it: any, i: number) => {
       const desc = it.description || '';
       const qty = it.quantity || 1;
       const rate = it.rate || 0;
       const amt = it.amount || 0;
-      
+
       // Alternate row background
       if (i % 2 === 0) {
         doc.setFillColor(249, 250, 251);
         doc.rect(14, currentY, pageWidth - 28, 7, 'F');
       }
-      
+
       doc.text(`${i + 1}`, 16, currentY + 5);
       doc.text(desc, 25, currentY + 5);
       doc.text(`${qty}`, 130, currentY + 5, { align: 'right' });
       doc.text(`AED ${rate.toFixed(2)}`, 155, currentY + 5, { align: 'right' });
       doc.text(`AED ${amt.toFixed(2)}`, pageWidth - 16, currentY + 5, { align: 'right' });
-      
+
       doc.setDrawColor(229, 231, 235);
       doc.line(14, currentY + 7, pageWidth - 14, currentY + 7);
       currentY += 7;
     });
-    
+
     // Labor Charges Row
     if (invoice?.laborCharges > 0) {
       doc.setFillColor(252, 252, 253);
@@ -203,74 +232,74 @@ export default function InvoiceDetails() {
       doc.line(14, currentY + 7, pageWidth - 14, currentY + 7);
       currentY += 7;
     }
-    
+
     currentY += 5;
-    
+
     // Totals Section
     const totalsX = pageWidth - 70;
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(75, 85, 99);
-    
+
     doc.text('Subtotal:', totalsX, currentY);
     doc.text(`AED ${(invoice?.subtotal || 0).toFixed(2)}`, pageWidth - 16, currentY, { align: 'right' });
     currentY += 6;
-    
+
     doc.text('Tax (5% VAT):', totalsX, currentY);
     doc.setTextColor(59, 130, 246);
     doc.text(`AED ${(invoice?.taxAmount || 0).toFixed(2)}`, pageWidth - 16, currentY, { align: 'right' });
     currentY += 6;
-    
+
     if (invoice?.discount > 0) {
       doc.setTextColor(220, 38, 38);
       doc.text('Discount:', totalsX, currentY);
       doc.text(`- AED ${invoice.discount.toFixed(2)}`, pageWidth - 16, currentY, { align: 'right' });
       currentY += 6;
     }
-    
+
     // Grand Total
     currentY += 2;
     doc.setDrawColor(229, 231, 235);
     doc.line(totalsX, currentY, pageWidth - 16, currentY);
     currentY += 6;
-    
+
     doc.setFillColor(239, 246, 255);
     doc.rect(totalsX, currentY - 5, pageWidth - totalsX - 16, 10, 'F');
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
     doc.text('GRAND TOTAL:', totalsX + 2, currentY + 2);
     doc.setTextColor(59, 130, 246);
     doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`, pageWidth - 20, currentY + 2, { align: 'right' });
-    
+
     // Payment Status
     currentY += 15;
     doc.setFillColor(249, 250, 251);
     doc.rect(14, currentY, pageWidth - 28, 10, 'F');
-    
+
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
     doc.text('Payment Status:', 16, currentY + 6.5);
-    
+
     const statusText = (invoice?.paymentStatus || 'UNPAID').toUpperCase();
     const statusColor = invoice?.paymentStatus === 'paid' ? [34, 197, 94] : [239, 68, 68];
     doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
     doc.text(statusText, pageWidth - 16, currentY + 6.5, { align: 'right' });
-    
+
     currentY += 12;
-    
+
     // Payment Terms
     if (invoice?.paymentTerms) {
       doc.setFillColor(239, 246, 255);
       doc.rect(14, currentY, pageWidth - 28, 10, 'F');
-      
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text('Payment Terms:', 16, currentY + 6.5);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(30, 64, 175);
       let termsText = '';
@@ -280,15 +309,60 @@ export default function InvoiceDetails() {
       else if (invoice.paymentTerms === 'tabby') termsText = 'Tabby/Tamara';
       else if (invoice.paymentTerms === 'other') termsText = invoice.paymentTermsOther || 'Other';
       doc.text(termsText, pageWidth - 16, currentY + 6.5, { align: 'right' });
-      
+
       currentY += 12;
     }
-    
+
+    // Partial Payment Information
+    if (invoice?.paymentStatus === 'partial' && invoice?.partialPaidAmount) {
+      const paid = typeof invoice.partialPaidAmount === 'string' ? parseFloat(invoice.partialPaidAmount) : invoice.partialPaidAmount;
+      const total = typeof invoice.total === 'string' ? parseFloat(invoice.total) : invoice.total;
+      const remaining = total - paid;
+
+      doc.setFillColor(254, 243, 224);
+      doc.rect(14, currentY, pageWidth - 28, 16, 'F');
+      doc.setDrawColor(251, 191, 36);
+      doc.rect(14, currentY, pageWidth - 28, 16);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(120, 53, 15);
+      doc.text('Partial Payment Information:', 16, currentY + 5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`Amount Paid: AED ${paid.toFixed(2)}`, 16, currentY + 10);
+      doc.text(`Remaining Balance: AED ${remaining.toFixed(2)}`, pageWidth - 16, currentY + 10, { align: 'right' });
+
+      currentY += 18;
+    }
+
+    // Notes Section
+    if (invoice?.notes) {
+      doc.setFillColor(254, 252, 232);
+      doc.rect(14, currentY, pageWidth - 28, 16, 'F');
+      doc.setDrawColor(217, 119, 6);
+      doc.rect(14, currentY, pageWidth - 28, 16);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(92, 51, 23);
+      doc.text('Notes:', 16, currentY + 5);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(75, 85, 99);
+      const notesLines = doc.splitTextToSize(invoice.notes, pageWidth - 32);
+      doc.text(notesLines, 16, currentY + 10);
+
+      currentY += Math.max(18, notesLines.length * 3.5 + 6);
+    }
+
     // Stamp Image
     currentY += 8;
     const stampSize = 30;
     const stampX = pageWidth - stampSize - 14;
-    
+
     const stampImg = new Image();
     stampImg.src = '/images/sample-stamp.png';
     try {
@@ -296,7 +370,7 @@ export default function InvoiceDetails() {
     } catch (e) {
       // If image fails, just continue without it
     }
-    
+
     // Footer
     doc.setFontSize(8);
     doc.setFont('helvetica', 'italic');
@@ -312,86 +386,121 @@ export default function InvoiceDetails() {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.width;
-      
+
       // Header Section with Background
       doc.setFillColor(59, 130, 246); // Blue-500 color
       doc.rect(0, 0, pageWidth, 45, 'F');
-      
+
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(28);
       doc.setFont('helvetica', 'bold');
       doc.text('INVOICE', 14, 25);
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.text(`Invoice #: ${invoice?.invoiceNumber || invoice?.id || ''}`, 14, 35);
       doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - 14, 35, { align: 'right' });
-      
+
       // Reset text color
       doc.setTextColor(0, 0, 0);
-      
+
       // Bill From, Bill To, and Vehicle in boxes
       let startY = 55;
       const boxWidth = 60;
       const boxHeight = 35;
-      
+
       // Bill From Box
       doc.setDrawColor(200, 200, 200);
       doc.setFillColor(249, 250, 251);
       doc.roundedRect(14, startY, boxWidth, boxHeight, 2, 2, 'FD');
-      
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(107, 114, 128);
       doc.text('BILL FROM', 16, startY + 6);
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text('Car Mantra LLC', 16, startY + 13);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(75, 85, 99);
       doc.text('info@carmantra.com', 16, startY + 19);
       doc.text('+971 50 123 4567', 16, startY + 25);
-      
+
       // Bill To Box
       doc.setFillColor(249, 250, 251);
       doc.roundedRect(78, startY, boxWidth, boxHeight, 2, 2, 'FD');
-      
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(107, 114, 128);
       doc.text('BILL TO', 80, startY + 6);
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(invoice?.customerName || '', 80, startY + 13);
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(75, 85, 99);
-      doc.text(invoice?.customerEmail || '', 80, startY + 19);
-      doc.text(invoice?.customerMobile || '', 80, startY + 25);
-      
-      // Vehicle Box
-      if (invoice?.vehicleDetails) {
+      if (invoice?.isB2B) {
+        doc.text(invoice?.companyName || '', 80, startY + 13);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(75, 85, 99);
+        doc.text(invoice?.contactEmail || '', 80, startY + 19);
+        doc.text(invoice?.contactPhone || '', 80, startY + 25);
+      } else {
+        doc.text(invoice?.customerName || '', 80, startY + 13);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(75, 85, 99);
+        doc.text(invoice?.customerEmail || '', 80, startY + 19);
+        doc.text(invoice?.customerMobile || '', 80, startY + 25);
+      }
+
+      // Vehicle Box - B2B or B2C
+      if (invoice?.isB2B && invoice?.vehicles && Array.isArray(invoice.vehicles) && invoice.vehicles.length > 0) {
         doc.setFillColor(249, 250, 251);
         doc.roundedRect(142, startY, boxWidth, boxHeight, 2, 2, 'FD');
-        
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(107, 114, 128);
+        doc.text(`VEHICLES (${invoice.vehicles.length})`, 144, startY + 6);
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        let vehicleY = startY + 13;
+        invoice.vehicles.slice(0, 2).forEach((vehicle: any) => {
+          // const vehicleName = `${vehicle.vehicleBrand || vehicle.brand || ''} ${vehicle.modelName || vehicle.model || ''}`;
+          // doc.text(vehicleName, 144, vehicleY);
+          // doc.setTextColor(75, 85, 99);
+          // doc.text(`${vehicle.numberPlate || vehicle.plate || ''}`, 144, vehicleY + 4);
+          // doc.setTextColor(0, 0, 0);
+          // vehicleY += 8;
+
+          const vehicleName = `${vehicle.vehicleBrand || vehicle.brand || ''} ${vehicle.modelName || vehicle.model || ''}`;
+          const vehiclePlate = vehicle.numberPlate || vehicle.plate || '';
+          doc.setTextColor(0, 0, 0);
+          doc.text(`${vehicleName} | ${vehiclePlate}`, 144, vehicleY);
+          vehicleY += 5;
+        });
+      } else if (invoice?.vehicleDetails) {
+        doc.setFillColor(249, 250, 251);
+        doc.roundedRect(142, startY, boxWidth, boxHeight, 2, 2, 'FD');
+
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(107, 114, 128);
         doc.text('VEHICLE', 144, startY + 6);
-        
+
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         const vehicleName = `${invoice.vehicleDetails.brand || ''} ${invoice.vehicleDetails.model || ''}`;
         doc.text(vehicleName, 144, startY + 13);
-        
+
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(75, 85, 99);
@@ -401,7 +510,7 @@ export default function InvoiceDetails() {
           doc.text(`VIN: ${invoice.vehicleDetails.vin}`, 144, startY + 31);
         }
       }
-      
+
       // Service Category Banner
       let currentY = startY + boxHeight + 10;
       if (invoice?.serviceCategory) {
@@ -413,7 +522,7 @@ export default function InvoiceDetails() {
         doc.text(`Service: ${invoice.serviceCategory}`, 16, currentY + 5.5);
         currentY += 10;
       }
-      
+
       // Service Items Table
       currentY += 5;
       doc.setFontSize(11);
@@ -421,13 +530,13 @@ export default function InvoiceDetails() {
       doc.setTextColor(0, 0, 0);
       doc.text('SERVICE ITEMS', 14, currentY);
       currentY += 7;
-      
+
       // Table Header
       doc.setFillColor(249, 250, 251);
       doc.rect(14, currentY, pageWidth - 28, 8, 'F');
       doc.setDrawColor(229, 231, 235);
       doc.line(14, currentY + 8, pageWidth - 14, currentY + 8);
-      
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(75, 85, 99);
@@ -436,37 +545,37 @@ export default function InvoiceDetails() {
       doc.text('QTY', 130, currentY + 5.5, { align: 'right' });
       doc.text('RATE', 155, currentY + 5.5, { align: 'right' });
       doc.text('AMOUNT', pageWidth - 16, currentY + 5.5, { align: 'right' });
-      
+
       currentY += 8;
-      
+
       // Table Rows
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(0, 0, 0);
-      
+
       (invoice?.items || []).forEach((it: any, i: number) => {
         const desc = it.description || '';
         const qty = it.quantity || 1;
         const rate = it.rate || 0;
         const amt = it.amount || 0;
-        
+
         // Alternate row background
         if (i % 2 === 0) {
           doc.setFillColor(249, 250, 251);
           doc.rect(14, currentY, pageWidth - 28, 7, 'F');
         }
-        
+
         doc.text(`${i + 1}`, 16, currentY + 5);
         doc.text(desc, 25, currentY + 5);
         doc.text(`${qty}`, 130, currentY + 5, { align: 'right' });
         doc.text(`AED ${rate.toFixed(2)}`, 155, currentY + 5, { align: 'right' });
         doc.text(`AED ${amt.toFixed(2)}`, pageWidth - 16, currentY + 5, { align: 'right' });
-        
+
         doc.setDrawColor(229, 231, 235);
         doc.line(14, currentY + 7, pageWidth - 14, currentY + 7);
         currentY += 7;
       });
-      
+
       // Labor Charges Row
       if (invoice?.laborCharges > 0) {
         doc.setFillColor(252, 252, 253);
@@ -477,75 +586,75 @@ export default function InvoiceDetails() {
         doc.line(14, currentY + 7, pageWidth - 14, currentY + 7);
         currentY += 7;
       }
-      
+
       currentY += 5;
-      
+
       // Totals Section
       const totalsX = pageWidth - 70;
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(75, 85, 99);
-      
+
       doc.text('Subtotal:', totalsX, currentY);
       doc.text(`AED ${(invoice?.subtotal || 0).toFixed(2)}`, pageWidth - 16, currentY, { align: 'right' });
       currentY += 6;
-      
+
       doc.text('Tax (5% VAT):', totalsX, currentY);
       doc.setTextColor(59, 130, 246);
       doc.text(`AED ${(invoice?.taxAmount || 0).toFixed(2)}`, pageWidth - 16, currentY, { align: 'right' });
       currentY += 6;
-      
+
       if (invoice?.discount > 0) {
         doc.setTextColor(220, 38, 38);
         doc.text('Discount:', totalsX, currentY);
         doc.text(`- AED ${invoice.discount.toFixed(2)}`, pageWidth - 16, currentY, { align: 'right' });
         currentY += 6;
       }
-      
+
       // Grand Total
       currentY += 2;
       doc.setDrawColor(229, 231, 235);
-      doc.line(totalsX-2, currentY, pageWidth - 16, currentY);
+      doc.line(totalsX - 2, currentY, pageWidth - 16, currentY);
       currentY += 6;
-      
+
       doc.setFillColor(239, 246, 255);
       doc.rect(totalsX, currentY - 5, pageWidth - totalsX - 16, 10, 'F');
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text('GRAND TOTAL:', totalsX-2, currentY + 2);
+      doc.text('GRAND TOTAL:', totalsX - 2, currentY + 2);
       doc.setTextColor(59, 130, 246);
-      doc.text(' ', totalsX-2, currentY + 2);
-      doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`,  pageWidth - 20, currentY + 2, { align: 'right' });
-      
+      doc.text(' ', totalsX - 2, currentY + 2);
+      doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`, pageWidth - 20, currentY + 2, { align: 'right' });
+
       // Payment Status
       currentY += 15;
       doc.setFillColor(249, 250, 251);
       doc.rect(14, currentY, pageWidth - 28, 10, 'F');
-      
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text('Payment Status:', 16, currentY + 6.5);
-      
+
       const statusText = (invoice?.paymentStatus || 'UNPAID').toUpperCase();
       const statusColor = invoice?.paymentStatus === 'paid' ? [34, 197, 94] : [239, 68, 68];
       doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
       doc.text(statusText, pageWidth - 16, currentY + 6.5, { align: 'right' });
-      
+
       currentY += 12;
-      
+
       // Payment Terms
       if (invoice?.paymentTerms) {
         doc.setFillColor(239, 246, 255);
         doc.rect(14, currentY, pageWidth - 28, 10, 'F');
-        
+
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         doc.text('Payment Terms:', 16, currentY + 6.5);
-        
+
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(30, 64, 175);
         let termsText = '';
@@ -555,15 +664,60 @@ export default function InvoiceDetails() {
         else if (invoice.paymentTerms === 'tabby') termsText = 'Tabby/Tamara';
         else if (invoice.paymentTerms === 'other') termsText = invoice.paymentTermsOther || 'Other';
         doc.text(termsText, pageWidth - 16, currentY + 6.5, { align: 'right' });
-        
+
         currentY += 12;
       }
-      
+
+      // Partial Payment Information
+      if (invoice?.paymentStatus === 'partial' && invoice?.partialPaidAmount) {
+        const paid = typeof invoice.partialPaidAmount === 'string' ? parseFloat(invoice.partialPaidAmount) : invoice.partialPaidAmount;
+        const total = typeof invoice.total === 'string' ? parseFloat(invoice.total) : invoice.total;
+        const remaining = total - paid;
+
+        doc.setFillColor(254, 243, 224);
+        doc.rect(14, currentY, pageWidth - 28, 16, 'F');
+        doc.setDrawColor(251, 191, 36);
+        doc.rect(14, currentY, pageWidth - 28, 16);
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(120, 53, 15);
+        doc.text('Partial Payment Information:', 16, currentY + 5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text(`Amount Paid: AED ${paid.toFixed(2)}`, 16, currentY + 10);
+        doc.text(`Remaining Balance: AED ${remaining.toFixed(2)}`, pageWidth - 16, currentY + 10, { align: 'right' });
+
+        currentY += 18;
+      }
+
+      // Notes Section
+      if (invoice?.notes) {
+        doc.setFillColor(254, 252, 232);
+        doc.rect(14, currentY, pageWidth - 28, 16, 'F');
+        doc.setDrawColor(217, 119, 6);
+        doc.rect(14, currentY, pageWidth - 28, 16);
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(92, 51, 23);
+        doc.text('Notes:', 16, currentY + 5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(75, 85, 99);
+        const notesLines = doc.splitTextToSize(invoice.notes, pageWidth - 32);
+        doc.text(notesLines, 16, currentY + 10);
+
+        currentY += Math.max(18, notesLines.length * 3.5 + 6);
+      }
+
       // Stamp Image
       currentY += 8;
       const stampSize = 30;
       const stampX = pageWidth - stampSize - 14;
-      
+
       const stampImg = new Image();
       stampImg.src = '/images/sample-stamp.png';
       try {
@@ -571,13 +725,13 @@ export default function InvoiceDetails() {
       } catch (e) {
         // If image fails, just continue without it
       }
-      
+
       // Footer
       doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(107, 114, 128);
       doc.text('Thank you for your business!', pageWidth / 2, doc.internal.pageSize.height - 15, { align: 'center' });
-      
+
       doc.save(`invoice-${invoice?.invoiceNumber || invoice?.id || 'invoice'}.pdf`);
     } catch (err) {
       safeConsoleError('PDF generation error', err);
@@ -616,6 +770,16 @@ export default function InvoiceDetails() {
             {invoice.customerName} • {invoice.customerMobile}
           </div>
         </div>
+
+        {/* Partial Payment Notes (if any) */}
+        {invoice.paymentStatus === 'partial' && invoice.partialPaymentNotes && (
+          <div className="px-5 sm:px-8 pb-8">
+            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mt-2">
+              <div className="text-xs font-semibold text-yellow-900 mb-1">Partial Payment Notes:</div>
+              <div className="text-sm text-yellow-900 whitespace-pre-line">{invoice.partialPaymentNotes}</div>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors w-full sm:w-auto" onClick={() => router.push('/admin/invoice')}>
             ← Back
@@ -639,11 +803,10 @@ export default function InvoiceDetails() {
       </div>
 
       {status && (
-        <div className={`p-4 rounded-lg ${
-          status.includes('sent') || status.includes('success') 
-            ? 'bg-green-50 text-green-700 border border-green-200' 
-            : 'bg-blue-50 text-blue-700 border border-blue-200'
-        }`}>
+        <div className={`p-4 rounded-lg ${status.includes('sent') || status.includes('success')
+          ? 'bg-green-50 text-green-700 border border-green-200'
+          : 'bg-blue-50 text-blue-700 border border-blue-200'
+          }`}>
           {status}
         </div>
       )}
@@ -670,20 +833,45 @@ export default function InvoiceDetails() {
             <div className="space-y-1">
               <p className="font-semibold text-lg">Car Mantra LLC</p>
               <p className="text-gray-600">info@carmantra.com</p>
-              <p className="text-gray-600">+971 50 123 4567</p> 
+              <p className="text-gray-600">+971 50 123 4567</p>
             </div>
           </div>
 
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Bill To</h3>
             <div className="space-y-1">
-              <p className="font-semibold text-lg">{invoice.customerName}</p>
-              {invoice.customerEmail && <p className="text-gray-600">{invoice.customerEmail}</p>}
-              {invoice.customerMobile && <p className="text-gray-600">{invoice.customerMobile}</p>}
+              {invoice.isB2B ? (
+                <>
+                  <p className="font-semibold text-lg">{invoice.companyName || 'N/A'}</p>
+                  {invoice.contactName && <p className="text-gray-600">{invoice.contactName}</p>}
+                  {invoice.contactEmail && <p className="text-gray-600">{invoice.contactEmail}</p>}
+                  {invoice.contactPhone && <p className="text-gray-600">{invoice.contactPhone}</p>}
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-lg">{invoice.customerName}</p>
+                  {invoice.customerEmail && <p className="text-gray-600">{invoice.customerEmail}</p>}
+                  {invoice.customerMobile && <p className="text-gray-600">{invoice.customerMobile}</p>}
+                </>
+              )}
             </div>
           </div>
-          
-          {invoice.vehicleDetails && (
+
+          {invoice.isB2B && invoice.vehicles && Array.isArray(invoice.vehicles) && invoice.vehicles.length > 0 ? (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Vehicles ({invoice.vehicles.length})</h3>
+              <div className="space-y-2">
+                {invoice.vehicles.map((vehicle: any, idx: number) => (
+                  <div key={idx} className="text-sm flex items-center gap-2">
+                    <p className="font-semibold text-gray-900">
+                      {vehicle.vehicleBrand || vehicle.brand || ''} {vehicle.modelName || vehicle.model || ''}
+                    </p>
+                    <p className="text-gray-600 text-xs">{vehicle.numberPlate || vehicle.plate || '-'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : invoice.vehicleDetails ? (
             <div>
               <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Vehicle Details</h3>
               <div className="space-y-1">
@@ -701,7 +889,7 @@ export default function InvoiceDetails() {
                 )}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Service Category */}
@@ -778,44 +966,80 @@ export default function InvoiceDetails() {
                 <span className="text-gray-600">Items Total:</span>
                 <span className="font-medium">AED {(invoice.itemsTotal || 0).toFixed(2)}</span>
               </div>
-              
+
               {invoice.laborCharges > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Labor Charges:</span>
                   <span className="font-medium">AED {invoice.laborCharges.toFixed(2)}</span>
                 </div>
               )}
-              
+
               <div className="flex justify-between text-sm pt-2 border-t">
                 <span className="text-gray-600">Subtotal:</span>
                 <span className="font-medium">AED {(invoice.subtotal || 0).toFixed(2)}</span>
               </div>
-              
+
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Tax (5% VAT):</span>
                 <span className="font-medium text-blue-600">AED {(invoice.taxAmount || 0).toFixed(2)}</span>
               </div>
-              
+
               {invoice.discount > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Discount:</span>
                   <span className="font-medium text-red-600">- AED {invoice.discount.toFixed(2)}</span>
                 </div>
               )}
-              
+
               <div className="flex justify-between text-xl font-bold pt-3 border-t-2 border-gray-300">
                 <span>Grand Total:</span>
                 <span className="text-blue-600">AED {(invoice.total || 0).toFixed(2)}</span>
               </div>
+
+              {/* Partial Payment Info */}
+              {invoice.paymentStatus === 'partial' && (() => {
+                // Defensive: handle string/number/null/undefined for partialPaidAmount and total
+                let paid = 0;
+                let total = 0;
+                if (invoice.partialPaidAmount !== undefined && invoice.partialPaidAmount !== null && invoice.partialPaidAmount !== '') {
+                  paid = typeof invoice.partialPaidAmount === 'string' ? parseFloat(invoice.partialPaidAmount) : invoice.partialPaidAmount;
+                  if (isNaN(paid)) paid = 0;
+                }
+                if (invoice.total !== undefined && invoice.total !== null && invoice.total !== '') {
+                  total = typeof invoice.total === 'string' ? parseFloat(invoice.total) : invoice.total;
+                  if (isNaN(total)) total = 0;
+                }
+                return (
+                  <div className="mt-2 p-3 rounded bg-yellow-50 border border-yellow-200">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-yellow-800 font-semibold">Partial Amount Paid:</span>
+                      <span className="text-yellow-900 font-bold">AED {paid.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-1">
+                      <span className="text-orange-700 font-semibold">Remaining Balance:</span>
+                      <span className="text-orange-800 font-bold">AED {(total - paid).toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* General Notes (if any) */}
+              {invoice.notes && (
+                <div className="mt-4 px-0 sm:px-0 pb-0">
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                    <div className="text-xs font-semibold text-yellow-900 mb-1">Notes:</div>
+                    <div className="text-sm text-yellow-900 whitespace-pre-line">{invoice.notes}</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Accepted Stamp */}
         <div className="px-5 sm:px-8 pb-2 flex justify-center">
-          <img 
-            src="/images/sample-stamp.png" 
-            alt="Accepted Stamp" 
+          <img
+            src="/images/sample-stamp.png"
+            alt="Accepted Stamp"
             className="w-24 h-24 sm:w-32 sm:h-32 object-contain"
           />
         </div>
@@ -825,16 +1049,15 @@ export default function InvoiceDetails() {
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">Payment Status:</span>
-              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                invoice.paymentStatus === 'paid' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
+              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${invoice.paymentStatus === 'paid'
+                ? 'bg-green-100 text-green-800'
+                : 'bg-red-100 text-red-800'
+                }`}>
                 {invoice.paymentStatus?.toUpperCase() || 'UNPAID'}
               </span>
             </div>
           </div>
-          
+
           {invoice.paymentTerms && (
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
               <div className="flex items-center justify-between">
@@ -859,8 +1082,8 @@ export default function InvoiceDetails() {
           <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full z-10 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">Edit Invoice</h2>
-              <button 
-                className="text-gray-500 hover:text-gray-700" 
+              <button
+                className="text-gray-500 hover:text-gray-700"
                 onClick={() => setShowEditModal(false)}
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -869,14 +1092,14 @@ export default function InvoiceDetails() {
               </button>
             </div>
             <div className="p-6">
-              <InvoiceForm 
-                invoice={invoice} 
+              <InvoiceForm
+                invoice={invoice}
                 onCreated={() => {
                   setShowEditModal(false);
                   fetchInvoice();
                   setStatus('Invoice updated successfully!');
-                }} 
-                onCancel={() => setShowEditModal(false)} 
+                }}
+                onCancel={() => setShowEditModal(false)}
               />
             </div>
           </div>

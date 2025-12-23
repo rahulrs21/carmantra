@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { getCustomer, listInvoicesForCustomer, listAllCustomerVehicles, updateCustomer, listServiceHistoryForCustomer } from '@/lib/firestore/customers';
+import { getCustomer, listInvoicesForCustomer, listAllCustomerVehicles, updateCustomer, listServiceHistoryForCustomer, listContactPersons } from '@/lib/firestore/customers';
 import type { Customer, Vehicle, InvoiceDoc, ServiceBooking } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ export default function CustomerProfilePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [invoices, setInvoices] = useState<InvoiceDoc[]>([]);
   const [latestBooking, setLatestBooking] = useState<ServiceBooking | null>(null);
+  const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -41,6 +42,19 @@ export default function CustomerProfilePage() {
       // Get latest booking for address fallback
       if (services.length > 0) {
         setLatestBooking(services[0]);
+      }
+      
+      // For B2B customers, fetch contact persons
+      if (cust.customerType === 'b2b' && cust.id) {
+        try {
+          const contactsList = await listContactPersons(cust.id);
+          setContacts(contactsList || []);
+        } catch (err: any) {
+          console.error('Failed to fetch contacts:', err);
+          setContacts([]);
+        }
+      } else {
+        setContacts([]);
       }
     }
     setLoading(false);
@@ -126,7 +140,7 @@ export default function CustomerProfilePage() {
     <div className="space-y-6 max-w-full w-full overflow-x-hidden p-1 sm:p-0">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 w-full min-w-0">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold leading-tight break-words">{customer.firstName} {customer.lastName}</h1>
+          <h1 className="text-2xl font-bold leading-tight break-words">{customer.firstName} - {customer.lastName}</h1>
           <div className="text-sm text-gray-600 break-all">{customer.email} • {customer.mobile}</div>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -159,13 +173,48 @@ export default function CustomerProfilePage() {
             <h2 className="text-lg font-semibold mb-3">Customer Details</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">Status:</span> <span className="font-medium">{customer.status}</span></div>
+              {customer.customerType === 'b2b' && (
+                <div><span className="text-gray-500">Type:</span> <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">B2B</span></div>
+              )}
               <div><span className="text-gray-500">Email:</span> <span className="font-medium break-all">{customer.email}</span></div>
               <div><span className="text-gray-500">Mobile:</span> <span className="font-medium break-words">{customer.mobile}</span></div>
               <div><span className="text-gray-500">Address:</span> <span className="font-medium break-words">{customer.address || latestBooking?.address || '-'}</span></div>
               <div><span className="text-gray-500">City:</span> <span className="font-medium break-words">{customer.city || latestBooking?.city || '-'}</span></div>
               <div><span className="text-gray-500">Country:</span> <span className="font-medium break-words">{customer.country || latestBooking?.country || '-'}</span></div>
+              {customer.customerType === 'b2b' && customer.companyName && (
+                <div className="sm:col-span-2"><span className="text-gray-500">Company:</span> <span className="font-medium break-words">{customer.companyName}</span></div>
+              )}
             </div>
           </Card>
+
+          {customer.customerType === 'b2b' && contacts.length > 0 && (
+            <Card className="p-6 w-full">
+              <h2 className="text-lg font-semibold mb-3">Contact Persons</h2>
+              <div className="space-y-2">
+                {contacts.map((contact: any, idx: number) => (
+                  <div key={contact.id || idx} className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 transition">
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900">{contact.name || '-'}</div>
+                      <div className="text-xs text-gray-600 break-all">{contact.email || '-'}</div>
+                      <div className="text-xs text-gray-600">{contact.phone || '-'}</div>
+                      {contact.title && <div className="text-xs text-gray-500">Title: {contact.title}</div>}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Navigate to customer profile with contact ID
+                        window.location.href = `/admin/customers/${customer.id}?contactId=${contact.id}`;
+                      }}
+                      className="ml-2 flex-shrink-0"
+                    >
+                      View
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <Card className="p-6 w-full">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
@@ -213,7 +262,11 @@ export default function CustomerProfilePage() {
 
                 {/* Desktop grid */}
                 <div className="hidden md:grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {vehicles.map((v, idx) => renderVehicleCard(v, idx))}
+                  {vehicles.map((v, idx) => (
+                    <div key={`${v.plate}-${idx}`}>
+                      {renderVehicleCard(v, idx)}
+                    </div>
+                  ))}
                 </div>
               </>
             )}

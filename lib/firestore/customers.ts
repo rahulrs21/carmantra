@@ -173,6 +173,7 @@ export async function listAllCustomerVehicles(customer: Customer): Promise<Vehic
   // 2. Get vehicles from bookedServices and associate services
   try {
     allServices.forEach(s => {
+      // Handle B2C: single vehicle (numberPlate field)
       if (s.numberPlate) {
         const key = s.numberPlate.toLowerCase().replace(/\s/g, '');
         
@@ -185,20 +186,76 @@ export async function listAllCustomerVehicles(customer: Customer): Promise<Vehic
             fuelType: s.fuelType,
             color: undefined,
             year: undefined,
-            vin: undefined,
+            vin: s.vinNumber,
             services: [],
           });
+        } else {
+          // Update missing fields with more complete data
+          const existing = vehiclesMap.get(key)!;
+          if (!existing.vin) existing.vin = s.vinNumber;
+          if (!existing.make) existing.make = s.vehicleBrand || '';
+          if (!existing.model) existing.model = s.modelName || '';
+          if (!existing.fuelType) existing.fuelType = s.fuelType;
         }
         
-        // Add service to vehicle
+        // Add service to vehicle (prevent duplicates by checking service ID)
         const vehicle = vehiclesMap.get(key)!;
         if (!vehicle.services) vehicle.services = [];
-        vehicle.services.push({
-          id: s.id!,
-          category: s.category || 'Service',
-          status: s.status || 'pending',
-          scheduledDate: s.scheduledDate,
-          jobCardNo: s.jobCardNo,
+        const serviceExists = vehicle.services.some(svc => svc.id === s.id);
+        if (!serviceExists) {
+          vehicle.services.push({
+            id: s.id!,
+            category: s.category || 'Service',
+            status: s.status || 'pending',
+            scheduledDate: s.scheduledDate,
+            jobCardNo: s.jobCardNo,
+          });
+        }
+      }
+      
+      // Handle B2B: multiple vehicles in array
+      // Process ALL vehicles in the booking
+      if (s.vehicles && Array.isArray(s.vehicles) && s.vehicles.length > 0) {
+        s.vehicles.forEach((v: any) => {
+          const plate = v.numberPlate || v.plate;
+          if (plate) {
+            const key = plate.toLowerCase().replace(/\s/g, '');
+            
+            // Create or get vehicle entry
+            if (!vehiclesMap.has(key)) {
+              vehiclesMap.set(key, {
+                make: v.vehicleBrand || v.brand || '',
+                model: v.modelName || v.model || '',
+                plate: plate,
+                fuelType: v.fuelType,
+                color: undefined,
+                year: undefined,
+                vin: v.vinNumber || v.vin,
+                services: [],
+              });
+            } else {
+              // Update missing fields with more complete data
+              const existing = vehiclesMap.get(key)!;
+              if (!existing.vin) existing.vin = v.vinNumber || v.vin;
+              if (!existing.make) existing.make = v.vehicleBrand || v.brand || '';
+              if (!existing.model) existing.model = v.modelName || v.model || '';
+              if (!existing.fuelType) existing.fuelType = v.fuelType;
+            }
+            
+            // Add service to vehicle with the vehicle's own category (prevent duplicates)
+            const vehicle = vehiclesMap.get(key)!;
+            if (!vehicle.services) vehicle.services = [];
+            const serviceExists = vehicle.services.some(svc => svc.id === s.id);
+            if (!serviceExists) {
+              vehicle.services.push({
+                id: s.id!,
+                category: v.category || s.category || 'Service',  // Use vehicle's category first
+                status: s.status || 'pending',
+                scheduledDate: s.scheduledDate,
+                jobCardNo: s.jobCardNo,
+              });
+            }
+          }
         });
       }
     });
@@ -206,10 +263,11 @@ export async function listAllCustomerVehicles(customer: Customer): Promise<Vehic
     console.error('Error fetching vehicles from bookedServices:', err);
   }
   
-  // 3. Get vehicles from invoices
+  // 3. Get vehicles from invoices (both B2C and B2B)
   try {
     const invoices = await listInvoicesForCustomer(customer);
     invoices.forEach((inv: any) => {
+      // B2C: single vehicle in vehicleDetails
       if (inv.vehicleDetails?.plate) {
         const key = inv.vehicleDetails.plate.toLowerCase().replace(/\s/g, '');
         if (!vehiclesMap.has(key)) {
@@ -220,10 +278,45 @@ export async function listAllCustomerVehicles(customer: Customer): Promise<Vehic
             fuelType: undefined,
             color: undefined,
             year: undefined,
-            vin: undefined,
+            vin: inv.vehicleDetails.vin,
             services: [],
           });
+        } else {
+          // Update missing fields
+          const existing = vehiclesMap.get(key)!;
+          if (!existing.vin) existing.vin = inv.vehicleDetails.vin;
+          if (!existing.make) existing.make = inv.vehicleDetails.brand || '';
+          if (!existing.model) existing.model = inv.vehicleDetails.model || '';
         }
+      }
+      
+      // B2B: multiple vehicles in array
+      if (inv.vehicles && Array.isArray(inv.vehicles)) {
+        inv.vehicles.forEach((v: any) => {
+          const plate = v.numberPlate || v.plate;
+          if (plate) {
+            const key = plate.toLowerCase().replace(/\s/g, '');
+            if (!vehiclesMap.has(key)) {
+              vehiclesMap.set(key, {
+                make: v.vehicleBrand || v.brand || '',
+                model: v.modelName || v.model || '',
+                plate: plate,
+                fuelType: v.fuelType,
+                color: undefined,
+                year: undefined,
+                vin: v.vinNumber || v.vin,
+                services: [],
+              });
+            } else {
+              // Update missing fields
+              const existing = vehiclesMap.get(key)!;
+              if (!existing.vin) existing.vin = v.vinNumber || v.vin;
+              if (!existing.make) existing.make = v.vehicleBrand || v.brand || '';
+              if (!existing.model) existing.model = v.modelName || v.model || '';
+              if (!existing.fuelType) existing.fuelType = v.fuelType;
+            }
+          }
+        });
       }
     });
   } catch (err) {
@@ -262,16 +355,81 @@ export async function deleteNote(customerId: ID, noteId: ID) {
   await deleteDoc(doc(db, 'customers', customerId, 'notes', noteId));
 }
 
+// Contact Persons (sub-collection under B2B company customer)
+export interface ContactPerson {
+  id?: ID;
+  name: string;
+  email: string;
+  phone: string;
+  title?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export async function saveContactPerson(companyCustomerId: ID, contactData: Omit<ContactPerson, 'id' | 'createdAt' | 'updatedAt'>): Promise<ID> {
+  // Find existing contact by email or phone
+  const contacts = await getDocs(
+    query(
+      collection(db, 'customers', companyCustomerId, 'contacts'),
+      where('email', '==', contactData.email)
+    )
+  );
+  
+  if (!contacts.empty) {
+    // Update existing
+    const contactId = contacts.docs[0].id;
+    await updateDoc(doc(db, 'customers', companyCustomerId, 'contacts', contactId), {
+      ...contactData,
+      updatedAt: serverTimestamp(),
+    });
+    return contactId;
+  }
+  
+  // Create new
+  const docRef = await addDoc(
+    collection(db, 'customers', companyCustomerId, 'contacts'),
+    {
+      ...contactData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }
+  );
+  return docRef.id;
+}
+
+export async function getContactPerson(companyCustomerId: ID, contactId: ID): Promise<ContactPerson | null> {
+  const snap = await getDoc(doc(db, 'customers', companyCustomerId, 'contacts', contactId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...(snap.data() as any) } as ContactPerson;
+}
+
+export async function listContactPersons(companyCustomerId: ID): Promise<ContactPerson[]> {
+  const snap = await getDocs(collection(db, 'customers', companyCustomerId, 'contacts'));
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as ContactPerson[];
+}
+
 // Related data from existing collections
 export async function listServiceHistoryForCustomer(customer: Customer): Promise<ServiceBooking[]> {
-  // Heuristic: match by mobileNo or email in 'bookedServices'
+  // Heuristic: match by mobileNo/email (B2C) or contactPhone/contactEmail/companyName (B2B)
   const rows: ServiceBooking[] = [];
-  // Firestore requires two queries; merge client-side
+  const map: Record<string, boolean> = {};
+  
+  // B2C: search by mobileNo and email
   const byMobile = customer.mobile ? await getDocs(query(collection(db, 'bookedServices'), where('mobileNo', '==', customer.mobile))) : null;
   const byEmail = customer.email ? await getDocs(query(collection(db, 'bookedServices'), where('email', '==', customer.email))) : null;
-  const map: Record<string, boolean> = {};
+  
+  // B2B: search by contactPhone, contactEmail, and companyName
+  const byContactPhone = customer.contactPhone ? await getDocs(query(collection(db, 'bookedServices'), where('contactPhone', '==', customer.contactPhone))) : null;
+  const byContactEmail = customer.contactEmail ? await getDocs(query(collection(db, 'bookedServices'), where('contactEmail', '==', customer.contactEmail))) : null;
+  const byCompanyName = customer.companyName ? await getDocs(query(collection(db, 'bookedServices'), where('companyName', '==', customer.companyName))) : null;
+  
+  // Merge all results, deduplicating by document ID
   if (byMobile) byMobile.docs.forEach(d => { rows.push({ id: d.id, ...(d.data() as any) }); map[d.id] = true; });
-  if (byEmail) byEmail.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any) }); });
+  if (byEmail) byEmail.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any) }); map[d.id] = true; });
+  if (byContactPhone) byContactPhone.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any) }); map[d.id] = true; });
+  if (byContactEmail) byContactEmail.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any) }); map[d.id] = true; });
+  if (byCompanyName) byCompanyName.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any) }); map[d.id] = true; });
+  
   // Sort by scheduledDate desc
   return rows.sort((a, b) => {
     const ad = a.scheduledDate?.toDate ? a.scheduledDate.toDate() : new Date(a.scheduledDate || 0);
@@ -281,17 +439,32 @@ export async function listServiceHistoryForCustomer(customer: Customer): Promise
 }
 
 export async function listLeadsForCustomer(customer: Customer): Promise<any[]> {
-  if (!customer.email && !customer.mobile) return [];
+  if (!customer.email && !customer.mobile && !customer.contactEmail && !customer.contactPhone) return [];
   const rows: any[] = [];
   const map: Record<string, boolean> = {};
   
+  // B2C: search by email and phone
   if (customer.email) {
     const byEmail = await getDocs(query(collection(db, 'crm-leads'), where('email', '==', customer.email)));
     byEmail.docs.forEach(d => { rows.push({ id: d.id, ...(d.data() as any), type: 'lead' }); map[d.id] = true; });
   }
   if (customer.mobile) {
     const byPhone = await getDocs(query(collection(db, 'crm-leads'), where('phone', '==', customer.mobile)));
-    byPhone.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any), type: 'lead' }); });
+    byPhone.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any), type: 'lead' }); map[d.id] = true; });
+  }
+  
+  // B2B: search by contactEmail, contactPhone, and companyName
+  if (customer.contactEmail) {
+    const byContactEmail = await getDocs(query(collection(db, 'crm-leads'), where('email', '==', customer.contactEmail)));
+    byContactEmail.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any), type: 'lead' }); map[d.id] = true; });
+  }
+  if (customer.contactPhone) {
+    const byContactPhone = await getDocs(query(collection(db, 'crm-leads'), where('phone', '==', customer.contactPhone)));
+    byContactPhone.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any), type: 'lead' }); map[d.id] = true; });
+  }
+  if (customer.companyName) {
+    const byCompanyName = await getDocs(query(collection(db, 'crm-leads'), where('company', '==', customer.companyName)));
+    byCompanyName.docs.forEach(d => { if (!map[d.id]) rows.push({ id: d.id, ...(d.data() as any), type: 'lead' }); map[d.id] = true; });
   }
   
   // Sort client-side by createdAt desc
@@ -316,20 +489,38 @@ export async function getCustomerActivityHistory(customer: Customer): Promise<an
   
   // Map services
   services.forEach(s => {
-    activities.push({
-      id: s.id,
-      type: 'service',
-      title: s.category || 'Service Booking',
-      description: `Job Card: ${s.jobCardNo || 'N/A'} • Status: ${s.status || 'pending'}`,
-      date: s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate || 0),
-      data: s,
-    });
+    // For B2B bookings with multiple vehicles, create an entry for each vehicle
+    if (s.customerType === 'b2b' && s.vehicles && Array.isArray(s.vehicles) && s.vehicles.length > 1) {
+      s.vehicles.forEach((v: any, idx: number) => {
+        activities.push({
+          id: s.id,
+          key: `${s.id}-vehicle-${idx}`,
+          type: 'service',
+          title: v.category || s.category || 'Service Booking',
+          description: `Vehicle: ${v.vehicleBrand || ''} ${v.modelName || ''} (${v.numberPlate || ''}) • Job Card: ${s.jobCardNo || 'N/A'} • Status: ${s.status || 'pending'}`,
+          date: s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate || 0),
+          data: s,
+        });
+      });
+    } else {
+      // For B2C or single-vehicle B2B, create single entry
+      activities.push({
+        id: s.id,
+        key: `service-${s.id}`,
+        type: 'service',
+        title: s.category || 'Service Booking',
+        description: `Job Card: ${s.jobCardNo || 'N/A'} • Status: ${s.status || 'pending'}`,
+        date: s.scheduledDate?.toDate ? s.scheduledDate.toDate() : new Date(s.scheduledDate || 0),
+        data: s,
+      });
+    }
   });
   
   // Map leads
   leads.forEach(l => {
     activities.push({
       id: l.id,
+      key: `lead-${l.id}`,
       type: 'lead',
       title: 'Lead Inquiry',
       description: `Service: ${l.service || 'General'} • ${(l.message || '').slice(0, 60)}${(l.message||'').length > 60 ? '...' : ''}`,
@@ -342,6 +533,7 @@ export async function getCustomerActivityHistory(customer: Customer): Promise<an
   invoices.forEach(inv => {
     activities.push({
       id: inv.id,
+      key: `invoice-${inv.id}`,
       type: 'invoice',
       title: 'Invoice Generated',
       description: `Total: AED ${inv.total || 0}`,
@@ -355,10 +547,45 @@ export async function getCustomerActivityHistory(customer: Customer): Promise<an
 }
 
 export async function listInvoicesForCustomer(customer: Customer): Promise<InvoiceDoc[]> {
-  if (!customer.email) return [];
-  const q = query(collection(db, 'invoices'), where('customerEmail', '==', customer.email));
-  const snap = await getDocs(q);
-  const invoices = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  const invoices: InvoiceDoc[] = [];
+  const map: Record<string, boolean> = {};
+  
+  // For B2C customers: search by customerEmail
+  if (customer.email) {
+    const q = query(collection(db, 'invoices'), where('customerEmail', '==', customer.email));
+    const snap = await getDocs(q);
+    snap.docs.forEach(d => {
+      const inv = { id: d.id, ...(d.data() as any) };
+      invoices.push(inv);
+      map[d.id] = true;
+    });
+  }
+  
+  // For B2B customers: search by contactEmail and companyName
+  if (customer.contactEmail) {
+    const q = query(collection(db, 'invoices'), where('contactEmail', '==', customer.contactEmail));
+    const snap = await getDocs(q);
+    snap.docs.forEach(d => {
+      if (!map[d.id]) {
+        const inv = { id: d.id, ...(d.data() as any) };
+        invoices.push(inv);
+        map[d.id] = true;
+      }
+    });
+  }
+  
+  if (customer.companyName) {
+    const q = query(collection(db, 'invoices'), where('companyName', '==', customer.companyName));
+    const snap = await getDocs(q);
+    snap.docs.forEach(d => {
+      if (!map[d.id]) {
+        const inv = { id: d.id, ...(d.data() as any) };
+        invoices.push(inv);
+        map[d.id] = true;
+      }
+    });
+  }
+  
   // Sort client-side by createdAt desc
   return invoices.sort((a, b) => {
     const aDate = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);

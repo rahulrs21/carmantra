@@ -18,10 +18,14 @@ interface Service {
   id: string;
   jobCardNo: string;
   category: string;
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  customerType?: 'b2b' | 'b2c';
   mobileNo: string;
   email: string;
+  contactPhone?: string;
+  contactEmail?: string;
   vehicleType: string;
   vehicleBrand: string;
   modelName: string;
@@ -230,7 +234,7 @@ export default function ServicesPage() {
   }
 
   function handleViewDetails(id: string) {
-    router.push(`/admin/book-service/${id}`);
+    window.open(`/admin/book-service/${id}`, '_blank');
   }
 
   function getStatusColor(status: string) {
@@ -508,9 +512,24 @@ export default function ServicesPage() {
                     <div className="min-w-0">
                       <div className="text-sm text-gray-500">Job Card</div>
                       <div className="font-semibold text-blue-600 break-words">{service.jobCardNo}</div>
-                      <div className="text-sm font-medium mt-1 break-words">{service.firstName} {service.lastName}</div>
-                      <div className="text-xs text-gray-500 break-words">{service.mobileNo}</div>
-                      <div className="text-xs text-gray-400 break-all">{service.email}</div>
+                      <div className="text-sm font-medium mt-1 break-words flex items-center gap-2">
+                        {service.firstName || service.lastName ? (
+                          <>
+                            {service.firstName} {service.lastName}
+                          </>
+                        ) : service.companyName ? (
+                          <>{service.companyName}</>
+                        ) : (
+                          <span className="text-gray-400">No Name</span>
+                        )}
+                        {service.customerType && (
+                          <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${service.customerType === 'b2b' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'}`}>
+                            {service.customerType.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 break-words">{service.customerType === 'b2b' ? (service.contactPhone || service.mobileNo) : service.mobileNo}</div>
+                      <div className="text-xs text-gray-400 break-all">{service.customerType === 'b2b' ? (service.contactEmail || service.email) : service.email}</div>
                     </div>
                     <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${getStatusColor(service.status)}`}>
                       {service.status}
@@ -614,11 +633,26 @@ export default function ServicesPage() {
                         <div className="font-medium text-blue-600">{service.jobCardNo}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium">{service.firstName} {service.lastName}</div>
+                        <div className="font-medium flex items-center gap-2">
+                          {service.firstName || service.lastName ? (
+                            <>
+                              {service.firstName} {service.lastName}
+                            </>
+                          ) : service.companyName ? (
+                            <>{service.companyName}</>
+                          ) : (
+                            <span className="text-gray-400">No Name</span>
+                          )}
+                          {service.customerType && (
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${service.customerType === 'b2b' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'}`}>
+                              {service.customerType.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        <div>{service.mobileNo}</div>
-                        <div className="text-xs text-gray-400">{service.email}</div>
+                        <div>{service.customerType === 'b2b' ? (service.contactPhone || service.mobileNo) : service.mobileNo}</div>
+                        <div className="text-xs text-gray-400">{service.customerType === 'b2b' ? (service.contactEmail || service.email) : service.email}</div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
