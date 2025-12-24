@@ -394,6 +394,45 @@ export default function BookServiceList() {
 
             const docRef = await addDoc(collection(db, 'bookedServices'), bookingData);
             
+            // Send booking confirmation email
+            try {
+                const customerEmail = formData.customerType === 'b2c' ? formData.email : formData.contactEmail;
+                const customerName = formData.customerType === 'b2c' 
+                    ? `${formData.firstName} ${formData.lastName}`
+                    : formData.contactName;
+                const customerPhone = formData.customerType === 'b2c' ? formData.mobileNo : formData.contactPhone;
+                
+                if (customerEmail) {
+                    const scheduledDateTime = new Date(selectedDate!);
+                    const [hours, minutes] = selectedTime.split(':');
+                    scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
+
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            emailType: 'booking-confirmation',
+                            name: customerName,
+                            email: customerEmail,
+                            phone: customerPhone,
+                            service: bookingCategory,
+                            jobCardNo: formData.jobCardNo,
+                            scheduledDate: scheduledDateTime.toISOString(),
+                            vehicleDetails: {
+                                vehicleBrand: primaryVehicle.vehicleBrand,
+                                modelName: primaryVehicle.modelName,
+                                numberPlate: primaryVehicle.numberPlate,
+                            },
+                            companyName: formData.customerType === 'b2b' ? formData.companyName : null,
+                            contactName: formData.customerType === 'b2b' ? formData.contactName : null,
+                        }),
+                    });
+                }
+            } catch (emailErr: any) {
+                safeConsoleError('Booking confirmation email error', emailErr);
+                // Don't fail the booking if email fails
+            }
+            
             // For B2B bookings, save the contact person to the company customer's sub-collection
             if (formData.customerType === 'b2b' && companyCustomerId && formData.contactName) {
                 try {

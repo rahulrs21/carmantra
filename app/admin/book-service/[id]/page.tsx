@@ -812,6 +812,38 @@ export default function BookServiceDetails() {
         updatedByName: currentAdminName,
       });
 
+      // Send job completion email
+      try {
+        const customerEmail = service.customerType?.toLowerCase() === 'b2b' 
+          ? service.contactEmail 
+          : service.email;
+        const customerName = service.customerType?.toLowerCase() === 'b2b'
+          ? service.contactName
+          : `${service.firstName} ${service.lastName}`;
+
+        if (customerEmail) {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              emailType: 'job-completion',
+              name: customerName,
+              email: customerEmail,
+              phone: service.customerType?.toLowerCase() === 'b2b' 
+                ? service.contactPhone 
+                : service.mobileNo,
+              service: service.category || 'Service',
+              jobCardNo: service.jobCardNo,
+              companyName: service.customerType?.toLowerCase() === 'b2b' ? service.companyName : null,
+              contactName: service.customerType?.toLowerCase() === 'b2b' ? service.contactName : null,
+            }),
+          });
+        }
+      } catch (emailErr: any) {
+        safeConsoleError('Job completion email error', emailErr);
+        // Don't fail the invoice creation if email fails
+      }
+
       setService({
         ...service,
         status: 'completed',
@@ -828,7 +860,7 @@ export default function BookServiceDetails() {
         updatedByName: currentAdminName,
       });
       setCreatedInvoiceId(docRef.id);
-      setStatus('✓ Invoice created and service marked as completed!');
+      setStatus('✓ Invoice created, service marked as completed, and confirmation email sent!');
       setShowBilling(false);
     } catch (err: any) {
       safeConsoleError('Billing save error', err);
