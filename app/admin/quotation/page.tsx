@@ -179,7 +179,7 @@ export default function QuotationsPage() {
 
   return (
     <ModuleAccess module="quotations">
-    <div className="p-6 space-y-6">
+    <div className="p-1 sm:p-6 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Quotations</h1>
@@ -195,12 +195,12 @@ export default function QuotationsPage() {
       {/* Filters */}
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between md:hidden">
-          <div className="text-sm font-medium text-gray-700">Filters</div>
+          <div className="text-sm font-medium text-gray-700 dark:text-white">Filters</div>
           <button
             className="flex items-center gap-2 px-3 py-2 text-sm border rounded hover:bg-gray-50"
             onClick={() => setShowMobileFilters((v) => !v)}
           >
-            <span className="text-gray-600">{showMobileFilters ? 'Hide' : 'Show'}</span>
+            <span className="text-gray-500">{showMobileFilters ? 'Hide' : 'Show'}</span>
             <span className="text-gray-400">⋮</span>
           </button>
         </div>
@@ -216,7 +216,7 @@ export default function QuotationsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm h-11"
+            className="border rounded px-3 py-2 text-sm h-11 dark:bg-black"
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -290,7 +290,7 @@ export default function QuotationsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="border rounded px-3 py-2 text-sm h-11"
+              className="border rounded px-3 py-2 text-sm h-11 dark:text-black"
             >
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
@@ -403,7 +403,7 @@ export default function QuotationsPage() {
                   <div className="flex gap-3">
                     <button
                       className="text-sm text-green-600 hover:underline"
-                      onClick={() => window.location.href = `/admin/quotation/${qt.id}`}
+                      onClick={() => window.open(`/admin/quotation/${qt.id}`, '_blank')}
                     >
                       View
                     </button>
@@ -476,7 +476,7 @@ export default function QuotationsPage() {
                     <tr key={qt.id} className="border-t hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 font-medium">
-                          <span className="truncate">{qt.customerName}</span>
+                          <span className="truncate dark:text-black">{qt.customerName}</span>
                           {typeBadge(qt)}
                         </div>
                         <div className="text-xs text-gray-500">{qt.quotationNumber}</div>
@@ -484,7 +484,7 @@ export default function QuotationsPage() {
                           <div className="text-xs text-gray-500">VIN: {qt.vehicleDetails.vin}</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-medium">AED {(qt.total || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 font-medium dark:text-black">AED {(qt.total || 0).toFixed(2)}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${
                           qt.status === 'accepted' 
@@ -501,7 +501,7 @@ export default function QuotationsPage() {
                         <div className="flex gap-2">
                           <button
                             className="text-sm text-green-600 hover:underline"
-                            onClick={() => window.location.href = `/admin/quotation/${qt.id}`}
+                            onClick={() => window.open(`/admin/quotation/${qt.id}`, '_blank')}
                           >
                             View
                           </button>
@@ -627,7 +627,7 @@ export default function QuotationsPage() {
                 </svg>
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-2 sm:p-6">
               <QuotationForm 
                 quotation={editingQuotation} 
                 onCreated={handleCloseModal} 

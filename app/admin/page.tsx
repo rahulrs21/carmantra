@@ -136,6 +136,7 @@ export default function AdminDashboard() {
   const [customRange, setCustomRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
   const [selectedRange, setSelectedRange] = useState<any>(undefined);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [chartMetric, setChartMetric] = useState<'leads' | 'services' | 'customers' | 'invoices'>('leads');
 
   function toDate(ts?: Lead['createdAt']) {
     try {
@@ -223,45 +224,84 @@ export default function AdminDashboard() {
     if (!activeRange) return { series: [], serviceBreakdown: [] };
     const { start, end, isDaily } = activeRange;
 
-    // hourly series for single-day ranges
+    // Build time series based on selected metric
     if (!isDaily) {
       const hours = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
-      const services = new Map<string, number>();
-      for (const l of leads) {
-        const d = toDate(l.createdAt);
+      const breakdown = new Map<string, number>();
+      
+      const dataSource = chartMetric === 'leads' ? leads :
+                        chartMetric === 'services' ? services :
+                        chartMetric === 'customers' ? customers :
+                        invoices;
+
+      for (const item of dataSource) {
+        const d = toDate(item.createdAt);
         if (!d) continue;
         if (!(d >= start && d <= end)) continue;
         hours[d.getHours()].count += 1;
-        const svc = l.service || 'Unknown';
-        services.set(svc, (services.get(svc) || 0) + 1);
+        
+        // Calculate breakdown based on metric type
+        if (chartMetric === 'leads' && item.service) {
+          const svc = item.service || 'Unknown';
+          breakdown.set(svc, (breakdown.get(svc) || 0) + 1);
+        } else if (chartMetric === 'services' && item.status) {
+          const status = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+          breakdown.set(status, (breakdown.get(status) || 0) + 1);
+        } else if (chartMetric === 'customers') {
+          breakdown.set('Total Registered', (breakdown.get('Total Registered') || 0) + 1);
+        } else if (chartMetric === 'invoices' && item.status) {
+          const status = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+          breakdown.set(status, (breakdown.get(status) || 0) + 1);
+        } else if (chartMetric === 'invoices') {
+          breakdown.set('Generated', (breakdown.get('Generated') || 0) + 1);
+        }
       }
       const series = hours.map((h) => ({ date: formatHourLabel(h.hour), count: h.count }));
-      const serviceBreakdown = Array.from(services.entries()).map(([name, value]) => ({ name, value }));
+      const serviceBreakdown = Array.from(breakdown.entries()).map(([name, value]) => ({ name, value }));
       return { series, serviceBreakdown };
     }
 
     // daily series for multi-day ranges
     const dayMap = new Map<number, number>();
-    const services = new Map<string, number>();
-    // initialize days
+    const breakdown = new Map<string, number>();
+    
     for (let t = start.getTime(); t <= end.getTime(); t += 24 * 3600 * 1000) {
       dayMap.set(new Date(t).getTime(), 0);
     }
 
-    for (const l of leads) {
-      const d = toDate(l.createdAt);
+    const dataSource = chartMetric === 'leads' ? leads :
+                      chartMetric === 'services' ? services :
+                      chartMetric === 'customers' ? customers :
+                      invoices;
+
+    for (const item of dataSource) {
+      const d = toDate(item.createdAt);
       if (!d) continue;
       if (!(d >= start && d <= end)) continue;
       const key = startOfDay(d).getTime();
       if (dayMap.has(key)) dayMap.set(key, (dayMap.get(key) || 0) + 1);
-      const svc = l.service || 'Unknown';
-      services.set(svc, (services.get(svc) || 0) + 1);
+      
+      // Calculate breakdown based on metric type
+      if (chartMetric === 'leads' && item.service) {
+        const svc = item.service || 'Unknown';
+        breakdown.set(svc, (breakdown.get(svc) || 0) + 1);
+      } else if (chartMetric === 'services' && item.status) {
+        const status = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+        breakdown.set(status, (breakdown.get(status) || 0) + 1);
+      } else if (chartMetric === 'customers') {
+        breakdown.set('Total Registered', (breakdown.get('Total Registered') || 0) + 1);
+      } else if (chartMetric === 'invoices' && item.status) {
+        const status = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+        breakdown.set(status, (breakdown.get(status) || 0) + 1);
+      } else if (chartMetric === 'invoices') {
+        breakdown.set('Generated', (breakdown.get('Generated') || 0) + 1);
+      }
     }
 
     const series = Array.from(dayMap.entries()).map(([date, count]) => ({ date, count })).sort((a, b) => Number(a.date) - Number(b.date));
-    const serviceBreakdown = Array.from(services.entries()).map(([name, value]) => ({ name, value }));
+    const serviceBreakdown = Array.from(breakdown.entries()).map(([name, value]) => ({ name, value }));
     return { series, serviceBreakdown };
-  }, [leads, activeRange]);
+  }, [leads, services, customers, invoices, activeRange, chartMetric]);
 
   const filteredLeads = useMemo(() => {
     if (!activeRange) return [];
@@ -311,7 +351,60 @@ export default function AdminDashboard() {
   const todaySeries = series.length ? series[series.length - 1].count : 0;
   const yesterdaySeries = series.length > 1 ? series[series.length - 2].count : 0;
   const todayChange = yesterdaySeries === 0 ? todaySeries === 0 ? 0 : 100 : Math.round(((todaySeries - yesterdaySeries) / Math.max(1, yesterdaySeries)) * 100);
-  const unreadCount = leads.filter(l => (l as any).read === false).length;
+  // Filter data by date range for module and metric cards
+  const filteredServices = useMemo(() => {
+    if (!activeRange) return [];
+    return services.filter((s) => {
+      const d = toDate(s.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end;
+    });
+  }, [services, activeRange]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!activeRange) return [];
+    return customers.filter((c) => {
+      const d = toDate(c.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end;
+    });
+  }, [customers, activeRange]);
+
+  const filteredInvoices = useMemo(() => {
+    if (!activeRange) return [];
+    return invoices.filter((i) => {
+      const d = toDate(i.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end;
+    });
+  }, [invoices, activeRange]);
+
+  const filteredQuotations = useMemo(() => {
+    if (!activeRange) return [];
+    return quotations.filter((q) => {
+      const d = toDate(q.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end;
+    });
+  }, [quotations, activeRange]);
+
+  const filteredLeadsCount = useMemo(() => {
+    if (!activeRange) return 0;
+    return leads.filter((l) => {
+      const d = toDate(l.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end;
+    }).length;
+  }, [leads, activeRange]);
+
+  const unreadCountFiltered = useMemo(() => {
+    if (!activeRange) return 0;
+    return leads.filter((l) => {
+      const d = toDate(l.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end && (l as any).read === false;
+    }).length;
+  }, [leads, activeRange]);
 
   function scrollToLeads() {
     const el = document.querySelector('table.w-full');
@@ -329,7 +422,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 mb-1">Total Services</p>
-              <h3 className="text-3xl font-bold text-blue-600">{services.length}</h3>
+              <h3 className="text-3xl font-bold text-blue-600">{filteredServices.length}</h3>
               <p className="text-xs text-gray-400 mt-2">Booked services</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -338,15 +431,15 @@ export default function AdminDashboard() {
               </svg>
             </div>
           </div>
-          {services.length > 0 && (
+          {filteredServices.length > 0 && (
             <div className="mt-4 pt-4 border-t">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Pending</span>
-                <span className="font-medium">{services.filter((s) => s.status === 'pending').length}</span>
+                <span className="font-medium">{filteredServices.filter((s) => s.status === 'pending').length}</span>
               </div>
               <div className="flex items-center justify-between text-xs mt-1">
                 <span className="text-gray-500">Completed</span>
-                <span className="font-medium text-green-600">{services.filter((s) => s.status === 'completed').length}</span>
+                <span className="font-medium text-green-600">{filteredServices.filter((s) => s.status === 'completed').length}</span>
               </div>
             </div>
           )}
@@ -356,20 +449,37 @@ export default function AdminDashboard() {
     {
       key: 'customers',
       render: () => (
-        <div
-          className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 hover:shadow-lg dark:hover:shadow-gray-600 transition-shadow cursor-pointer h-full min-h-[200px] flex flex-col"
-          onClick={() => (window.location.href = '/admin/customers')}
-        >
-          <div className="flex items-center justify-between">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-700 p-6 h-full min-h-[200px] flex flex-col gap-0">
+          <div
+            className="flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 -m-6 p-6 rounded-t-lg transition-colors"
+            onClick={() => (window.location.href = '/admin/customers')}
+          >
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Customers</p>
-              <h3 className="text-3xl font-bold text-green-600 dark:text-green-500">{customers.length}</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Registered</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Customers</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-500">{filteredCustomers.length}</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Registered</p>
             </div>
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-4 pt-2 sm:pt-4 border-t">
+            <div
+              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 -m-6 p-6 rounded-b-lg transition-colors"
+              onClick={() => (window.location.href = '/admin/leads')}
+            >
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Leads</p>
+                <h3 className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-500">{filteredLeadsCount}</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Within range</p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
@@ -385,7 +495,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Revenue</p>
-              <h3 className="text-3xl font-bold text-purple-600">{invoices.length}</h3>
+              <h3 className="text-3xl font-bold text-purple-600">{filteredInvoices.length}</h3>
               <p className="text-xs text-gray-400 mt-2">Generated invoices</p>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
@@ -394,11 +504,11 @@ export default function AdminDashboard() {
               </svg>
             </div>
           </div>
-          {invoices.length > 0 && (
+          {filteredInvoices.length > 0 && (
             <div className="mt-4 pt-4 border-t">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">Total Amount</span>
-                <span className="font-medium">AED {invoices.reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0).toLocaleString()}</span>
+                <span className="font-medium">AED {filteredInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0).toLocaleString()}</span>
               </div>
             </div>
           )}
@@ -415,7 +525,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Quotations</p>
-              <h3 className="text-3xl font-bold text-purple-600 dark:text-purple-500">{quotations.length}</h3>
+              <h3 className="text-3xl font-bold text-purple-600 dark:text-purple-500">{filteredQuotations.length}</h3>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Sent</p>
             </div>
             <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
@@ -424,65 +534,24 @@ export default function AdminDashboard() {
               </svg>
             </div>
           </div>
+          {filteredQuotations.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Pending</span>
+                <span className="font-medium">{filteredQuotations.filter((q) => q.status === 'pending').length}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs mt-1">
+                <span className="text-gray-500">Accepted</span>
+                <span className="font-medium text-green-600">{filteredQuotations.filter((q) => q.status === 'accepted').length}</span>
+              </div>
+            </div>
+          )}
         </div>
       ),
     },
   ];
 
-  const metricCards = [
-    {
-      key: 'total-leads',
-      render: () => (
-        <div className="h-full min-h-[100px]">
-          <MetricCard
-            title="Total Leads"
-            value={leads.length}
-            trendData={analytics.series.map((s) => ({ date: String(s.date), value: s.count }))}
-            color={COLORS[0]}
-            onClick={() => {
-              setFilterService(null);
-              scrollToLeads();
-            }}
-          />
-        </div>
-      ),
-    },
-    {
-      key: 'today',
-      render: () => (
-        <div className="h-full min-h-[100px]">
-          <MetricCard
-            title="Today"
-            value={todayCount}
-            subtitle={`${todayChange >= 0 ? '+' : ''}${todayChange}% vs yesterday`}
-            trendData={analytics.series.slice(-7).map((s) => ({ date: String(s.date), value: s.count }))}
-            color={COLORS[1]}
-            onClick={() => {
-              setFilterService(null);
-              scrollToLeads();
-            }}
-          />
-        </div>
-      ),
-    },
-    {
-      key: 'unread',
-      render: () => (
-        <div className="h-full min-h-[100px]">
-          <MetricCard
-            title="Unread"
-            value={unreadCount}
-            subtitle={unreadCount ? `${unreadCount} unread` : 'All read'}
-            color={COLORS[2]}
-            onClick={() => {
-              setFilterService(null);
-              scrollToLeads();
-            }}
-          />
-        </div>
-      ),
-    },
-  ];
+  const metricCards = [];
 
   if (error) {
     return (
@@ -512,6 +581,71 @@ export default function AdminDashboard() {
         </div>
       </header>
 
+      {/* Date Range Filter Section - Top Controls */}
+      <section className="sticky top-0 z-1 bg-white dark:bg-gray-900 rounded-lg shadow dark:shadow-gray-700 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Filter by Date Range</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Currently viewing: <span className="font-medium text-gray-700 dark:text-gray-300">{rangeLabel}</span></p>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <div className="inline-flex rounded-md shadow-sm bg-gray-100 dark:bg-gray-800 items-center flex-shrink-0">
+              <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors rounded-l-md ${rangeType==='30d' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} onClick={() => { setRangeType('30d'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Last 30d</button>
+              <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 ${rangeType==='yesterday' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} onClick={() => { setRangeType('yesterday'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Yesterday</button>
+              <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 ${rangeType==='today' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} onClick={() => { setRangeType('today'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Today</button>
+              <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 rounded-r-md ${rangeType==='custom' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} onClick={() => setIsPopoverOpen(true)}>Custom</button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto">
+                  <div className="flex flex-col gap-2">
+                    <Calendar
+                      mode="range"
+                      selected={selectedRange}
+                      onSelect={(r: any) => {
+                        setSelectedRange(r);
+                        // auto-apply when both dates are selected
+                        if (r?.from && r?.to) {
+                          setCustomRange({ from: r.from, to: r.to });
+                          setRangeType('custom');
+                        } else if (r instanceof Date) {
+                          setCustomRange({ from: r, to: r });
+                          setRangeType('custom');
+                        }
+                      }}
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { setSelectedRange(undefined); setCustomRange({ from: null, to: null }); setIsPopoverOpen(false); }}>Clear</Button>
+                      <Button size="sm" onClick={() => {
+                        if (!selectedRange) return setIsPopoverOpen(false);
+                        let from: Date | null = null;
+                        let to: Date | null = null;
+                        if (selectedRange.from || selectedRange.to) {
+                          from = selectedRange.from || selectedRange.to || null;
+                          to = selectedRange.to || selectedRange.from || null;
+                        } else if (selectedRange instanceof Date) {
+                          from = selectedRange;
+                          to = selectedRange;
+                        }
+                        if (from && to) {
+                          setCustomRange({ from, to });
+                          setRangeType('custom');
+                        }
+                        setIsPopoverOpen(false);
+                      }}>Apply</Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2 w-full sm:w-auto">
+              <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline" onClick={exportServiceCSV}>Export services CSV</button>
+              <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline" onClick={exportLeadsCSV}>Export leads CSV</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Module Overview Section */}
       <section className="sm:hidden">
         <Carousel opts={{ align: 'start', dragFree: true }}>
@@ -531,171 +665,158 @@ export default function AdminDashboard() {
         ))}
       </section>
 
-      {/* Leads Metrics Section */}
-      <section className="sm:hidden">
-        <Carousel opts={{ align: 'start', dragFree: true }}>
-          <CarouselContent>
-            {metricCards.map(({ key, render }) => (
-              <CarouselItem key={key} className="basis-[88%] h-full">
-                {render()}
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
-      </section>
-
-      <section className="hidden sm:grid grid-cols-3 gap-4">
-        {metricCards.map(({ key, render }) => (
-          <div key={key}>{render()}</div>
-        ))}
-      </section>
-
       <section>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h2 className="text-xl sm:text-2xl font-semibold">Analytics</h2>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="text-xs sm:text-sm text-gray-500 hidden md:block">Leads trends & service breakdown</div>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full">
-                <div className="inline-flex rounded-md shadow-sm bg-white items-center flex-shrink-0">
-                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='30d' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('30d'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Last 30d</button>
-                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='yesterday' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('yesterday'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Yesterday</button>
-                  <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='today' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => { setRangeType('today'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}>Today</button>
-                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <button className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap ${rangeType==='custom' ? 'bg-indigo-600 text-white' : 'text-gray-600'}`} onClick={() => setIsPopoverOpen(true)}>Custom</button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto">
-                      <div className="flex flex-col gap-2">
-                        <Calendar
-                          mode="range"
-                          selected={selectedRange}
-                          onSelect={(r: any) => {
-                            setSelectedRange(r);
-                            // auto-apply when both dates are selected
-                            if (r?.from && r?.to) {
-                              setCustomRange({ from: r.from, to: r.to });
-                              setRangeType('custom');
-                              // setIsPopoverOpen(false);
-                            } else if (r instanceof Date) {
-                              setCustomRange({ from: r, to: r });
-                              setRangeType('custom');
-                              // setIsPopoverOpen(false);
-                            }
-                          }}
-                        />
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => { setSelectedRange(undefined); setCustomRange({ from: null, to: null }); setIsPopoverOpen(false); }}>Clear</Button>
-                          <Button size="sm" onClick={() => {
-                            // support DayPicker range object { from, to } or a single Date
-                            if (!selectedRange) return setIsPopoverOpen(false);
-                            let from: Date | null = null;
-                            let to: Date | null = null;
-                            if (selectedRange.from || selectedRange.to) {
-                              from = selectedRange.from || selectedRange.to || null;
-                              to = selectedRange.to || selectedRange.from || null;
-                            } else if (selectedRange instanceof Date) {
-                              from = selectedRange;
-                              to = selectedRange;
-                            }
-                            if (from && to) {
-                              setCustomRange({ from, to });
-                              setRangeType('custom');
-                            }
-                            setIsPopoverOpen(false);
-                          }}>Apply</Button>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-2 w-full sm:w-auto">
-                  <button className="text-xs sm:text-sm text-indigo-600 hover:underline" onClick={exportServiceCSV}>Export services CSV</button>
-                  <button className="text-xs sm:text-sm text-indigo-600 hover:underline" onClick={exportLeadsCSV}>Export leads CSV</button>
-                </div>
-              </div>
+
+
+        <div className="hidden sm:flex justify-between items-center">
+
+          <div className="flex space-x-5 items-center">
+            <h2 className="text-xl sm:text-2xl font-semibold">Analytics</h2>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">Trends & breakdown by metric</p>
+          </div>
+
+          {/* Chart Metric Selector */}
+          <div className="mt-4 flex gap-2 flex-wrap">
+            {[
+              { key: 'leads', label: 'Leads' },
+              { key: 'services', label: 'Services' },
+              { key: 'customers', label: 'Customers' },
+              { key: 'invoices', label: 'Revenue' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setChartMetric(key as any)}
+                className={`px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                  chartMetric === key
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+          {/* Mobile device */}
+        <div className="flex sm:hidden flex-col">
+
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl sm:text-2xl font-semibold">Analytics</h2>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">Trends & breakdown by metric</p>
+          </div>
+
+          {/* Chart Metric Selector */}
+          <div className="mt-4 flex gap-2 flex-wrap">
+            {[
+              { key: 'leads', label: 'Leads' },
+              { key: 'services', label: 'Services' },
+              { key: 'customers', label: 'Customers' },
+              { key: 'invoices', label: 'Revenue' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setChartMetric(key as any)}
+                className={`px-3 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                  chartMetric === key
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-gray-800 relative rounded-xl shadow dark:shadow-gray-700 p-4 lg:col-span-2 overflow-hidden">
-            <h3 className="text-sm text-gray-600 dark:text-gray-300 mb-4 sm:mb-10">Leads ({rangeLabel})</h3>
-            <ChartContainer config={{ count: { label: 'Leads', color: '#4f46e5' } }} className="h-64 sm:h-72 aspect-auto flex relative -left-8 sm:-left-5 justify-center w-[calc(100%+3rem)] -mx-6 sm:w-full sm:mx-0">
-              {analytics.series.length === 0 ? (
-                <div className="h-64 flex items-center justify-center text-sm text-gray-400">No data for selected range</div>
-              ) : (
-                <LineChart data={analytics.series} margin={{ left: 0, right: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e6e6f0" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10 }}
-                    tickFormatter={(d: any) => {
-                      const useDaily = !!activeRange?.isDaily;
-                      if (useDaily) {
-                        try {
-                          const t = typeof d === 'number' ? new Date(d) : new Date(String(d));
-                          return t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                        } catch (e) {
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-gray-700 p-4 lg:col-span-2 overflow-hidden flex flex-col">
+            <h3 className="text-sm text-gray-600 dark:text-gray-300 mb-4">{['Leads', 'Services', 'Customers', 'Revenue'][['leads', 'services', 'customers', 'invoices'].indexOf(chartMetric)]} ({rangeLabel})</h3>
+            <div className="h-56 sm:h-96">
+              <ChartContainer config={{ count: { label: chartMetric.charAt(0).toUpperCase() + chartMetric.slice(1), color: '#4f46e5' } }} className="h-full w-full relative -left-4 sm:left-0">
+                {analytics.series.length === 0 ? (
+                  <div className="h-full w-full flex items-center justify-center text-sm text-gray-400">No data for selected range</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analytics.series} margin={{ left: -20, right: 0, top: 10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e6e6f0" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10 }}
+                        tickFormatter={(d: any) => {
+                          const useDaily = !!activeRange?.isDaily;
+                          if (useDaily) {
+                            try {
+                              const t = typeof d === 'number' ? new Date(d) : new Date(String(d));
+                              return t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                            } catch (e) {
+                              return String(d);
+                            }
+                          }
                           return String(d);
-                        }
-                      }
-                      return String(d);
-                    }}
-                    interval={activeRange?.isDaily ? 'preserveStartEnd' : 3}
-                  />
-                  <YAxis allowDecimals={false} />
-                  <RechartsTooltip
-                    content={<ChartTooltipContent hideIndicator labelKey="date" />}
-                    formatter={(value: any) => [value, 'Leads']}
-                  />
-                  <Line type="monotone" dataKey="count" stroke="#4f46e5" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                  <Legend content={(props) => <ChartLegendContent {...(props as any)} />} />
-                </LineChart>
-              )}
-            </ChartContainer>
+                        }}
+                        interval={activeRange?.isDaily ? 'preserveStartEnd' : 3}
+                      />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                      <RechartsTooltip
+                        content={<ChartTooltipContent hideIndicator labelKey="date" />}
+                        formatter={(value: any) => [value, chartMetric.charAt(0).toUpperCase() + chartMetric.slice(1)]}
+                      />
+                      <Line type="monotone" dataKey="count" stroke="#4f46e5" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                      <Legend  verticalAlign="bottom" content={(props) => <ChartLegendContent {...(props as any)} className="relative left-8" />} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartContainer>
+            </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-gray-700 p-4">
-            <h3 className="text-sm text-gray-600 dark:text-gray-400 mb-2">Services breakdown</h3>
-            <div className="h-56 sm:h-48 pt-4 sm:pt-0">
+            <h3 className="text-sm text-gray-600 dark:text-gray-400 mb-2">Breakdown</h3>
+            <div className="h-56 sm:h-48 ">
               <ChartContainer
                 config={analytics.serviceBreakdown.reduce((acc, s, i) => ({ ...acc, [s.name]: { label: s.name, color: COLORS[i % COLORS.length] } }), {} as any)}
                 className="h-full aspect-auto flex justify-center items-center"
               >
-                <PieChart>
-                  <Pie
-                    data={analytics.serviceBreakdown}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={32}
-                    outerRadius={64}
-                    paddingAngle={4}
-                    cy="55%"
-                  >
-                    {analytics.serviceBreakdown.map((entry, idx) => (
-                      <Cell key={entry.name} fill={COLORS[idx % COLORS.length]} onClick={() => setFilterService(entry.name)} style={{ cursor: 'pointer' }} />
-                    ))}
-                  </Pie>
-                  <Legend verticalAlign="bottom" content={(props) => <ChartLegendContent {...(props as any)} />} />
-                  <RechartsTooltip content={<ChartTooltipContent nameKey="name" />} />
-                </PieChart>
+                {analytics.serviceBreakdown.length === 0 ? (
+                  <div className="flex items-center justify-center text-sm text-gray-400">No data</div>
+                ) : (
+                  <PieChart>
+                    <Pie
+                      data={analytics.serviceBreakdown}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={32}
+                      outerRadius={64}
+                      paddingAngle={4}
+                      cy="55%"
+                    >
+                      {analytics.serviceBreakdown.map((entry, idx) => (
+                        <Cell key={entry.name} fill={COLORS[idx % COLORS.length]} onClick={() => chartMetric === 'leads' && setFilterService(entry.name)} style={{ cursor: chartMetric === 'leads' ? 'pointer' : 'default' }} />
+                      ))}
+                    </Pie>
+                    <Legend align="center" verticalAlign="bottom" content={(props) => <ChartLegendContent {...(props as any)} />} />
+                    <RechartsTooltip content={<ChartTooltipContent nameKey="name" />} />
+                  </PieChart>
+                )}
               </ChartContainer>
             </div>
 
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[260px] text-sm">
-                <thead className="text-xs text-gray-500">
+            <div className="mt-3 max-h-48 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-gray-500 dark:text-gray-400">
                   <tr>
-                    <th className="text-left px-2">Service</th>
-                    <th className="text-right px-2">Count</th>
+                    <th className="text-left px-2 py-2">{chartMetric === 'leads' ? 'Service' : 'Status'}</th>
+                    <th className="text-right px-2 py-2">Count</th>
                   </tr>
                 </thead>
                 <tbody>
                   {analytics.serviceBreakdown.length === 0 && (
                     <tr><td colSpan={2} className="py-3 text-center text-gray-400">No data</td></tr>
                   )}
-                  {analytics.serviceBreakdown.map((s) => (
-                    <tr key={s.name} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => setFilterService(s.name)}>
-                      <td className="py-2 px-2 flex items-center gap-2"><span className="w-2 h-2 rounded" style={{ background: COLORS[analytics.serviceBreakdown.indexOf(s) % COLORS.length] }} />{s.name}</td>
+                  {analytics.serviceBreakdown.map((s, idx) => (
+                    <tr key={s.name} className="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" style={{ cursor: chartMetric === 'leads' ? 'pointer' : 'default' }} onClick={() => chartMetric === 'leads' && setFilterService(s.name)}>
+                      <td className="py-2 px-2 flex items-center gap-2"><span className="w-2 h-2 rounded" style={{ background: COLORS[idx % COLORS.length] }} />{s.name}</td>
                       <td className="py-2 px-2 text-right font-medium">{s.value}</td>
                     </tr>
                   ))}

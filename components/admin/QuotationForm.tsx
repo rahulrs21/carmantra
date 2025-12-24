@@ -551,8 +551,8 @@ export default function QuotationForm({
           </button>
         </div>
 
-        {/* Column Headers */}
-        <div className="grid grid-cols-12 gap-2 mb-2 px-3">
+        {/* Column Headers - Hidden on mobile */}
+        <div className="hidden md:grid grid-cols-12 gap-2 mb-2 px-3">
           <div className="col-span-5 text-xs font-semibold text-gray-600 uppercase">Description</div>
           <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Quantity</div>
           <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Rate</div>
@@ -560,58 +560,122 @@ export default function QuotationForm({
           <div className="col-span-1"></div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           {items.map((it, idx) => (
-            <div key={idx} className="grid grid-cols-12 gap-2 items-start bg-gray-50 p-3 rounded">
-              <div className="col-span-5">
-                <input 
-                  className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  placeholder="Service/Part description" 
-                  value={it.description || ''} 
-                  onChange={e => updateItem(idx, 'description', e.target.value)} 
-                />
+            <div key={idx} className="bg-gray-50 p-4 rounded border border-gray-200">
+              {/* Desktop Layout */}
+              <div className="hidden md:grid grid-cols-12 gap-2 items-start">
+                <div className="col-span-5">
+                  <input 
+                    className="w-full border border-gray-300 p-2 rounded text-sm" 
+                    placeholder="Service/Part description" 
+                    value={it.description || ''} 
+                    onChange={e => updateItem(idx, 'description', e.target.value)} 
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input 
+                    type="number" 
+                    className="w-full border border-gray-300 p-2 rounded text-sm" 
+                    value={it.quantity || 1} 
+                    min={1} 
+                    onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value || '1', 10))} 
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input 
+                    type="number" 
+                    className="w-full border border-gray-300 p-2 rounded text-sm" 
+                    value={it.rate === 0 ? '' : it.rate} 
+                    step="1"
+                    min={0}
+                    onChange={e => {
+                      const val = e.target.value;
+                      updateItem(idx, 'rate', val === '' ? 0 : parseFloat(val));
+                    }} 
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input 
+                    type="number" 
+                    className="w-full border border-gray-200 p-2 rounded text-sm bg-white font-medium" 
+                    value={(it.amount || 0).toFixed(2)} 
+                    readOnly
+                  />
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  {items.length > 1 && (
+                    <button 
+                      type="button" 
+                      className="text-red-500 hover:text-red-700" 
+                      onClick={() => removeItem(idx)}
+                      title="Remove item"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="col-span-2">
-                <input 
-                  type="number" 
-                  className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  value={it.quantity || 1} 
-                  min={1} 
-                  onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value || '1', 10))} 
-                />
-              </div>
-              <div className="col-span-2">
-                <input 
-                  type="number" 
-                  className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  value={it.rate === 0 ? '' : it.rate} 
-                  step="1"
-                  min={0}
-                  onChange={e => {
-                    const val = e.target.value;
-                    updateItem(idx, 'rate', val === '' ? 0 : parseFloat(val));
-                  }} 
-                />
-              </div>
-              <div className="col-span-2">
-                <input 
-                  type="number" 
-                  className="w-full border border-gray-200 p-2 rounded text-sm bg-white font-medium" 
-                  value={(it.amount || 0).toFixed(2)} 
-                  readOnly
-                />
-              </div>
-              <div className="col-span-1 flex justify-center">
+
+              {/* Mobile Layout */}
+              <div className="md:hidden space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Description</label>
+                  <input 
+                    className="w-full border border-gray-300 p-2 rounded text-sm" 
+                    placeholder="Service/Part description" 
+                    value={it.description || ''} 
+                    onChange={e => updateItem(idx, 'description', e.target.value)} 
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Qty</label>
+                    <input 
+                      type="number" 
+                      className="w-full border border-gray-300 p-2 rounded text-sm" 
+                      value={it.quantity || 1} 
+                      min={1} 
+                      onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value || '1', 10))} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Rate</label>
+                    <input 
+                      type="number" 
+                      className="w-full border border-gray-300 p-2 rounded text-sm" 
+                      value={it.rate === 0 ? '' : it.rate} 
+                      step="1"
+                      min={0}
+                      onChange={e => {
+                        const val = e.target.value;
+                        updateItem(idx, 'rate', val === '' ? 0 : parseFloat(val));
+                      }} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Amount</label>
+                    <input 
+                      type="number" 
+                      className="w-full border border-gray-200 p-2 rounded text-sm bg-gray-100 font-medium" 
+                      value={(it.amount || 0).toFixed(2)} 
+                      readOnly
+                    />
+                  </div>
+                </div>
                 {items.length > 1 && (
                   <button 
                     type="button" 
-                    className="text-red-500 hover:text-red-700" 
+                    className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 py-2 rounded text-sm font-medium flex items-center justify-center gap-2 border border-red-200" 
                     onClick={() => removeItem(idx)}
                     title="Remove item"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
+                    Remove Item
                   </button>
                 )}
               </div>
@@ -621,7 +685,7 @@ export default function QuotationForm({
       </div>
 
       {/* Additional Details */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Labor Charges</label>
           <input 
@@ -665,7 +729,7 @@ export default function QuotationForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select

@@ -304,12 +304,12 @@ export default function ServicesPage() {
       {/* Filters */}
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between md:hidden">
-          <div className="text-sm font-medium text-gray-700">Filters</div>
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-100">Filters</div>
           <button
             className="flex items-center gap-2 px-3 py-2 text-sm border rounded hover:bg-gray-50"
             onClick={() => setShowMobileFilters((v) => !v)}
           >
-            <span className="text-gray-600">{showMobileFilters ? 'Hide' : 'Show'}</span>
+            <span className="text-gray-500">{showMobileFilters ? 'Hide' : 'Show'}</span>
             <span className="text-gray-400">⋮</span>
           </button>
         </div>
@@ -325,7 +325,7 @@ export default function ServicesPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm h-11"
+            className="border rounded px-3 py-2 text-sm h-11 dark:bg-gray-800"
           >
             <option value="all">All Status</option>
             {statuses.map(status => (
@@ -335,7 +335,7 @@ export default function ServicesPage() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm h-11"
+            className="border rounded px-3 py-2 text-sm h-11 dark:bg-gray-800"
           >
             <option value="all">All Categories</option>
             {categories.map(cat => (
@@ -416,7 +416,7 @@ export default function ServicesPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="border rounded px-3 py-2 text-sm h-11"
+              className="border rounded px-3 py-2 text-sm h-11 dark:bg-gray-800"
             >
               <option value="all">All Status</option>
               {statuses.map(status => (
@@ -426,7 +426,7 @@ export default function ServicesPage() {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="border rounded px-3 py-2 text-sm h-11"
+              className="border rounded px-3 py-2 text-sm h-11 dark:bg-gray-800"
             >
               <option value="all">All Categories</option>
               {categories.map(cat => (
@@ -512,7 +512,7 @@ export default function ServicesPage() {
                     <div className="min-w-0">
                       <div className="text-sm text-gray-500">Job Card</div>
                       <div className="font-semibold text-blue-600 break-words">{service.jobCardNo}</div>
-                      <div className="text-sm font-medium mt-1 break-words flex items-center gap-2">
+                      <div className="text-sm font-medium mt-1 break-words flex items-center gap-2 dark:text-gray-800">
                         {service.firstName || service.lastName ? (
                           <>
                             {service.firstName} {service.lastName}
@@ -633,7 +633,7 @@ export default function ServicesPage() {
                         <div className="font-medium text-blue-600">{service.jobCardNo}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium flex items-center gap-2">
+                        <div className="font-medium flex items-center gap-2 dark:text-gray-800">
                           {service.firstName || service.lastName ? (
                             <>
                               {service.firstName} {service.lastName}

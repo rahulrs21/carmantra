@@ -4,6 +4,7 @@ import * as React from 'react';
 import * as RechartsPrimitive from 'recharts';
 
 import { cn } from '@/lib/utils';
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from './carousel';
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: '', dark: '.dark' } as const;
@@ -280,36 +281,50 @@ const ChartLegendContent = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          'flex items-center justify-center gap-4',
+          'w-full',
           verticalAlign === 'top' ? 'pb-3' : 'pt-3',
           className
         )}
       >
-        {payload.map((item) => {
-          const key = `${nameKey || item.dataKey || 'value'}`;
-          const itemConfig = getPayloadConfigFromPayload(config, item, key);
+        {/* Carousel Slider - All Devices */}
+        <Carousel 
+          opts={{ 
+            align: 'center', 
+            dragFree: true,
+            skipSnaps: false,
+          }}
+          className="w-full"
+        >
+          <CarouselContent className="-ml-2 cursor-grab">
+            {payload.map((item) => {
+              const key = `${nameKey || item.dataKey || 'value'}`;
+              const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
-          return (
-            <div
-              key={item.value}
-              className={cn(
-                'flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground'
-              )}
-            >
-              {itemConfig?.icon && !hideIcon ? (
-                <itemConfig.icon />
-              ) : (
-                <div
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{
-                    backgroundColor: item.color,
-                  }}
-                />
-              )}
-              {itemConfig?.label}
-            </div>
-          );
-        })}
+              return (
+                <CarouselItem key={item.value} className="basis-auto pl-2">
+                  <div
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/50 bg-muted/50 hover:bg-muted transition-colors whitespace-nowrap',
+                      '[&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground'
+                    )}
+                  >
+                    {itemConfig?.icon && !hideIcon ? (
+                      <itemConfig.icon />
+                    ) : (
+                      <div
+                        className="h-2 w-2 shrink-0 rounded-[2px]"
+                        style={{
+                          backgroundColor: item.color,
+                        }}
+                      />
+                    )}
+                    <span className="text-xs font-medium">{itemConfig?.label}</span>
+                  </div>
+                </CarouselItem>
+              );
+            })}
+          </CarouselContent>
+        </Carousel>
       </div>
     );
   }

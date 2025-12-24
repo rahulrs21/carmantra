@@ -7,14 +7,14 @@ import { safeConsoleError } from '@/lib/safeConsole';
 
 interface Item { description: string; quantity: number; rate: number; amount: number }
 
-export default function InvoiceForm({ 
-  invoice, 
-  onCreated, 
-  onCancel 
-}: { 
-  invoice?: any; 
-  onCreated?: (id: string) => void; 
-  onCancel?: () => void; 
+export default function InvoiceForm({
+  invoice,
+  onCreated,
+  onCancel
+}: {
+  invoice?: any;
+  onCreated?: (id: string) => void;
+  onCancel?: () => void;
 }) {
   const [customerType, setCustomerType] = useState<'b2c' | 'b2b'>('b2c');
   const [companyName, setCompanyName] = useState('');
@@ -58,7 +58,7 @@ export default function InvoiceForm({
       setVehiclePlate(invoice.vehicleDetails?.plate || '');
       setVehicleVin(invoice.vehicleDetails?.vin || '');
       setServiceCategory(invoice.serviceCategory || '');
-      
+
       // Ensure items always have valid values
       const invoiceItems = invoice.items || [{ description: '', quantity: 1, rate: 0, amount: 0 }];
       setItems(invoiceItems.map((item: any) => ({
@@ -67,7 +67,7 @@ export default function InvoiceForm({
         rate: item.rate || 0,
         amount: item.amount || 0
       })));
-      
+
       setLaborCharges(invoice.laborCharges || 0);
       setDiscount(invoice.discount || 0);
       setPaymentStatus(invoice.paymentStatus || 'unpaid');
@@ -83,7 +83,7 @@ export default function InvoiceForm({
     const subtotal = itemsTotal + laborCharges;
     const tax = subtotal * 0.05; // 5% VAT
     const grandTotal = subtotal + tax - discount;
-    
+
     return {
       itemsTotal,
       subtotal,
@@ -95,19 +95,19 @@ export default function InvoiceForm({
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     setMessage(null);
-    
+
     if (customerType === 'b2b') {
       if (!companyName) return setMessage('Enter company name');
       if (!contactName) return setMessage('Enter contact person');
     } else {
       if (!customerName) return setMessage('Enter customer name');
     }
-    
+
     const hasEmptyItems = items.some(item => !item.description || item.rate === 0);
     if (hasEmptyItems) {
       return setMessage('Please fill all service items with description and rate');
     }
-    
+
     setLoading(true);
 
     // Partial payment validation
@@ -118,7 +118,7 @@ export default function InvoiceForm({
         return;
       }
     }
-    
+
     const totals = calculateTotals();
     try {
       const normalizedCustomerName = customerType === 'b2b'
@@ -174,15 +174,15 @@ export default function InvoiceForm({
           createdAt: Timestamp.now(),
         });
         setMessage(`Invoice created: ${docRef.id}`);
-        
+
         // Reset form
         setCustomerType('b2c');
         setCompanyName('');
         setContactName('');
         setContactEmail('');
         setContactMobile('');
-        setCustomerName(''); 
-        setCustomerEmail(''); 
+        setCustomerName('');
+        setCustomerEmail('');
         setCustomerMobile('');
         setVehicleType('');
         setVehicleBrand('');
@@ -190,7 +190,7 @@ export default function InvoiceForm({
         setVehiclePlate('');
         setVehicleVin('');
         setServiceCategory('');
-        setItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]); 
+        setItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
         setLaborCharges(0);
         setDiscount(0);
         setPaymentStatus('unpaid');
@@ -198,14 +198,14 @@ export default function InvoiceForm({
         setPaymentTerms('cash');
         setPaymentTermsOther('');
         setNotes('');
-        
+
         if (onCreated) onCreated(docRef.id);
       }
     } catch (err) {
       safeConsoleError('Submit invoice error', err);
       setMessage(invoice?.id ? 'Failed to update invoice' : 'Failed to create invoice');
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -213,12 +213,12 @@ export default function InvoiceForm({
     setItems(prev => {
       const updated = [...prev];
       updated[idx] = { ...updated[idx], [field]: value };
-      
+
       // Auto-calculate amount
       if (field === 'quantity' || field === 'rate') {
         updated[idx].amount = (updated[idx].quantity || 0) * (updated[idx].rate || 0);
       }
-      
+
       return updated;
     });
   }
@@ -238,11 +238,10 @@ export default function InvoiceForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {message && (
-        <div className={`p-3 rounded text-sm ${
-          message.includes('success') || message.includes('created') 
-            ? 'bg-green-50 text-green-700 border border-green-200' 
+        <div className={`p-3 rounded text-sm ${message.includes('success') || message.includes('created')
+            ? 'bg-green-50 text-green-700 border border-green-200'
             : 'bg-red-50 text-red-700 border border-red-200'
-        }`}>
+          }`}>
           {message}
         </div>
       )}
@@ -259,6 +258,7 @@ export default function InvoiceForm({
               type="button"
               className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
               onClick={() => setCustomerType('b2c')}
+              disabled={!!invoice}
             >
               B2C
             </button>
@@ -266,6 +266,7 @@ export default function InvoiceForm({
               type="button"
               className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
               onClick={() => setCustomerType('b2b')}
+              disabled={!!invoice}
             >
               B2B
             </button>
@@ -273,8 +274,8 @@ export default function InvoiceForm({
         </div>
 
         {customerType === 'b2b' ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="col-span-1 sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
               <input
                 className="w-full border border-gray-300 p-2 rounded"
@@ -301,7 +302,7 @@ export default function InvoiceForm({
                 placeholder="e.g., +971 50 123 4567"
               />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
               <input
                 type="email"
@@ -313,31 +314,31 @@ export default function InvoiceForm({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
-              <input 
-                className="w-full border border-gray-300 p-2 rounded" 
-                value={customerName} 
-                onChange={e => setCustomerName(e.target.value)} 
+              <input
+                className="w-full border border-gray-300 p-2 rounded"
+                value={customerName}
+                onChange={e => setCustomerName(e.target.value)}
                 placeholder="Enter customer name"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-              <input 
-                className="w-full border border-gray-300 p-2 rounded" 
-                value={customerMobile} 
+              <input
+                className="w-full border border-gray-300 p-2 rounded"
+                value={customerMobile}
                 onChange={e => setCustomerMobile(e.target.value)}
                 placeholder="Enter mobile number"
               />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input 
+              <input
                 type="email"
-                className="w-full border border-gray-300 p-2 rounded" 
-                value={customerEmail} 
+                className="w-full border border-gray-300 p-2 rounded"
+                value={customerEmail}
                 onChange={e => setCustomerEmail(e.target.value)}
                 placeholder="Enter email address"
               />
@@ -349,7 +350,7 @@ export default function InvoiceForm({
       {/* Vehicle Details */}
       <div className="bg-gray-50 p-4 rounded-lg space-y-3">
         <h3 className="font-semibold text-gray-900 mb-3">Vehicle Details</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
             <select
@@ -367,35 +368,35 @@ export default function InvoiceForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehicleBrand} 
+            <input
+              className="w-full border border-gray-300 p-2 rounded"
+              value={vehicleBrand}
               onChange={e => setVehicleBrand(e.target.value)}
               placeholder="e.g., Toyota"
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehicleModel} 
+            <input
+              className="w-full border border-gray-300 p-2 rounded"
+              value={vehicleModel}
               onChange={e => setVehicleModel(e.target.value)}
               placeholder="e.g., Camry"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Plate Number</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={vehiclePlate} 
+            <input
+              className="w-full border border-gray-300 p-2 rounded"
+              value={vehiclePlate}
               onChange={e => setVehiclePlate(e.target.value)}
               placeholder="e.g., ABC-1234"
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
             <input
@@ -407,9 +408,9 @@ export default function InvoiceForm({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
-            <input 
-              className="w-full border border-gray-300 p-2 rounded" 
-              value={serviceCategory} 
+            <input
+              className="w-full border border-gray-300 p-2 rounded"
+              value={serviceCategory}
               onChange={e => setServiceCategory(e.target.value)}
               placeholder="e.g., Car Wash, Oil Change"
             />
@@ -421,17 +422,17 @@ export default function InvoiceForm({
       <div>
         <div className="flex items-center justify-between mb-3">
           <label className="block text-sm font-medium text-gray-700">Service Items *</label>
-          <button 
-            type="button" 
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium" 
+          <button
+            type="button"
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
             onClick={addItem}
           >
             + Add Item
           </button>
         </div>
 
-        {/* Column Headers */}
-        <div className="grid grid-cols-12 gap-2 mb-2 px-3">
+        {/* Column Headers - Hidden on mobile */}
+        <div className="hidden md:grid grid-cols-12 gap-2 mb-2 px-3">
           <div className="col-span-5 text-xs font-semibold text-gray-600 uppercase">Description</div>
           <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Quantity</div>
           <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Rate</div>
@@ -439,55 +440,116 @@ export default function InvoiceForm({
           <div className="col-span-1"></div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           {items.map((it, idx) => (
-            <div key={idx} className="grid grid-cols-12 gap-2 items-start bg-gray-50 p-3 rounded">
-              <div className="col-span-5">
-                <input 
-                  className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  placeholder="Service/Part description" 
-                  value={it.description || ''} 
-                  onChange={e => updateItem(idx, 'description', e.target.value)} 
-                />
+            <div key={idx} className="bg-gray-50 p-4 rounded border border-gray-200">
+              {/* Desktop Layout */}
+              <div className="hidden md:grid grid-cols-12 gap-2 items-start">
+                <div className="col-span-5">
+                  <input
+                    className="w-full border border-gray-300 p-2 rounded text-sm"
+                    placeholder="Service/Part description"
+                    value={it.description || ''}
+                    onChange={e => updateItem(idx, 'description', e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 p-2 rounded text-sm"
+                    value={it.quantity || 1}
+                    min={1}
+                    onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value || '1', 10))}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 p-2 rounded text-sm"
+                    value={it.rate || 0}
+                    step="1"
+                    min={0}
+                    onChange={e => updateItem(idx, 'rate', parseFloat(e.target.value || '0'))}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input
+                    type="number"
+                    className="w-full border border-gray-200 p-2 rounded text-sm bg-white font-medium"
+                    value={(it.amount || 0).toFixed(2)}
+                    readOnly
+                  />
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      className="text-red-500 hover:text-red-700"
+                      onClick={() => removeItem(idx)}
+                      title="Remove item"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="col-span-2">
-                <input 
-                  type="number" 
-                  className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  value={it.quantity || 1} 
-                  min={1} 
-                  onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value || '1', 10))} 
-                />
-              </div>
-              <div className="col-span-2">
-                <input 
-                  type="number" 
-                  className="w-full border border-gray-300 p-2 rounded text-sm" 
-                  value={it.rate || 0} 
-                  step="0.01"
-                  min={0}
-                  onChange={e => updateItem(idx, 'rate', parseFloat(e.target.value || '0'))} 
-                />
-              </div>
-              <div className="col-span-2">
-                <input 
-                  type="number" 
-                  className="w-full border border-gray-200 p-2 rounded text-sm bg-white font-medium" 
-                  value={(it.amount || 0).toFixed(2)} 
-                  readOnly
-                />
-              </div>
-              <div className="col-span-1 flex justify-center">
+
+              {/* Mobile Layout */}
+              <div className="md:hidden space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Description</label>
+                  <input
+                    className="w-full border border-gray-300 p-2 rounded text-sm"
+                    placeholder="Service/Part description"
+                    value={it.description || ''}
+                    onChange={e => updateItem(idx, 'description', e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Qty</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-300 p-2 rounded text-sm"
+                      value={it.quantity || 1}
+                      min={1}
+                      onChange={e => updateItem(idx, 'quantity', parseInt(e.target.value || '1', 10))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Rate</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-300 p-2 rounded text-sm"
+                      value={it.rate || 0}
+                      step="0.01"
+                      min={0}
+                      onChange={e => updateItem(idx, 'rate', parseFloat(e.target.value || '0'))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Amount</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-200 p-2 rounded text-sm bg-gray-100 font-medium"
+                      value={(it.amount || 0).toFixed(2)}
+                      readOnly
+                    />
+                  </div>
+                </div>
                 {items.length > 1 && (
-                  <button 
-                    type="button" 
-                    className="text-red-500 hover:text-red-700" 
+                  <button
+                    type="button"
+                    className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 py-2 rounded text-sm font-medium flex items-center justify-center gap-2 border border-red-200"
                     onClick={() => removeItem(idx)}
                     title="Remove item"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
+                    Remove Item
                   </button>
                 )}
               </div>
@@ -497,14 +559,14 @@ export default function InvoiceForm({
       </div>
 
       {/* Additional Charges */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Labor Charges</label>
-          <input 
+          <input
             type="number"
-            className="w-full border border-gray-300 p-2 rounded" 
+            className="w-full border border-gray-300 p-2 rounded"
             value={laborCharges || 0}
-            step="0.01"
+            step="1"
             min={0}
             onChange={e => setLaborCharges(parseFloat(e.target.value || '0'))}
             placeholder="Enter labor charges"
@@ -512,11 +574,11 @@ export default function InvoiceForm({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Discount</label>
-          <input 
+          <input
             type="number"
-            className="w-full border border-gray-300 p-2 rounded" 
+            className="w-full border border-gray-300 p-2 rounded"
             value={discount || 0}
-            step="0.01"
+            step="1"
             min={0}
             onChange={e => setDiscount(parseFloat(e.target.value || '0'))}
             placeholder="Enter discount amount"
@@ -536,49 +598,54 @@ export default function InvoiceForm({
             <option value="paid">Paid</option>
             <option value="partial">Partial Paid</option>
           </select>
-          {paymentStatus === 'partial' && (
-            <div className="mt-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Amount Paid (Min AED 100)</label>
-              <input
-                type="number"
-                min={0}
-                step="1"
-                className="w-full border border-gray-300 p-2 rounded"
-                value={partialPaidAmount}
-                onChange={e => setPartialPaidAmount(e.target.value)}
-                onBlur={e => {
-                  let val = e.target.value;
-                  if (val === '' || isNaN(Number(val))) {
-                    setPartialPaidAmount('');
-                  } else {
-                    let num = parseFloat(val);
-                    if (num < 100) num = 100;
-                    if (num > totals.grandTotal) num = totals.grandTotal;
-                    setPartialPaidAmount(num.toString());
-                  }
-                }}
-                placeholder="Enter amount paid"
-              />
-              {partialPaidAmount && !isNaN(Number(partialPaidAmount)) && (
-                <div className="mt-1 text-xs">
-                  <span className="text-green-700 font-semibold">Partial amount paid: AED {parseFloat(partialPaidAmount).toFixed(2)}</span><br />
-                  <span className="text-orange-700 font-semibold">Remaining: AED {(totals.grandTotal - parseFloat(partialPaidAmount)).toFixed(2)}</span>
-                </div>
-              )}
+
+        </div>
+      </div>
+
+
+      {/* Amount Paid - Partial  */}
+      {paymentStatus === 'partial' && (
+        <div className="mt-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1">Amount Paid (Min AED 100)</label>
+          <input
+            type="number"
+            min={0}
+            step="1"
+            className="w-full border border-gray-300 p-2 rounded"
+            value={partialPaidAmount}
+            onChange={e => setPartialPaidAmount(e.target.value)}
+            onBlur={e => {
+              let val = e.target.value;
+              if (val === '' || isNaN(Number(val))) {
+                setPartialPaidAmount('');
+              } else {
+                let num = parseFloat(val);
+                if (num < 100) num = 100;
+                if (num > totals.grandTotal) num = totals.grandTotal;
+                setPartialPaidAmount(num.toString());
+              }
+            }}
+            placeholder="Enter amount paid"
+          />
+          {partialPaidAmount && !isNaN(Number(partialPaidAmount)) && (
+            <div className="mt-1 text-xs">
+              <span className="text-green-700 font-semibold">Partial amount paid: AED {parseFloat(partialPaidAmount).toFixed(2)}</span><br />
+              <span className="text-orange-700 font-semibold">Remaining: AED {(totals.grandTotal - parseFloat(partialPaidAmount)).toFixed(2)}</span>
             </div>
           )}
-              {/* General Notes field, always visible in form */}
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded"
-                  placeholder="Add any notes for this invoice (optional)"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  rows={2}
-                />
-              </div>
         </div>
+      )}
+
+      {/* General Notes field */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Notes</label>
+        <textarea
+          className="w-full px-3 py-1 border border-gray-300 rounded"
+          placeholder="Add any notes for this invoice (optional)"
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={2}
+        />
       </div>
 
       {/* Payment Terms */}
@@ -602,13 +669,13 @@ export default function InvoiceForm({
             <option value="other">Other</option>
           </select>
         </div>
-        
+
         {paymentTerms === 'other' && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Specify Payment Method</label>
-            <input 
+            <input
               type="text"
-              className="w-full border border-gray-300 p-2 rounded" 
+              className="w-full border border-gray-300 p-2 rounded"
               value={paymentTermsOther}
               onChange={e => setPaymentTermsOther(e.target.value)}
               placeholder="Enter custom payment method"
@@ -649,19 +716,19 @@ export default function InvoiceForm({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center justify-end gap-3 pt-4 border-t">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 pt-4 border-t">
         {onCancel && (
-          <button 
-            type="button" 
-            className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50" 
+          <button
+            type="button"
+            className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50 text-sm"
             onClick={onCancel}
           >
             Cancel
           </button>
         )}
-        <button 
+        <button
           type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-medium" 
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-medium text-sm"
           disabled={loading}
         >
           {loading ? (invoice?.id ? 'Updating…' : 'Creating…') : (invoice?.id ? 'Update Invoice' : 'Create Invoice')}

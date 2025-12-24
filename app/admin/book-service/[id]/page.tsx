@@ -2503,7 +2503,7 @@ export default function BookServiceDetails() {
               <p className="text-xs text-gray-500">Invoice unlocks after the quotation is accepted.</p>
               <div className="flex flex-wrap gap-2">
                 <Button
-                  className={`flex-1 ${isCancelled || service.status === 'completed' ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}
+                  className={`flex-1 ${isCancelled || service.status === 'completed' ? 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' : 'bg-orange-600 hover:bg-orange-700 text-white dark:border-orange-500 dark:bg-orange-500 dark:hover:bg-orange-600'}`}
                   onClick={() => setShowQuotationModal(true)}
                   disabled={isCancelled || service.status === 'completed'}
                   title={service.status === 'completed' ? 'Cannot update quotation - work is completed' : ''}
@@ -2515,7 +2515,7 @@ export default function BookServiceDetails() {
                     href={`/admin/quotation/${quotation.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex-1 px-4 py-2 border rounded text-center text-sm font-medium ${isCancelled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                    className={`flex-1 px-4 py-2 border rounded text-center text-sm font-medium ${isCancelled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-600 dark:text-gray-300 '}`}
                     tabIndex={isCancelled ? -1 : 0}
                     aria-disabled={isCancelled}
                     style={isCancelled ? { pointerEvents: 'none' } : {}}
@@ -2534,7 +2534,7 @@ export default function BookServiceDetails() {
                 <>
                   <Button
                     variant={rescheduling ? 'default' : 'outline'}
-                    className={`w-full ${rescheduleDisabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`}
+                    className={`w-full ${rescheduleDisabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed dark:border dark:border-white' : ''}`}
                     onClick={() => {
                       if (rescheduleDisabled) return;
                       setRescheduling(!rescheduling);
@@ -2656,7 +2656,7 @@ export default function BookServiceDetails() {
           {/* History */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">History</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">History</h3>
               <span className="text-[11px] text-gray-500">Latest activity</span>
             </div>
             {historyItems.length === 0 ? (
@@ -2688,15 +2688,15 @@ export default function BookServiceDetails() {
           {/* Reschedule Form */}
           {rescheduling && !rescheduleDisabled && service.status !== 'completed' && service.status !== 'cancelled' && (
             <Card className="p-6 bg-blue-50">
-              <h3 className="font-semibold mb-3">Reschedule Service</h3>
+              <h3 className="font-semibold mb-3 dark:text-gray-800">Reschedule Service</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">New Date & Time</label>
+                  <label className="block text-sm text-gray-700 mb-1 dark:text-gray-700">New Date & Time</label>
                   <input
                     type="datetime-local"
                     value={newScheduleDate}
                     onChange={(e) => setNewScheduleDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:bg-gray-100 dark:border-gray-600 dark:text-gray-900"
                   />
                 </div>
                 <Button

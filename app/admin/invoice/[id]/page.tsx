@@ -762,7 +762,7 @@ export default function InvoiceDetails() {
   if (!invoice) return <div className="p-6">Invoice not found</div>;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+    <div className="space-y-6 p-1 sm:p-6 max-w-6xl mx-auto">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Invoice #{invoice.invoiceNumber || invoice.id}</h1>
@@ -781,7 +781,7 @@ export default function InvoiceDetails() {
           </div>
         )}
         <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors w-full sm:w-auto" onClick={() => router.push('/admin/invoice')}>
+          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 dark:text-black rounded font-medium transition-colors w-full sm:w-auto" onClick={() => router.push('/admin/invoice')}>
             ← Back
           </button>
           <PermissionGate module="invoices" action="edit">
@@ -831,7 +831,7 @@ export default function InvoiceDetails() {
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Bill From</h3>
             <div className="space-y-1">
-              <p className="font-semibold text-lg">Car Mantra LLC</p>
+              <p className="font-semibold text-lg dark:text-black">Car Mantra LLC</p>
               <p className="text-gray-600">info@carmantra.com</p>
               <p className="text-gray-600">+971 50 123 4567</p>
             </div>
@@ -842,8 +842,8 @@ export default function InvoiceDetails() {
             <div className="space-y-1">
               {invoice.isB2B ? (
                 <>
-                  <p className="font-semibold text-lg">{invoice.companyName || 'N/A'}</p>
-                  {invoice.contactName && <p className="text-gray-600">{invoice.contactName}</p>}
+                  <p className="font-semibold text-lg dark:text-black">{invoice.companyName || 'N/A'}</p>
+                  {invoice.contactName && <p className="text-gray-600 ">{invoice.contactName}</p>}
                   {invoice.contactEmail && <p className="text-gray-600">{invoice.contactEmail}</p>}
                   {invoice.contactPhone && <p className="text-gray-600">{invoice.contactPhone}</p>}
                 </>
@@ -903,7 +903,7 @@ export default function InvoiceDetails() {
 
         {/* Service Items Table */}
         <div className="p-5 sm:p-8">
-          <h3 className="text-lg font-semibold mb-4">Service Items</h3>
+          <h3 className="text-lg font-semibold mb-4 dark:text-black">Service Items</h3>
 
           {/* Mobile cards */}
           <div className="space-y-3 md:hidden">
@@ -946,11 +946,11 @@ export default function InvoiceDetails() {
               <tbody>
                 {(invoice.items || []).map((it: any, i: number) => (
                   <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-3 px-2 text-gray-600">{i + 1}</td>
-                    <td className="py-3 px-2">{it.description}</td>
-                    <td className="py-3 px-2 text-right">{it.quantity || 1}</td>
-                    <td className="py-3 px-2 text-right">AED {(it.rate || 0).toFixed(2)}</td>
-                    <td className="py-3 px-2 text-right font-medium">AED {(it.amount || 0).toFixed(2)}</td>
+                    <td className="py-3 px-2 text-gray-600 ">{i + 1}</td>
+                    <td className="py-3 px-2 dark:text-black">{it.description}</td>
+                    <td className="py-3 px-2 dark:text-black text-right">{it.quantity || 1}</td>
+                    <td className="py-3 px-2 dark:text-black text-right">AED {(it.rate || 0).toFixed(2)}</td>
+                    <td className="py-3 px-2 dark:text-black text-right font-medium">AED {(it.amount || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -964,19 +964,19 @@ export default function InvoiceDetails() {
             <div className="w-full md:w-1/2 lg:w-1/3 space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Items Total:</span>
-                <span className="font-medium">AED {(invoice.itemsTotal || 0).toFixed(2)}</span>
+                <span className="font-medium dark:text-black">AED {(invoice.itemsTotal || 0).toFixed(2)}</span>
               </div>
 
               {invoice.laborCharges > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Labor Charges:</span>
-                  <span className="font-medium">AED {invoice.laborCharges.toFixed(2)}</span>
+                  <span className="font-medium dark:text-black">AED {invoice.laborCharges.toFixed(2)}</span>
                 </div>
               )}
 
               <div className="flex justify-between text-sm pt-2 border-t">
                 <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium">AED {(invoice.subtotal || 0).toFixed(2)}</span>
+                <span className="font-medium dark:text-black">AED {(invoice.subtotal || 0).toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-sm">
@@ -992,7 +992,7 @@ export default function InvoiceDetails() {
               )}
 
               <div className="flex justify-between text-xl font-bold pt-3 border-t-2 border-gray-300">
-                <span>Grand Total:</span>
+                <span className='dark:text-black'>Grand Total:</span>
                 <span className="text-blue-600">AED {(invoice.total || 0).toFixed(2)}</span>
               </div>
 

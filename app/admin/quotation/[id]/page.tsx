@@ -470,12 +470,12 @@ export default function QuotationDetailPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-1 sm:p-6">
       {/* Header Actions */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6 mb-6">
         <button
           onClick={() => router.push('/admin/quotation')}
-          className="flex items-center text-gray-600 hover:text-gray-900"
+          className="flex items-center text-gray-600 hover:text-gray-900 text-sm sm:text-base dark:text-gray-300 dark:hover:text-white border border-gray-300 hover:border-gray-400 px-3 sm:px-4 py-2 rounded "
         >
           <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -483,11 +483,11 @@ export default function QuotationDetailPage() {
           Back to Quotations
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <PermissionGate module="quotations" action="edit">
             <button
               onClick={() => setShowEditModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -499,33 +499,20 @@ export default function QuotationDetailPage() {
           <PermissionGate module="quotations" action="create">
             <button
               onClick={generatePDF}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-indigo-600 text-white rounded hover:bg-indigo-700 whitespace-nowrap"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Download PDF
+              Download
             </button>
           </PermissionGate>
-
-          {/* {quotation.customerEmail && (
-            <button
-              onClick={sendEmail}
-              disabled={emailStatus === 'Sending...'}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              {emailStatus || 'Email'}
-            </button>
-          )} */}
 
           <PermissionGate module="quotations" action="delete">
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 whitespace-nowrap"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -549,15 +536,15 @@ export default function QuotationDetailPage() {
       {/* Quotation Content */}
       <div className="bg-white rounded-lg shadow-lg border border-gray-200">
         {/* Header Section */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-8 rounded-t-lg">
-          <div className="flex justify-between items-start">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 sm:p-8 rounded-t-lg">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
             <div>
-              <h1 className="text-3xl font-bold mb-2">CARMANTRA</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-2">CARMANTRA</h1>
               <p className="text-blue-100">Premium Auto Care Services</p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <div className="text-sm text-blue-100">Quotation #</div>
-              <div className="text-xl font-bold">{quotation.quotationNumber || 'N/A'}</div>
+              <div className="text-lg sm:text-xl font-bold">{quotation.quotationNumber || 'N/A'}</div>
               <div className="text-sm text-blue-100 mt-2">Date: {formatDate(quotation.createdAt)}</div>
               <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mt-2 ${statusColors[quotation.status as keyof typeof statusColors] || statusColors.pending}`}>
                 {(quotation.status || 'pending').toUpperCase()}
@@ -566,33 +553,33 @@ export default function QuotationDetailPage() {
           </div>
         </div>
 
-        <div className="p-8">
-          {/* Customer & Vehicle Info */}
-          <div className="grid grid-cols-2 gap-8 mb-8">
+        <div className="p-4 sm:p-8">
+          {/* Customer & Vehicle Info - Responsive Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-8">
             <div>
               <h3 className="text-sm font-semibold text-gray-600 uppercase mb-3">Customer Information</h3>
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <p className="text-lg font-semibold text-gray-900">{quotation.customerName || 'N/A'}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${quotation.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                  <p className="text-md sm:text-lg font-semibold text-gray-900">{quotation.customerName || 'N/A'}</p>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold w-fit ${quotation.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                     {quotation.customerType === 'b2b' ? 'B2B' : 'B2C'}
                   </span>
                 </div>
                 {quotation.customerType === 'b2b' && quotation.companyName && (
-                  <p className="text-gray-700">Company: {quotation.companyName}</p>
+                  <p className="text-gray-700 text-xs sm:text-lg">Company: {quotation.companyName}</p>
                 )}
                 {quotation.customerType === 'b2b' && quotation.contactName && (
-                  <p className="text-gray-700">Contact: {quotation.contactName}</p>
+                  <p className="text-gray-700 text-xs sm:text-lg">Contact: {quotation.contactName}</p>
                 )}
-                {quotation.customerEmail && <p className="text-gray-600">{quotation.customerEmail}</p>}
-                {quotation.customerMobile && <p className="text-gray-600">{quotation.customerMobile}</p>}
+                {quotation.customerEmail && <p className="text-gray-600 break-all text-xs sm:text-lg">Email: {quotation.customerEmail}</p>}
+                {quotation.customerMobile && <p className="text-gray-600 text-xs sm:text-lg">Phone: {quotation.customerMobile}</p>}
                 {/* <p className="text-gray-600">Source: {sourceLabel}</p> */}
               </div>
             </div>
 
             {/* Vehicle Information: For B2B, show all vehicles; for B2C, show single vehicleDetails */}
             {quotation.customerType === 'b2b' && ((Array.isArray(quotation.vehicles) && quotation.vehicles.length > 0) || (Array.isArray(bookingVehicles) && bookingVehicles.length > 0)) ? (
-              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div className="bg-gray-50 p-2 sm:p-4 rounded-lg space-y-1 sm:space-y-3">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-gray-900">Vehicle Information</h3>
                   <span className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium">
@@ -616,28 +603,28 @@ export default function QuotationDetailPage() {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Type:</span>
-                          <span className="font-medium">{vehicle.vehicleType || '-'}</span>
+                          <span className="text-gray-600 ">Type:</span>
+                          <span className="font-medium dark:text-gray-500">{vehicle.vehicleType || '-'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Brand:</span>
-                          <span className="font-medium">{vehicle.vehicleBrand || '-'}</span>
+                          <span className="text-gray-600 ">Brand:</span>
+                          <span className="font-medium dark:text-gray-500">{vehicle.vehicleBrand || '-'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Model:</span>
-                          <span className="font-medium">{vehicle.modelName || '-'}</span>
+                          <span className="text-gray-600 ">Model:</span>
+                          <span className="font-medium dark:text-gray-500">{vehicle.modelName || '-'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Number Plate:</span>
-                          <span className="font-medium">{vehicle.numberPlate || '-'}</span>
+                          <span className="text-gray-600 ">Number Plate:</span>
+                          <span className="font-medium dark:text-gray-500">{vehicle.numberPlate || '-'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Fuel Type:</span>
-                          <span className="font-medium">{vehicle.fuelType || '-'}</span>
+                          <span className="text-gray-600 ">Fuel Type:</span>
+                          <span className="font-medium dark:text-gray-500">{vehicle.fuelType || '-'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">VIN:</span>
-                          <span className="font-medium">{vehicle.vinNumber || '-'}</span>
+                          <span className="text-gray-600 ">VIN:</span>
+                          <span className="font-medium dark:text-gray-500">{vehicle.vinNumber || '-'}</span>
                         </div>
                       </div>
                     </div>
@@ -658,9 +645,9 @@ export default function QuotationDetailPage() {
                                   {veh.brand} {veh.model}
                                 </p>
                               )}
-                              {veh.type && <p className="text-gray-600">Type: {veh.type}</p>}
-                              {veh.plate && <p className="text-gray-600">Plate: {veh.plate}</p>}
-                              {veh.vin && <p className="text-gray-600">VIN: {veh.vin}</p>}
+                              {veh.type && <p className="text-gray-600 dark:text-gray-500">Type: {veh.type}</p>}
+                              {veh.plate && <p className="text-gray-600 dark:text-gray-500">Plate: {veh.plate}</p>}
+                              {veh.vin && <p className="text-gray-600 dark:text-gray-500">VIN: {veh.vin}</p>}
                             </div>
                           ))}
                         </div>
@@ -688,23 +675,23 @@ export default function QuotationDetailPage() {
           {/* Service Items Table */}
           <div className="mb-8">
             <h3 className="text-sm font-semibold text-gray-600 uppercase mb-3">Service Details</h3>
-            <div className="overflow-hidden border border-gray-200 rounded-lg">
-              <table className="w-full">
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <table className="w-full min-w-[500px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Description</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Qty</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Rate</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Amount</th>
+                    <th className="px-3 sm:px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Description</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Qty</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Rate</th>
+                    <th className="px-3 sm:px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {(quotation.items || []).map((item: any, idx: number) => (
                     <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-3 text-gray-900">{item.description || 'N/A'}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{item.quantity || 0}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">AED {(item.rate || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-900">AED {(item.amount || 0).toFixed(2)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-900">{item.description || 'N/A'}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm text-gray-700">{item.quantity || 0}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm text-gray-700">AED {(item.rate || 0).toFixed(2)}</td>
+                      <td className="px-3 sm:px-4 py-3 text-right text-xs sm:text-sm font-medium text-gray-900">AED {(item.amount || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -712,22 +699,22 @@ export default function QuotationDetailPage() {
             </div>
           </div>
 
-          {/* Totals */}
-          <div className="flex justify-end mb-8">
-            <div className="w-80 space-y-2">
+          {/* Totals - Responsive */}
+          <div className="flex flex-col sm:flex-row sm:justify-end mb-8">
+            <div className="w-full sm:w-80 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Items Total:</span>
-                <span className="font-medium">AED {(quotation.itemsTotal || 0).toFixed(2)}</span>
+                <span className="font-medium dark:text-gray-900">AED {(quotation.itemsTotal || 0).toFixed(2)}</span>
               </div>
               {quotation.laborCharges > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Labor Charges:</span>
-                  <span className="font-medium">AED {quotation.laborCharges.toFixed(2)}</span>
+                  <span className="font-medium dark:text-gray-900">AED {quotation.laborCharges.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm border-t pt-2">
                 <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium">AED {(quotation.subtotal || 0).toFixed(2)}</span>
+                <span className="font-medium dark:text-gray-900">AED {(quotation.subtotal || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Tax (5% VAT):</span>
@@ -740,7 +727,7 @@ export default function QuotationDetailPage() {
                 </div>
               )}
               <div className="flex justify-between text-lg font-bold border-t-2 border-blue-600 pt-2">
-                <span>Grand Total:</span>
+                <span className='dark:text-gray-900'>Grand Total:</span>
                 <span className="text-blue-600">AED {(quotation.total || 0).toFixed(2)}</span>
               </div>
               <div className="text-xs text-gray-500 text-right pt-2">
@@ -751,9 +738,9 @@ export default function QuotationDetailPage() {
 
           {/* Notes */}
           {quotation.notes && (
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="bg-gray-50 p-4 sm:p-4 rounded-lg">
               <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Notes</h3>
-              <p className="text-gray-700 whitespace-pre-wrap">{quotation.notes}</p>
+              <p className="text-gray-700 whitespace-pre-wrap text-sm break-words">{quotation.notes}</p>
             </div>
           )}
         </div>

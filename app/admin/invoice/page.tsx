@@ -183,7 +183,7 @@ export default function InvoicesPage() {
 
   return (
     <ModuleAccess module="invoices">
-      <div className="p-6 space-y-6">
+      <div className="p-1 sm:p-6 space-y-6">
         {deleteStatus && (
           <div className={`p-4 rounded-lg ${deleteStatus.type === 'success' 
             ? 'bg-green-50 text-green-700 border border-green-200' 
@@ -207,12 +207,12 @@ export default function InvoicesPage() {
         {/* Filters */}
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between md:hidden">
-            <div className="text-sm font-medium text-gray-700">Filters</div>
+            <div className="text-sm font-medium text-gray-700 dark:text-gray-100">Filters</div>
             <button
               className="flex items-center gap-2 px-3 py-2 text-sm border rounded hover:bg-gray-50"
               onClick={() => setShowMobileFilters((v) => !v)}
             >
-              <span className="text-gray-600">{showMobileFilters ? 'Hide' : 'Show'}</span>
+              <span className="text-gray-500 ">{showMobileFilters ? 'Hide' : 'Show'}</span>
               <span className="text-gray-400">⋮</span>
             </button>
           </div>
@@ -228,7 +228,7 @@ export default function InvoicesPage() {
             <select
               value={paymentFilter}
               onChange={(e) => setPaymentFilter(e.target.value)}
-              className="border rounded px-3 py-2 text-sm h-11"
+              className="border rounded px-3 py-2 text-sm h-11 dark:bg-black"
             >
               <option value="all">All Status</option>
               <option value="paid">Paid</option>
@@ -301,9 +301,9 @@ export default function InvoicesPage() {
               <select
                 value={paymentFilter}
                 onChange={(e) => setPaymentFilter(e.target.value)}
-                className="border rounded px-3 py-2 text-sm h-11"
+                className="border rounded px-3 py-2 text-sm h-11 dark:bg-black"
               >
-                <option value="all">All Status</option>
+                <option value="all" className=''>All Status</option>
                 <option value="paid">Paid</option>
                 <option value="unpaid">Unpaid</option>
               </select>
@@ -379,7 +379,7 @@ export default function InvoicesPage() {
                         <div className="text-xs text-gray-500">Invoice</div>
                         <div className="font-semibold text-blue-600 break-words">{inv.invoiceNumber || '—'}</div>
                         <div className="text-sm font-medium mt-1 break-words flex items-center gap-2">
-                          <span className="break-words">{displayName(inv)}</span>
+                          <span className="break-words text-black">{displayName(inv)}</span>
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.isB2B ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'}`}>
                             {inv.isB2B ? 'B2B' : 'B2C'}
                           </span>
@@ -491,7 +491,7 @@ export default function InvoicesPage() {
                       <tr key={inv.id} className="border-t hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="font-medium flex items-center gap-2">
-                            <span>{displayName(inv)}</span>
+                            <span className='text-black'>{displayName(inv)}</span>
                             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${inv.isB2B ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'}`}>
                               {inv.isB2B ? 'B2B' : 'B2C'}
                             </span>
@@ -525,13 +525,13 @@ export default function InvoicesPage() {
                               href={`/admin/invoice/${inv.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm text-green-600 hover:underline"
+                              className="text-sm text-white hover:underline bg-green-500 px-2 py-1 rounded"
                             >
                               View
                             </a>
                             <PermissionGate module="invoices" action="edit">
                               <button
-                                className="text-sm text-blue-600 hover:underline"
+                                className="text-sm text-white hover:underline bg-blue-500 px-2 py-1 rounded"
                                 onClick={() => handleEdit(inv)}
                               >
                                 Edit
@@ -539,7 +539,7 @@ export default function InvoicesPage() {
                             </PermissionGate>
                             <PermissionGate module="invoices" action="delete">
                               <button
-                                className="text-sm text-red-600 hover:underline"
+                                className="text-sm text-white hover:underline bg-red-500 px-2 py-1 rounded"
                                 onClick={() => handleDelete(inv.id, displayName(inv))}
                               >
                                 Delete
@@ -570,7 +570,7 @@ export default function InvoicesPage() {
                   <select
                     value={itemsPerPage}
                     onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="border rounded px-2 py-1 text-sm"
+                    className="border rounded px-2 py-1 text-sm dark:bg-black"
                   >
                     <option value={25}>25</option>
                     <option value={50}>50</option>
@@ -582,14 +582,14 @@ export default function InvoicesPage() {
                   <button
                     onClick={() => setCurrentPage(1)}
                     disabled={currentPage === 1}
-                    className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="px-3 py-1 border rounded text-sm dark:bg-black disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     First
                   </button>
                   <button
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="px-3 py-1 border rounded  dark:bg-black text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Previous
                   </button>
@@ -623,14 +623,14 @@ export default function InvoicesPage() {
                   <button
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="px-3 py-1 border rounded dark:bg-black text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Next
                   </button>
                   <button
                     onClick={() => setCurrentPage(totalPages)}
                     disabled={currentPage === totalPages}
-                    className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="px-3 py-1 border rounded dark:bg-black text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                   >
                     Last
                   </button>
@@ -643,7 +643,7 @@ export default function InvoicesPage() {
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={handleCloseModal} />
-            <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full z-10 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full z-10 p-3 sm:p-6 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">{editingInvoice ? 'Edit Invoice' : 'Create Invoice'}</h3>
                 <button className="text-gray-500" onClick={handleCloseModal}>Close</button>
