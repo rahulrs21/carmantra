@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const auth = admin.auth();
 
     // Generate password reset link with custom action URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' || 'https://carmantra.vercel.app/';
     let resetLink;
     try {
       resetLink = await auth.generatePasswordResetLink(email, {
