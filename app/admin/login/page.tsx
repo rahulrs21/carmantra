@@ -278,7 +278,7 @@ export default function AdminLogin() {
         <div className="bg-white/95 backdrop-blur-md p-8 rounded-xl shadow-2xl w-full max-w-sm relative z-10 border border-gray-200">
           
           <h1 className="text-2xl font-bold mb-2 text-center text-gray-800">Reset Password</h1>
-          <p className="text-center text-gray-600 text-sm mb-6">Enter your email address and we'll send you a link to reset your password</p>
+          <p className="text-center text-gray-600 text-sm mb-6">Enter your email address and we'll send a link to Admin to reset your password</p>
 
           {resetMessage && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
@@ -313,7 +313,7 @@ export default function AdminLogin() {
                   className={`w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition font-medium ${forgotLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                   disabled={forgotLoading}
                 >
-                  {forgotLoading ? 'Sending…' : 'Send link to my email'}
+                  {forgotLoading ? 'Sending…' : 'Send link to Admin email'}
                 </button>
 
                 <button
