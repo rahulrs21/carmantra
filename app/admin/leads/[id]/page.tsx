@@ -59,6 +59,9 @@ export default function LeadDetailsPage() {
   const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
   const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
   const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -70,9 +73,12 @@ export default function LeadDetailsPage() {
           setError('Lead not found');
           setLead(null);
         } else {
-          setLead({ ...(snap.data() as any), id: snap.id });
+          const leadData = snap.data() as any;
+          setLead({ ...leadData, id: snap.id });
           // Fetch related bookings
           fetchRelatedBookings(id);
+          // Fetch notes
+          setNotes(leadData.notes || []);
         }
       } catch (err: any) {
         safeConsoleError('Lead fetch error', err);
@@ -181,6 +187,49 @@ export default function LeadDetailsPage() {
     else if (hour > 12) hour -= 12;
     return `${hour}:${m} ${suffix}`;
   };
+
+  async function handleAddNote(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newNote.trim() || !id) return;
+
+    setSavingNote(true);
+    try {
+      const updatedNotes = [
+        ...notes,
+        {
+          id: Date.now().toString(),
+          text: newNote.trim(),
+          createdAt: Timestamp.now(),
+          createdBy: role || 'User',
+        }
+      ];
+      
+      await updateDoc(doc(db, 'crm-leads', id), {
+        notes: updatedNotes,
+      });
+
+      setNotes(updatedNotes);
+      setNewNote('');
+    } catch (err: any) {
+      safeConsoleError('Error adding note', err);
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    if (!id) return;
+    
+    try {
+      const updatedNotes = notes.filter((note) => note.id !== noteId);
+      await updateDoc(doc(db, 'crm-leads', id), {
+        notes: updatedNotes,
+      });
+      setNotes(updatedNotes);
+    } catch (err: any) {
+      safeConsoleError('Error deleting note', err);
+    }
+  }
 
   const isTimeDisabled = (time: string) => {
     if (!selectedDate) return false;
@@ -847,6 +896,63 @@ export default function LeadDetailsPage() {
                 <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded border">
                   <p className="font-medium mb-1">Not Booked Yet</p>
                   <p className="text-xs">This lead hasn't been converted to a booking. Use the "Book Service" button to create a booking.</p>
+                </div>
+              )}
+            </Card>
+
+            {/* Notes Section */}
+            <Card className="p-6 w-full">
+              <h2 className="text-xl font-semibold mb-4">Notes</h2>
+              
+              {/* Add Note Form */}
+              <form onSubmit={handleAddNote} className="mb-6 pb-6 border-b">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-2 font-medium">Add Note</label>
+                    <textarea
+                      value={newNote}
+                      onChange={(e) => setNewNote(e.target.value)}
+                      placeholder="Type your note here..."
+                      className="w-full border rounded px-3 py-2 text-sm min-h-20 resize-vertical focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={savingNote}
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    disabled={savingNote || !newNote.trim()}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {savingNote ? 'Saving…' : 'Add Note'}
+                  </Button>
+                </div>
+              </form>
+
+              {/* Notes List */}
+              {notes.length > 0 ? (
+                <div className="space-y-3">
+                  {notes.map((note, index) => (
+                    <div key={note.id} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex justify-between items-start gap-3 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-500">
+                            {note.createdBy} • {formatDateTime(note.createdAt)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(note.id)}
+                          className="text-red-600 hover:text-red-800 text-xs font-medium flex-shrink-0"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{note.text}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded border">
+                  <p>No notes yet. Add one to get started.</p>
                 </div>
               )}
             </Card>
