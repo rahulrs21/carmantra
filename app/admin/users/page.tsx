@@ -54,12 +54,41 @@ export default function UsersPage() {
 
     // Set current user as online
     if (currentUser?.uid) {
-      updateDoc(doc(db, 'users', currentUser.uid), {
-        isOnline: true,
-        lastLogin: Timestamp.now(),
-      }).catch(() => {
-        // User doc might not exist yet
-      });
+      // Mark user as online immediately
+      const markOnline = async () => {
+        try {
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            isOnline: true,
+            lastLogin: Timestamp.now(),
+          });
+        } catch (error) {
+          // User doc might not exist yet
+          console.debug('Could not update online status:', error);
+        }
+      };
+
+      markOnline();
+
+      // Set a heartbeat to keep user marked as online (every 30 seconds)
+      const heartbeatInterval = setInterval(() => {
+        updateDoc(doc(db, 'users', currentUser.uid), {
+          isOnline: true,
+          lastActivityAt: Timestamp.now(),
+        }).catch(() => {
+          // Silently fail if document doesn't exist
+        });
+      }, 30000);
+
+      // Cleanup: set user as offline when component unmounts or user logs out
+      return () => {
+        clearInterval(heartbeatInterval);
+        updateDoc(doc(db, 'users', currentUser.uid), {
+          isOnline: false,
+        }).catch(() => {
+          // Silently fail
+        });
+        unsubscribe();
+      };
     }
 
     return () => unsubscribe();

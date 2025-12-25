@@ -51,6 +51,7 @@
     "eslint": "8.49.0",
     "eslint-config-next": "13.5.1",
     "firebase": "^12.6.0",
+    "firebase-admin": "^13.6.0",
     "framer-motion": "^12.23.22",
     "gsap": "^3.13.0",
     "input-otp": "^1.2.4",

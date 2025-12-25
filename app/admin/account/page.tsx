@@ -5,7 +5,7 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { useUser } from "@/lib/userContext";
-import { updateProfile } from "firebase/auth";
+import { updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 
 export default function AccountPage() {
   const { user, displayName, photoURL, role } = useUser();
@@ -21,6 +21,17 @@ export default function AccountPage() {
   const [brandUploading, setBrandUploading] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordResetting, setPasswordResetting] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [currentPasswordVerified, setCurrentPasswordVerified] = useState(false);
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
 
   useEffect(() => {
     setName(displayName || "");
@@ -106,6 +117,117 @@ export default function AccountPage() {
       setBrandStatus("Could not save branding. Try again.");
     } finally {
       setBrandSaving(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    setPasswordError(null);
+    setPasswordStatus(null);
+
+    if (!currentPasswordVerified) {
+      setPasswordError("Please verify your current password first");
+      return;
+    }
+
+    if (!newPassword.trim()) {
+      setPasswordError("New password cannot be blank");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters long");
+      return;
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      setPasswordError("Password must contain lowercase letters");
+      return;
+    }
+
+    if (!/[A-Z]/.test(newPassword)) {
+      setPasswordError("Password must contain uppercase letters");
+      return;
+    }
+
+    if (!/[0-9]/.test(newPassword)) {
+      setPasswordError("Password must contain numbers");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match");
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordError("New password must be different from current password");
+      return;
+    }
+
+    try {
+      setPasswordResetting(true);
+
+      if (!safeUser || !safeUser.email) {
+        setPasswordError("Unable to verify your email");
+        return;
+      }
+
+      // Update password
+      await updatePassword(safeUser, newPassword);
+
+      setPasswordStatus("✓ Password updated successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setCurrentPasswordVerified(false);
+
+      // Clear status after 3 seconds
+      setTimeout(() => {
+        setPasswordStatus(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+      if (error?.code === "auth/weak-password") {
+        setPasswordError("Password is too weak. Please choose a stronger password");
+      } else {
+        setPasswordError(error?.message || "Failed to update password. Please try again");
+      }
+    } finally {
+      setPasswordResetting(false);
+    }
+  }
+
+  async function verifyCurrentPassword() {
+    setPasswordError(null);
+
+    if (!currentPassword.trim()) {
+      setPasswordError("Please enter your current password");
+      return;
+    }
+
+    try {
+      setVerifyingPassword(true);
+
+      if (!safeUser || !safeUser.email) {
+        setPasswordError("Unable to verify your email");
+        return;
+      }
+
+      // Attempt reauthentication to verify password
+      const credential = EmailAuthProvider.credential(safeUser.email, currentPassword);
+      await reauthenticateWithCredential(safeUser, credential);
+      
+      setCurrentPasswordVerified(true);
+    } catch (error: any) {
+      console.error("Password verification error:", error);
+      if (error?.code === "auth/wrong-password") {
+        setPasswordError("Current password is incorrect");
+      } else {
+        setPasswordError(error?.message || "Failed to verify password. Please try again");
+      }
+      setCurrentPasswordVerified(false);
+    } finally {
+      setVerifyingPassword(false);
     }
   }
 
@@ -218,6 +340,175 @@ export default function AccountPage() {
             {savingName ? "Saving..." : "Save name"}
           </button>
           {status && <p className="text-sm text-gray-600 dark:text-gray-400">{status}</p>}
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Password</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Update your password. Make sure it's strong and secure.</p>
+        </div>
+
+        {passwordStatus && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+            <p className="text-green-700 dark:text-green-400 text-sm font-medium">{passwordStatus}</p>
+          </div>
+        )}
+
+        {passwordError && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <p className="text-red-700 dark:text-red-400 text-sm font-medium">{passwordError}</p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {/* Current Password */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Current Password</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    if (currentPasswordVerified) setCurrentPasswordVerified(false);
+                  }}
+                  placeholder="Enter your current password"
+                  className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                >
+                  {showCurrentPassword ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0M15 12a3 3 0 11-6 0 3 3 0 016 0zm6 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={verifyCurrentPassword}
+                disabled={verifyingPassword || !currentPassword || currentPasswordVerified}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                  currentPasswordVerified
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                    : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60'
+                }`}
+              >
+                {verifyingPassword ? "Verifying..." : currentPasswordVerified ? "✓ Verified" : "Verify"}
+              </button>
+            </div>
+          </div>
+
+          {/* New Password */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                {showNewPassword ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0M15 12a3 3 0 11-6 0 3 3 0 016 0zm6 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+
+            {/* Password Requirements */}
+            {newPassword && (
+              <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                <p className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-2">Password Requirements:</p>
+                <div className="space-y-1">
+                  <div className={`text-xs flex items-center ${newPassword.length >= 8 ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${newPassword.length >= 8 ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                    At least 8 characters
+                  </div>
+                  <div className={`text-xs flex items-center ${/[a-z]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${/[a-z]/.test(newPassword) ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                    Lowercase letter (a-z)
+                  </div>
+                  <div className={`text-xs flex items-center ${/[A-Z]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${/[A-Z]/.test(newPassword) ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                    Uppercase letter (A-Z)
+                  </div>
+                  <div className={`text-xs flex items-center ${/[0-9]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${/[0-9]/.test(newPassword) ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                    Number (0-9)
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Confirm Password */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Confirm Password</label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                {showConfirmPassword ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-4.803m5.596-3.856a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0M15 12a3 3 0 11-6 0 3 3 0 016 0zm6 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+
+            {newPassword && confirmPassword && (
+              <p className={`mt-2 text-sm ${newPassword === confirmPassword ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {newPassword === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            onClick={handlePasswordChange}
+            disabled={passwordResetting || !currentPasswordVerified || !newPassword || !confirmPassword}
+            className="px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium transition"
+          >
+            {passwordResetting ? "Updating..." : "Update Password"}
+          </button>
         </div>
       </div>
 

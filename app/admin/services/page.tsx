@@ -566,12 +566,14 @@ export default function ServicesPage() {
                     >
                       View
                     </button>
-                    <button
-                      className="text-sm text-red-600 hover:underline"
-                      onClick={() => confirmAndDelete(service)}
-                    >
-                      Delete
-                    </button>
+                    <PermissionGate module="services" action="delete">
+                      <button
+                        className="text-sm text-red-600 hover:underline"
+                        onClick={() => confirmAndDelete(service)}
+                      >
+                        Delete
+                      </button>
+                    </PermissionGate>
                   </div>
                 </div>
               ))}
@@ -682,12 +684,14 @@ export default function ServicesPage() {
                           >
                             View
                           </button>
-                          <button
-                            className="text-sm text-red-600 hover:underline"
-                            onClick={() => confirmAndDelete(service)}
-                          >
-                            Delete
-                          </button>
+                          <PermissionGate module="services" action="delete">
+                            <button
+                              className="text-sm text-red-600 hover:underline"
+                              onClick={() => confirmAndDelete(service)}
+                            >
+                              Delete
+                            </button>
+                          </PermissionGate>
                         </div>
                       </td>
                     </tr>

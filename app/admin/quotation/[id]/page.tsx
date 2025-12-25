@@ -103,7 +103,7 @@ export default function QuotationDetailPage() {
   const sourceLabel = sourceLabelMap[derivedSource] || 'Direct booking';
 
 
-  function generatePDF() {
+  async function generatePDF() {
     if (!quotation) return;
 
     const pdf = new jsPDF();
@@ -113,13 +113,36 @@ export default function QuotationDetailPage() {
     const contentWidth = pageWidth - leftMargin - rightMargin;
     let yPos = 20;
 
-    // Header - Company Name
-    pdf.setFontSize(24);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(59, 130, 246); // Blue color
-    pdf.text('CARMANTRA', leftMargin, yPos);
+    // Header - Logo Image
+    try {
+      const response = await fetch('/images/Carmantra_Invoice.png');
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      reader.onload = () => {
+        const imgData = reader.result;
+        // Add black background rectangle with rounded corners behind logo
+        pdf.setFillColor(0, 0, 0);
+        pdf.roundedRect(leftMargin - 2, yPos - 2, 44, 16, 2, 2, 'F');
+        
+        pdf.addImage(imgData as string, 'PNG', leftMargin, yPos, 40, 12);
+        
+        // Continue with rest of PDF after image is loaded
+        completePDF(pdf, pageWidth, leftMargin, rightMargin, contentWidth, yPos + 18);
+      };
+      
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      safeConsoleError('Error loading logo image', err);
+      // Fallback to text if image fails to load
+      completePDF(pdf, pageWidth, leftMargin, rightMargin, contentWidth, yPos);
+    }
+  }
 
-    yPos += 6;
+  function completePDF(pdf: any, pageWidth: number, leftMargin: number, rightMargin: number, contentWidth: number, startYPos: number) {
+    let yPos = startYPos;
+
+    // Subtitle
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(100, 100, 100);
@@ -215,15 +238,7 @@ export default function QuotationDetailPage() {
         pdf.text(`Vehicle ${idx + 1}: ${(veh.vehicleBrand || veh.brand || '') + ' | ' + (veh.modelName || veh.model || '') + ' | ' + plateNumber}`.trim(), vehX, vehY);
         vehY += 5;
         pdf.setFont('helvetica', 'normal');
-        // let details = [];
-        // if (veh.vehicleType || veh.type) details.push(`Type: ${veh.vehicleType || veh.type}`);
-        // if (veh.numberPlate || veh.vehiclePlate || veh.plate) details.push(`Plate: ${veh.numberPlate || veh.vehiclePlate || veh.plate}`);
-        // if (veh.fuelType) details.push(`Fuel: ${veh.fuelType}`);
-        // if (veh.vinNumber || veh.vin) details.push(`VIN: ${veh.vinNumber || veh.vin}`);
-        // if (details.length > 0) {
-        //   pdf.text(details.join(' | '), vehX + 5, vehY);
-        //   vehY += 5;
-        // }
+        
         vehY += 2;
       });
     } else if (quotation.vehicleDetails && Object.values(quotation.vehicleDetails).some(v => v)) {
@@ -373,7 +388,7 @@ export default function QuotationDetailPage() {
     // Save PDF
     const filename = `Quotation_${quotation.quotationNumber || quotationId}.pdf`;
     pdf.save(filename);
-  } // <-- Add this closing brace to end generatePDF
+  }
 
   async function sendEmail() {
     if (!quotation?.customerEmail) {
@@ -539,7 +554,13 @@ export default function QuotationDetailPage() {
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 sm:p-8 rounded-t-lg">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold mb-2">CARMANTRA</h1>
+              <div className=" h-16 sm:h-20 ">
+                <img 
+                  src="/images/Carmantra_Invoice.png" 
+                  alt="Carmantra Logo" 
+                  className="h-full bg-black object-contain  p-2 rounded"
+                />
+              </div>
               <p className="text-blue-100">Premium Auto Care Services</p>
             </div>
             <div className="text-left sm:text-right">

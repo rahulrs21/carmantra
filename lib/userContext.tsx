@@ -44,20 +44,38 @@ export function UserProvider({ children }: { children: ReactNode }) {
       
       if (firebaseUser) {
         try {
+          console.log(`Loading user data for: ${firebaseUser.email} (uid: ${firebaseUser.uid})`);
           const userRole = await getUserRole(firebaseUser.uid);
-          setRole(userRole as UserRole);
+          
+          if (userRole) {
+            setRole(userRole as UserRole);
+            console.log(`✓ Role set to: ${userRole}`);
+          } else {
+            console.warn('⚠ No role found for user, checking Firestore...');
+            setRole(null);
+          }
 
           const userRef = doc(db, 'users', firebaseUser.uid);
           unsubscribeUserDoc = onSnapshot(userRef, (userDoc) => {
             if (userDoc.exists()) {
-              setDisplayName(userDoc.data()?.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User');
-              setPhotoURL(userDoc.data()?.photoURL || firebaseUser.photoURL || null);
+              const userData = userDoc.data();
+              console.log('✓ User document found:', userData);
+              setDisplayName(userData?.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User');
+              setPhotoURL(userData?.photoURL || firebaseUser.photoURL || null);
+              
+              // If role wasn't loaded before, try again from the document
+              if (!userRole && userData?.role) {
+                console.log(`✓ Role found in Firestore: ${userData.role}`);
+                setRole(userData.role as UserRole);
+              }
             } else {
+              console.warn('⚠ User document not found in Firestore');
               setDisplayName(firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User');
               setPhotoURL(firebaseUser.photoURL || null);
             }
           });
-        } catch (error) {
+        } catch (error: any) {
+          console.error('✗ Error loading user data:', error);
           setRole(null);
           setDisplayName(null);
           setPhotoURL(null);

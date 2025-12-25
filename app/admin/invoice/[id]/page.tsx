@@ -382,32 +382,85 @@ export default function InvoiceDetails() {
     return base64;
   }
 
-  function downloadPDF() {
+  async function downloadPDF() {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.width;
+      const leftMargin = 20;
+      let yPos = 20;
 
-      // Header Section with Background
-      doc.setFillColor(59, 130, 246); // Blue-500 color
-      doc.rect(0, 0, pageWidth, 45, 'F');
+      // Header Section with Blue Background
+      doc.setFillColor(59, 130, 246);
+      doc.rect(0, 0, pageWidth, 35, 'F');
 
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(28);
-      doc.setFont('helvetica', 'bold');
-      doc.text('INVOICE', 14, 25);
+      // Header - Logo Image
+      try {
+        const response = await fetch('/images/Carmantra_Invoice.png');
+        const blob = await response.blob();
+        const reader = new FileReader();
+        
+        reader.onload = () => {
+          const imgData = reader.result;
+          // Add black background rectangle with rounded corners behind logo
+          doc.setFillColor(0, 0, 0);
+          doc.roundedRect(leftMargin - 2, yPos - 15, 40, 16, 2, 2, 'F');
+          
+          doc.addImage(imgData as string, 'PNG', leftMargin, yPos - 13, 36, 13);
+          
+          // Add INVOICE heading
+          doc.setFontSize(22);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(255, 255, 255);
+          doc.text('INVOICE', pageWidth - leftMargin, yPos - 5, { align: 'right' });
+          
+          // Add Invoice # and Date
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(255, 255, 255);
+          const date = new Date();
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          doc.text(`Invoice #: ${invoice?.invoiceNumber || invoice?.id || ''}`, leftMargin, yPos + 8);
+          doc.text(`Date: ${day}/${month}/${year}`, pageWidth - leftMargin, yPos + 8, { align: 'right' });
+          
+          // Reset text color and continue with rest of PDF
+          doc.setTextColor(0, 0, 0);
+          completePDFDownload(doc, pageWidth, leftMargin, yPos + 25);
+        };
+        
+        reader.readAsDataURL(blob);
+      } catch (err) {
+        safeConsoleError('Error loading logo image', err);
+        // Fallback to text-based header if image fails
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.setFont('helvetica', 'bold');
+        doc.text('INVOICE', pageWidth - leftMargin, yPos - 5, { align: 'right' });
+        
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        const date = new Date();
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        doc.text(`Invoice #: ${invoice?.invoiceNumber || invoice?.id || ''}`, leftMargin, yPos + 8);
+        doc.text(`Date: ${day}/${month}/${year}`, pageWidth - leftMargin, yPos + 8, { align: 'right' });
+        
+        doc.setTextColor(0, 0, 0);
+        completePDFDownload(doc, pageWidth, leftMargin, yPos + 25);
+      }
+    } catch (err) {
+      safeConsoleError('PDF generation error', err);
+      setStatus('Failed to generate PDF');
+    }
+  }
 
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Invoice #: ${invoice?.invoiceNumber || invoice?.id || ''}`, 14, 35);
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - 14, 35, { align: 'right' });
-
-      // Reset text color
-      doc.setTextColor(0, 0, 0);
-
-      // Bill From, Bill To, and Vehicle in boxes
-      let startY = 55;
-      const boxWidth = 60;
-      const boxHeight = 35;
+  function completePDFDownload(doc: any, pageWidth: number, leftMargin: number, startYPos: number) {
+    const startY = startYPos + 15;
+    const boxWidth = 60;
+    const boxHeight = 35;
+    let currentY = startY;
 
       // Bill From Box
       doc.setDrawColor(200, 200, 200);
@@ -512,7 +565,7 @@ export default function InvoiceDetails() {
       }
 
       // Service Category Banner
-      let currentY = startY + boxHeight + 10;
+      currentY = startY + boxHeight + 10;
       if (invoice?.serviceCategory) {
         doc.setFillColor(239, 246, 255);
         doc.rect(14, currentY, pageWidth - 28, 8, 'F');
@@ -733,10 +786,6 @@ export default function InvoiceDetails() {
       doc.text('Thank you for your business!', pageWidth / 2, doc.internal.pageSize.height - 15, { align: 'center' });
 
       doc.save(`invoice-${invoice?.invoiceNumber || invoice?.id || 'invoice'}.pdf`);
-    } catch (err) {
-      safeConsoleError('PDF generation error', err);
-      setStatus('Failed to generate PDF');
-    }
   }
 
   async function sendInvoice() {
@@ -765,6 +814,7 @@ export default function InvoiceDetails() {
     <div className="space-y-6 p-1 sm:p-6 max-w-6xl mx-auto">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
+          
           <h1 className="text-3xl font-bold">Invoice #{invoice.invoiceNumber || invoice.id}</h1>
           <div className="text-sm text-gray-500 mt-1">
             {invoice.customerName} • {invoice.customerMobile}
@@ -816,10 +866,18 @@ export default function InvoiceDetails() {
         <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white p-5 sm:p-8 rounded-t-lg">
           <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold mb-2">INVOICE</h2>
+               <div className=" h-16 sm:h-20 ">
+                <img 
+                  src="/images/Carmantra_Invoice.png" 
+                  alt="Carmantra Logo" 
+                  className="h-full bg-black object-contain  p-2 rounded"
+                />
+              </div>
               <p className="text-blue-100">Invoice #: {invoice.invoiceNumber || invoice.id}</p>
             </div>
+ 
             <div className="text-left sm:text-right">
+              <h2 className='font-bold text-3xl mb-2'>INVOICE</h2>
               <p className="text-blue-100">Date:</p>
               <p className="font-semibold">{new Date().toLocaleDateString()}</p>
             </div>

@@ -8,8 +8,8 @@ export function hasPermission(
 ): boolean {
   if (!role) return false;
   
-  // Use custom permissions if provided, otherwise use defaults
-  const permissions = customPermissions || DEFAULT_PERMISSIONS[role] || [];
+  // Always use DEFAULT_PERMISSIONS from code (ignores old Firebase custom permissions)
+  const permissions = DEFAULT_PERMISSIONS[role] || [];
   const modulePermission = permissions.find(p => p.module === module);
   
   if (!modulePermission) return false;
