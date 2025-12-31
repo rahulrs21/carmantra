@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 
 interface Service {
   id: string;
@@ -57,6 +57,11 @@ export default function ServicesPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingCount, setDeletingCount] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'bookedServices'), orderBy('createdAt', 'desc'));
@@ -219,9 +224,56 @@ export default function ServicesPage() {
   async function handleDelete(id: string) {
     try {
       await deleteDoc(doc(db, 'bookedServices', id));
+      setDeleteStatus('Service booking deleted successfully!');
+      
+      // Auto-hide status message after 5 seconds
+      setTimeout(() => setDeleteStatus(null), 5000);
     } catch (err: any) {
       safeConsoleError('Delete booking error', err);
-      alert('Error deleting booking: ' + err.message);
+      setDeleteStatus(`Error deleting booking: ${err.message}`);
+      setTimeout(() => setDeleteStatus(null), 5000);
+    }
+  }
+
+  async function handleBatchDelete() {
+    const idsToDelete = Array.from(selectedIds);
+    setDeletingCount(idsToDelete.length);
+    
+    try {
+      await Promise.all(
+        idsToDelete.map(id => deleteDoc(doc(db, 'bookedServices', id)))
+      );
+      setSelectedIds(new Set());
+      setShowDeleteConfirm(false);
+      setConfirmDelete(false);
+      setDeleteStatus(`Successfully deleted ${idsToDelete.length} booking${idsToDelete.length !== 1 ? 's' : ''}!`);
+      
+      // Auto-hide status message after 5 seconds
+      setTimeout(() => setDeleteStatus(null), 5000);
+    } catch (err: any) {
+      safeConsoleError('Batch delete error', err);
+      setDeleteStatus(`Error deleting bookings: ${err.message}`);
+      setTimeout(() => setDeleteStatus(null), 5000);
+    } finally {
+      setDeletingCount(0);
+    }
+  }
+
+  function toggleSelectId(id: string) {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === paginated.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginated.map(s => s.id)));
     }
   }
 
@@ -276,7 +328,7 @@ export default function ServicesPage() {
   }
 
   return (
-    <ModuleAccess module="services">
+    <ModuleAccessComponent module={ModuleAccess.SERVICES}>
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
@@ -284,6 +336,16 @@ export default function ServicesPage() {
           <p className="text-sm text-gray-500 mt-1">All service bookings and history from Book Service module</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto sm:justify-end">
+          {selectedIds.size > 0 && (
+            <PermissionGate module="services" action="delete">
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium transition-colors w-full sm:w-auto"
+              >
+                Delete {selectedIds.size} Selected
+              </button>
+            </PermissionGate>
+          )}
           <PermissionGate module="services" action="create">
             <Button variant="outline" onClick={downloadCSV} disabled={loading || sorted.length === 0} className="w-full sm:w-auto">
               Export CSV
@@ -299,6 +361,12 @@ export default function ServicesPage() {
 
       {error && (
         <div className="p-4 bg-red-50 text-red-700 rounded">{error}</div>
+      )}
+
+      {deleteStatus && (
+        <div className={`p-4 rounded ${deleteStatus.includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+          {deleteStatus}
+        </div>
       )}
 
       {/* Filters */}
@@ -500,7 +568,7 @@ export default function ServicesPage() {
         {loading ? (
           <div className="p-6">Loading…</div>
         ) : (
-          <>
+          <div>
             {/* Mobile cards */}
             <div className="md:hidden divide-y">
               {paginated.length === 0 && (
@@ -509,7 +577,13 @@ export default function ServicesPage() {
               {paginated.map((service) => (
                 <div key={service.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(service.id)}
+                      onChange={() => toggleSelectId(service.id)}
+                      className="mt-1 rounded border-gray-300 cursor-pointer flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm text-gray-500">Job Card</div>
                       <div className="font-semibold text-blue-600 break-words">{service.jobCardNo}</div>
                       <div className="text-sm font-medium mt-1 break-words flex items-center gap-2 dark:text-gray-800">
@@ -522,11 +596,11 @@ export default function ServicesPage() {
                         ) : (
                           <span className="text-gray-400">No Name</span>
                         )}
-                        {service.customerType && (
+                        {/* {service.customerType && (
                           <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${service.customerType === 'b2b' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'}`}>
                             {service.customerType.toUpperCase()}
                           </span>
-                        )}
+                        )} */}
                       </div>
                       <div className="text-xs text-gray-500 break-words">{service.customerType === 'b2b' ? (service.contactPhone || service.mobileNo) : service.mobileNo}</div>
                       <div className="text-xs text-gray-400 break-all">{service.customerType === 'b2b' ? (service.contactEmail || service.email) : service.email}</div>
@@ -584,6 +658,14 @@ export default function ServicesPage() {
               <table className="w-full min-w-[1200px]">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-sm text-gray-600 w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.size > 0 && selectedIds.size === paginated.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left px-4 py-3 text-sm text-gray-600 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('jobCardNo')}>
                       <div className="flex items-center">
                         Job Card No
@@ -631,6 +713,14 @@ export default function ServicesPage() {
                   )}
                   {paginated.map(service => (
                     <tr key={service.id} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-3 w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(service.id)}
+                          onChange={() => toggleSelectId(service.id)}
+                          className="rounded border-gray-300 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-blue-600">{service.jobCardNo}</div>
                       </td>
@@ -645,11 +735,11 @@ export default function ServicesPage() {
                           ) : (
                             <span className="text-gray-400">No Name</span>
                           )}
-                          {service.customerType && (
+                          {/* {service.customerType && (
                             <span className={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${service.customerType === 'b2b' ? 'bg-blue-200 text-blue-800' : 'bg-green-200 text-green-800'}`}>
                               {service.customerType.toUpperCase()}
                             </span>
-                          )}
+                          )} */}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
@@ -699,7 +789,7 @@ export default function ServicesPage() {
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -788,7 +878,63 @@ export default function ServicesPage() {
           </div>
         </div>
       )}
+
+      {/* Safe Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full z-10 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 0v2m0-10V7a2 2 0 012-2h6a2 2 0 012 2v10a2 2 0 01-2 2H8a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900">Delete Bookings</h3>
+            </div>
+            
+            <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
+              <p className="text-sm text-red-800">
+                <strong>{selectedIds.size}</strong> service booking{selectedIds.size !== 1 ? 's' : ''} will be permanently deleted. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={confirmDelete}
+                  onChange={(e) => setConfirmDelete(e.target.checked)}
+                  className="rounded border-gray-300 cursor-pointer"
+                />
+                <span className="text-sm text-gray-700 cursor-pointer">
+                  I understand this action is permanent
+                </span>
+              </label>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setConfirmDelete(false);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBatchDelete}
+                disabled={deletingCount > 0 || !confirmDelete}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded font-medium transition-colors"
+              >
+                {deletingCount > 0 ? `Deleting ${deletingCount}...` : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }

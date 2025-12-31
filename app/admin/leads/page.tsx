@@ -5,7 +5,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, orderBy, query, where, getDocs } from 'firebase/firestore';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { formatDateTime } from '@/lib/utils';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 
@@ -219,7 +219,7 @@ export default function LeadsPage() {
   }, [queryText, itemsPerPage, rangeType, selectedRange]);
 
   return (
-    <ModuleAccess module="leads">
+    <ModuleAccessComponent module={ModuleAccess.LEADS}>
     <div className="space-y-4 sm:space-y-6 max-w-full w-full overflow-x-hidden">
       <header className="flex flex-col gap-3 sm:gap-4 w-full">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full min-w-0">
@@ -572,6 +572,6 @@ export default function LeadsPage() {
         </div>
       )}
     </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }

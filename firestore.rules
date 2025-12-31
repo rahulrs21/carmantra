@@ -23,7 +23,13 @@ service cloud.firestore {
     // Helper: is this user an admin according to users/{uid}.role
     function isAdmin() {
       return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Helper: is user authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
     // Quotations: allow admin OR the document owner (ownerId field) to read.
@@ -45,6 +51,60 @@ service cloud.firestore {
     // Sent forms: admin-only for now
     match /sentForms/{docId} {
       allow read, write: if isAdmin();
+    }
+
+    // B2B Collections: authenticated users (no admin role required for now)
+    // Companies collection with all subcollections
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+      
+      // Services subcollection
+      match /services/{serviceId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAuthenticated();
+        allow delete: if isAuthenticated();
+        
+        // Vehicles subcollection
+        match /vehicles/{vehicleId} {
+          allow read: if isAuthenticated();
+          allow create: if isAuthenticated();
+          allow update: if isAuthenticated();
+          allow delete: if isAuthenticated();
+          
+          // Pre-inspections subcollection
+          match /preInspections/{inspectionId} {
+            allow read: if isAuthenticated();
+            allow create: if isAuthenticated();
+            allow update: if isAuthenticated();
+            allow delete: if isAuthenticated();
+          }
+        }
+        
+        // Referrals subcollection
+        match /referrals/{referralId} {
+          allow read: if isAuthenticated();
+          allow create: if isAuthenticated();
+          allow update: if isAuthenticated();
+          allow delete: if isAuthenticated();
+        }
+      }
+    }
+
+    // Legacy B2B collections (deprecated - kept for backward compatibility)
+    match /b2b-companies/{docId=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /b2b-vehicles/{docId=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /b2b-services/{docId=**} {
+      allow read, write: if isAuthenticated();
     }
   }
 }

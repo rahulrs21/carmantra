@@ -104,6 +104,81 @@ export interface InvoiceDoc {
   };
 }
 
+// =============== B2B BOOKING SERVICE MODULE ===============
+
+export interface B2BCompany {
+  id?: ID;
+  companyName: string;
+  companyEmail: string;
+  companyPhone: string;
+  contactPerson: string;
+  companyVat?: string;
+  companyCode?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  state?: string;
+  status: 'active' | 'inactive';
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface B2BVehicle {
+  id?: ID;
+  companyId: string;
+  vehicleBrand: string;
+  modelName: string;
+  numberPlate: string;
+  vin?: string;
+  fuelType?: string;
+  vehicleType?: string;
+  color?: string;
+  year?: number;
+  status: 'active' | 'inactive';
+  preInspection?: PreInspectionData;
+  referral?: ReferralInfo;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface B2BService {
+  id?: ID;
+  vehicleId: string;
+  companyId: string;
+  category: string;
+  description?: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
+  scheduledDate?: any;
+  completedDate?: any;
+  amount?: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface PreInspectionData {
+  message?: string;
+  images?: string[];
+  videos?: string[];
+  inspectionDate?: any;
+}
+
+export interface ReferralInfo {
+  referralContact?: string;
+  referralPhone?: string;
+  referralEmail?: string;
+  commissionRate?: number;
+  totalCommission?: number;
+  notes?: string;
+}
+
+export interface B2BVehicleDetail extends B2BVehicle {
+  preInspection?: PreInspectionData;
+  referral?: ReferralInfo;
+  services?: B2BService[];
+}
+
+// =============== USER & PERMISSIONS ===============
+
 export type UserRole = 'admin' | 'manager' | 'sales' | 'support' | 'viewer';
 
 export interface Permission {
@@ -139,6 +214,8 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'services', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'invoices', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'b2b-booking', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'accounts', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'users', canView: true, canCreate: true, canEdit: true, canDelete: true },
   ],
   manager: [
@@ -148,6 +225,8 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'services', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'invoices', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'b2b-booking', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'accounts', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'users', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
   sales: [
@@ -157,6 +236,8 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'services', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'invoices', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'b2b-booking', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   support: [
@@ -166,6 +247,8 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'services', canView: true, canCreate: false, canEdit: true, canDelete: false },
     { module: 'invoices', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'quotations', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'b2b-booking', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   viewer: [
@@ -175,6 +258,8 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'services', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'invoices', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'quotations', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'b2b-booking', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
 };

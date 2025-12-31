@@ -582,9 +582,9 @@ export default function QuotationDetailPage() {
               <div className="space-y-2">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                   <p className="text-md sm:text-lg font-semibold text-gray-900">{quotation.customerName || 'N/A'}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold w-fit ${quotation.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                  {/* <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold w-fit ${quotation.customerType === 'b2b' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                     {quotation.customerType === 'b2b' ? 'B2B' : 'B2C'}
-                  </span>
+                  </span> */}
                 </div>
                 {quotation.customerType === 'b2b' && quotation.companyName && (
                   <p className="text-gray-700 text-xs sm:text-lg">Company: {quotation.companyName}</p>

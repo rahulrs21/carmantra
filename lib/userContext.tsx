@@ -15,7 +15,7 @@ interface UserContextType {
   loading: boolean;
 }
 
-const UserContext = createContext<UserContextType>({
+export const UserContext = createContext<UserContextType>({
   user: null,
   role: null,
   displayName: null,

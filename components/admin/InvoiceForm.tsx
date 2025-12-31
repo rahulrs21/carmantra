@@ -127,7 +127,7 @@ export default function InvoiceForm({
       const normalizedEmail = customerType === 'b2b' ? (contactEmail || customerEmail) : customerEmail;
       const normalizedMobile = customerType === 'b2b' ? (contactMobile || customerMobile) : customerMobile;
 
-      const invoiceData = {
+      const invoiceData: any = {
         customerType,
         companyName,
         contactName,
@@ -153,12 +153,20 @@ export default function InvoiceForm({
         discount,
         total: totals.grandTotal,
         paymentStatus,
-        partialPaidAmount: paymentStatus === 'partial' ? Number(partialPaidAmount) : undefined,
         notes: notes,
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
         updatedAt: Timestamp.now(),
       };
+
+      // Only include partialPaidAmount if payment status is partial
+      if (paymentStatus === 'partial') {
+        invoiceData.partialPaidAmount = Number(partialPaidAmount);
+      } else {
+        // Clear partial payment fields when not partial
+        invoiceData.partialPaidAmount = null;
+        invoiceData.partialPaymentNotes = null;
+      }
 
       if (invoice?.id) {
         // Update existing invoice
@@ -250,27 +258,9 @@ export default function InvoiceForm({
       <div className="bg-gray-50 p-4 rounded-lg space-y-3">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div>
-            <h3 className="font-semibold text-gray-900">Customer Information</h3>
-            <p className="text-xs text-gray-500">Switch B2C/B2B and fill the relevant fields</p>
+            <h3 className="font-semibold text-gray-900">Customer Information</h3> 
           </div>
-          <div className="flex gap-2 text-xs">
-            <button
-              type="button"
-              className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
-              onClick={() => setCustomerType('b2c')}
-              disabled={!!invoice}
-            >
-              B2C
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
-              onClick={() => setCustomerType('b2b')}
-              disabled={!!invoice}
-            >
-              B2B
-            </button>
-          </div>
+          
         </div>
 
         {customerType === 'b2b' ? (

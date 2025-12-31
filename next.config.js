@@ -2,9 +2,6 @@
 const nextConfig = {
   // output: 'export',
   reactStrictMode: false, // reduces strict hydration warnings
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   images: { unoptimized: true },
 };
 

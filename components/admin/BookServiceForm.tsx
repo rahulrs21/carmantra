@@ -44,6 +44,7 @@ export default function BookServiceForm({
         vehicleBrand: '',
         numberPlate: '',
         modelName: '',
+        vehicleColor: '',
     });
 
     const [status, setStatus] = useState<string | null>(null);
@@ -297,6 +298,7 @@ export default function BookServiceForm({
                 vehicleBrand: formData.vehicleBrand,
                 numberPlate: formData.numberPlate,
                 modelName: formData.modelName,
+                vehicleColor: formData.vehicleColor,
                 // Pre-inspection
                 preInspection: preInspectionData,
                 status: 'pending',
@@ -321,6 +323,7 @@ export default function BookServiceForm({
                 vehicleBrand: '',
                 numberPlate: '',
                 modelName: '',
+                vehicleColor: '',
             });
             setPreInspection({
                 message: '',
@@ -609,6 +612,19 @@ export default function BookServiceForm({
                             placeholder="3 Series"
                             className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                             required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Vehicle Color
+                        </label>
+                        <input
+                            type="text"
+                            name="vehicleColor"
+                            value={formData.vehicleColor}
+                            onChange={handleChange}
+                            placeholder="e.g., Black, White, Silver"
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                         />
                     </div>
                 </div>

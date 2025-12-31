@@ -17,7 +17,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useUser } from '@/lib/userContext';
 import { toast } from 'sonner';
 import { Users, UserPlus, Shield, Trash2, Edit2, Search, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 
 export default function UsersPage() {
   const { user: currentUser, role: currentRole } = useUser();
@@ -325,7 +325,7 @@ export default function UsersPage() {
   }
 
   return (
-    <ModuleAccess module="users">
+    <ModuleAccessComponent module={ModuleAccess.USERS}>
       <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -717,6 +717,6 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
       </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }

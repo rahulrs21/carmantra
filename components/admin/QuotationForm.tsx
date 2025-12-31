@@ -39,6 +39,8 @@ export default function QuotationForm({
   const [laborCharges, setLaborCharges] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [validityDays, setValidityDays] = useState(30);
+  const [validityDate, setValidityDate] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('pending');
   const [loading, setLoading] = useState(false);
@@ -75,6 +77,8 @@ export default function QuotationForm({
       setLaborCharges(quotation.laborCharges || 0);
       setDiscount(quotation.discount || 0);
       setValidityDays(quotation.validityDays || 30);
+      setValidityDate(quotation.validityDate || '');
+      setPaymentTerms(quotation.paymentTerms || '');
       setNotes(quotation.notes || '');
       setStatus(quotation.status || 'pending');
     }
@@ -97,6 +101,46 @@ export default function QuotationForm({
       setItems(autoItems.length > 0 ? autoItems : [{ description: '', quantity: 1, rate: 0, amount: 0 }]);
     }
   }, [vehiclesList, customerType, quotation]);
+
+  // Populate form when creating new quotation from service booking
+  useEffect(() => {
+    if (!serviceBookingId || quotation) return; // Only for new quotations linked to service booking
+    
+    (async () => {
+      try {
+        const { getDoc, doc } = await import('firebase/firestore');
+        const bookingSnap = await getDoc(doc(db, 'bookedServices', serviceBookingId));
+        
+        if (bookingSnap.exists()) {
+          const booking = bookingSnap.data() as any;
+          
+          // Populate customer information from booking
+          if (booking.customerType === 'b2b') {
+            setCustomerType('b2b');
+            setCompanyName(booking.companyName || '');
+            setContactName(booking.contactName || '');
+            setContactEmail(booking.contactEmail || '');
+            setContactMobile(booking.contactPhone || '');
+          } else {
+            setCustomerType('b2c');
+            setCustomerName(`${booking.firstName || ''} ${booking.lastName || ''}`.trim());
+            setCustomerEmail(booking.email || '');
+            setCustomerMobile(booking.mobileNo || '');
+          }
+          
+          // Populate vehicle information from booking
+          setVehicleType(booking.vehicleType || '');
+          setVehicleBrand(booking.vehicleBrand || '');
+          setVehicleModel(booking.modelName || '');
+          setVehiclePlate(booking.numberPlate || '');
+          setVehicleVin(booking.vinNumber || ''); // This populates the VIN
+          setServiceCategory(booking.category || '');
+        }
+      } catch (err) {
+        safeConsoleError('Error fetching booking for quotation', err);
+      }
+    })();
+  }, [serviceBookingId, quotation]);
 
   function calculateTotals() {
     const itemsTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -186,6 +230,8 @@ export default function QuotationForm({
         discount,
         total: totals.grandTotal,
         validityDays,
+        validityDate,
+        paymentTerms,
         notes,
         status,
         updatedAt: Timestamp.now(),
@@ -244,6 +290,8 @@ export default function QuotationForm({
         setLaborCharges(0);
         setDiscount(0);
         setValidityDays(30);
+        setValidityDate('');
+        setPaymentTerms('');
         setNotes('');
         setStatus('pending');
         setCustomerType('b2c');
@@ -725,6 +773,25 @@ export default function QuotationForm({
             min={1}
             onChange={e => setValidityDays(parseInt(e.target.value || '30', 10))}
             placeholder="Quote valid for"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Validity Date</label>
+          <input 
+            type="date"
+            className="w-full border border-gray-300 p-2 rounded" 
+            value={validityDate}
+            onChange={e => setValidityDate(e.target.value)}
+          />  
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms (Optional)</label>
+          <textarea 
+            className="w-full border border-gray-300 p-2 rounded" 
+            value={paymentTerms}
+            onChange={e => setPaymentTerms(e.target.value)}
+            placeholder="e.g., 50% upfront, 50% on completion"
+            rows={2}
           />
         </div>
       </div>

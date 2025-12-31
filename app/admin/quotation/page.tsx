@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import QuotationForm from '@/components/admin/QuotationForm';
 import { formatDateTime } from '@/lib/utils';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -178,7 +178,7 @@ export default function QuotationsPage() {
   }
 
   return (
-    <ModuleAccess module="quotations">
+    <ModuleAccessComponent module={ModuleAccess.QUOTATIONS}>
     <div className="p-1 sm:p-6 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -639,6 +639,6 @@ export default function QuotationsPage() {
         </div>
       )}
     </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }

@@ -1449,12 +1449,12 @@ export default function BookServiceDetails() {
                   {service.status || 'pending'}
                 </span>
               </div>
-              <div className="flex justify-between">
+              {/* <div className="flex justify-between">
                 <span className="text-gray-600">Customer Type:</span>
                 <span className={`px-2 py-1 rounded text-xs font-semibold ${customerTypeBadgeClass}`}>
                   {customerType === 'b2b' ? 'B2B' : 'B2C'}
                 </span>
-              </div>
+              </div> */}
             </div>
           </Card>
 
@@ -1699,10 +1699,10 @@ export default function BookServiceDetails() {
                 <>
                   {customerType === 'b2b' ? (
                     <>
-                      <div className="flex justify-between">
+                      {/* <div className="flex justify-between">
                         <span className="text-gray-600">Customer Type:</span>
                         <span className={`px-2 py-1 rounded text-xs font-semibold ${customerTypeBadgeClass}`}>B2B</span>
-                      </div>
+                      </div> */}
                       <div className="flex justify-between">
                         <span className="text-gray-600">Company:</span>
                         <span className="font-medium">{service.companyName || '-'}</span>
@@ -1754,10 +1754,10 @@ export default function BookServiceDetails() {
                     </>
                   ) : (
                     <>
-                      <div className="flex justify-between">
+                      {/* <div className="flex justify-between">
                         <span className="text-gray-600">Customer Type:</span>
                         <span className={`px-2 py-1 rounded text-xs font-semibold ${customerTypeBadgeClass}`}>B2C</span>
-                      </div>
+                      </div> */}
                       <div className="flex justify-between">
                         <span className="text-gray-600">Name:</span>
                         <span className="font-medium">{service.firstName} {service.lastName}</span>

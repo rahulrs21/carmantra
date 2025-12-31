@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import InvoiceForm from '@/components/admin/InvoiceForm';
 import { formatDateTime } from '@/lib/utils';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -182,7 +182,7 @@ export default function InvoicesPage() {
   }
 
   return (
-    <ModuleAccess module="invoices">
+    <ModuleAccessComponent module={ModuleAccess.INVOICES}>
       <div className="p-1 sm:p-6 space-y-6">
         {deleteStatus && (
           <div className={`p-4 rounded-lg ${deleteStatus.type === 'success' 
@@ -657,6 +657,6 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }

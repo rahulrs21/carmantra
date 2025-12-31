@@ -57,7 +57,7 @@ export default function InvoiceDetails() {
     doc.setTextColor(0, 0, 0);
 
     // Bill From, Bill To, and Vehicle in boxes
-    let startY = 55;
+    let startY = 38;
     const boxWidth = 60;
     const boxHeight = 35;
 
@@ -108,6 +108,10 @@ export default function InvoiceDetails() {
       doc.setTextColor(75, 85, 99);
       doc.text(invoice?.customerEmail || '', 80, startY + 19);
       doc.text(invoice?.customerMobile || '', 80, startY + 25);
+      if (invoice?.address) {
+        const addressText = [invoice.address, invoice.city, invoice.state, invoice.country].filter(Boolean).join(', ');
+        doc.text(addressText, 80, startY + 31);
+      }
     }
 
     // Vehicle Box - B2B or B2C
@@ -260,18 +264,18 @@ export default function InvoiceDetails() {
     // Grand Total
     currentY += 2;
     doc.setDrawColor(229, 231, 235);
-    doc.line(totalsX, currentY, pageWidth - 16, currentY);
+    doc.line(14, currentY, pageWidth - 14, currentY);
     currentY += 6;
 
     doc.setFillColor(239, 246, 255);
-    doc.rect(totalsX, currentY - 5, pageWidth - totalsX - 16, 10, 'F');
+    doc.rect(14, currentY - 5, pageWidth - 28, 10, 'F');
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('GRAND TOTAL:', totalsX + 2, currentY + 2);
+    doc.text('GRAND TOTAL:', 16, currentY + 2);
     doc.setTextColor(59, 130, 246);
-    doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`, pageWidth - 20, currentY + 2, { align: 'right' });
+    doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`, pageWidth - 16, currentY + 2, { align: 'right' });
 
     // Payment Status
     currentY += 15;
@@ -457,7 +461,7 @@ export default function InvoiceDetails() {
   }
 
   function completePDFDownload(doc: any, pageWidth: number, leftMargin: number, startYPos: number) {
-    const startY = startYPos + 15;
+    const startY = startYPos + 1;
     const boxWidth = 60;
     const boxHeight = 35;
     let currentY = startY;
@@ -509,6 +513,10 @@ export default function InvoiceDetails() {
         doc.setTextColor(75, 85, 99);
         doc.text(invoice?.customerEmail || '', 80, startY + 19);
         doc.text(invoice?.customerMobile || '', 80, startY + 25);
+        if (invoice?.address) {
+          const addressText = [invoice.address, invoice.city, invoice.state, invoice.country].filter(Boolean).join(', ');
+          doc.text(addressText, 80, startY + 31);
+        }
       }
 
       // Vehicle Box - B2B or B2C
@@ -565,7 +573,7 @@ export default function InvoiceDetails() {
       }
 
       // Service Category Banner
-      currentY = startY + boxHeight + 10;
+      currentY = startY + boxHeight + 8;
       if (invoice?.serviceCategory) {
         doc.setFillColor(239, 246, 255);
         doc.rect(14, currentY, pageWidth - 28, 8, 'F');
@@ -573,7 +581,7 @@ export default function InvoiceDetails() {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(59, 130, 246);
         doc.text(`Service: ${invoice.serviceCategory}`, 16, currentY + 5.5);
-        currentY += 10;
+        currentY += 8;
       }
 
       // Service Items Table
@@ -667,19 +675,18 @@ export default function InvoiceDetails() {
       // Grand Total
       currentY += 2;
       doc.setDrawColor(229, 231, 235);
-      doc.line(totalsX - 2, currentY, pageWidth - 16, currentY);
+      doc.line(14, currentY, pageWidth - 14, currentY);
       currentY += 6;
 
       doc.setFillColor(239, 246, 255);
-      doc.rect(totalsX, currentY - 5, pageWidth - totalsX - 16, 10, 'F');
+      doc.rect(14, currentY - 5, pageWidth - 28, 10, 'F');
 
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text('GRAND TOTAL:', totalsX - 2, currentY + 2);
+      doc.text('GRAND TOTAL:', 16, currentY + 2);
       doc.setTextColor(59, 130, 246);
-      doc.text(' ', totalsX - 2, currentY + 2);
-      doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`, pageWidth - 20, currentY + 2, { align: 'right' });
+      doc.text(`AED ${(invoice?.total || 0).toFixed(2)}`, pageWidth - 16, currentY + 2, { align: 'right' });
 
       // Payment Status
       currentY += 15;

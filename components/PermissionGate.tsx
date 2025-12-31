@@ -4,6 +4,18 @@ import { ReactNode } from 'react';
 import { useUser } from '@/lib/userContext';
 import { hasPermission } from '@/lib/permissions';
 
+export const ModuleAccess = {
+  DASHBOARD: 'dashboard',
+  LEADS: 'leads',
+  CUSTOMERS: 'customers',
+  SERVICES: 'services',
+  INVOICES: 'invoices',
+  QUOTATIONS: 'quotations',
+  B2B_BOOKING: 'b2b-booking',
+  USERS: 'users',
+  ACCOUNTS: 'accounts',
+} as const;
+
 interface PermissionGateProps {
   module: string;
   action: 'view' | 'create' | 'edit' | 'delete';
@@ -21,12 +33,12 @@ export function PermissionGate({ module, action, children, fallback = null }: Pe
   return <>{children}</>;
 }
 
-interface ModuleAccessProps {
+interface ModuleAccessComponentProps {
   module: string;
   children: ReactNode;
 }
 
-export function ModuleAccess({ module, children }: ModuleAccessProps) {
+export function ModuleAccessComponent({ module, children }: ModuleAccessComponentProps) {
   const { role } = useUser();
   
   if (!hasPermission(role, module, 'view')) {

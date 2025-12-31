@@ -25,7 +25,7 @@ import { Calendar } from '@/components/ui/calendar';
 import MetricCard from '@/components/admin/MetricCard';
 import { safeConsoleError } from '@/lib/safeConsole';
 // Local date/time formatting helpers for DD/MM/YYYY and 12-hour clock
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 import { useUser } from '@/lib/userContext';
 
 interface Lead {
@@ -568,7 +568,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <ModuleAccess module="dashboard">
+    <ModuleAccessComponent module={ModuleAccess.DASHBOARD}>
       <div className={`space-y-6 lg:space-y-8 ${!isLoggedIn ? 'blur-sm pointer-events-none select-none' : ''}`}>
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
@@ -929,6 +929,6 @@ export default function AdminDashboard() {
         </div>
       </section>
       </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }

@@ -9,6 +9,7 @@ import { RouteLoader } from '@/components/RouteLoader';  // ✅ custom wrapper
 import Footer from '@/components/Footer';
 import Prefooter from '@/components/PreFooter';
 import Script from 'next/script';
+import { ReactQueryProvider } from '@/components/providers/ReactQueryProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -61,23 +62,25 @@ export default function RootLayout({
 
 
       <body suppressHydrationWarning={true}>
-        {/* ✅ Top Navigation */}
-        <Navigation />
+        <ReactQueryProvider>
+          {/* ✅ Top Navigation */}
+          <Navigation />
 
-        {/* ✅ Fluid background effect */}
-        <FluidSmoke />
+          {/* ✅ Fluid background effect */}
+          <FluidSmoke />
 
-        {/* ✅ Wrap children with Suspense + RouteLoader */}
-        <Suspense fallback={<Loading />}>
-          <RouteLoader>{children}</RouteLoader>
-        </Suspense>
-
-
-        <Prefooter />
+          {/* ✅ Wrap children with Suspense + RouteLoader */}
+          <Suspense fallback={<Loading />}>
+            <RouteLoader>{children}</RouteLoader>
+          </Suspense>
 
 
-        {/* Footer */}
-        <Footer />
+          <Prefooter />
+
+
+          {/* Footer */}
+          <Footer />
+        </ReactQueryProvider>
       </body>
     </html>
   );

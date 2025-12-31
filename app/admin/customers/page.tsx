@@ -11,7 +11,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import CustomerForm from '@/components/admin/customers/CustomerForm';
 import { useRouter } from 'next/navigation';
-import { ModuleAccess, PermissionGate } from '@/components/PermissionGate';
+import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -121,7 +121,7 @@ export default function CustomersPage() {
   }
 
   return (
-    <ModuleAccess module="customers">
+    <ModuleAccessComponent module={ModuleAccess.CUSTOMERS}>
     <div className="space-y-6 max-w-full w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full min-w-0">
         <div className="min-w-0">
@@ -390,6 +390,6 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
-    </ModuleAccess>
+    </ModuleAccessComponent>
   );
 }
