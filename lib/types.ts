@@ -179,7 +179,7 @@ export interface B2BVehicleDetail extends B2BVehicle {
 
 // =============== USER & PERMISSIONS ===============
 
-export type UserRole = 'admin' | 'manager' | 'sales' | 'support' | 'viewer';
+export type UserRole = 'admin' | 'manager' | 'sales' | 'support' | 'viewer' | 'employee';
 
 export interface Permission {
   module: string;
@@ -205,6 +205,89 @@ export interface UserAccount {
   inviteExpires?: any;
 }
 
+// =============== EMPLOYEE MANAGEMENT ===============
+
+export interface Employee {
+  id?: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  department: string;
+  position: string;
+  joiningDate: any;
+  salary: number; // Base salary
+  photoURL?: string;
+  status: 'active' | 'inactive';
+  userId?: string; // Link to Users module (optional)
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface AttendanceRecord {
+  employeeId: string;
+  date: any;
+  status: 'present' | 'absent' | 'leave' | 'holiday' | 'halfday';
+  leaveId?: string; // Reference to leave record if status is 'leave'
+  remarks?: string;
+}
+
+export interface LeaveRequest {
+  id?: string;
+  employeeId: string;
+  type: 'casual' | 'sick' | 'earned' | 'unpaid' | 'maternity' | 'paternity';
+  startDate: any;
+  endDate: any;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  approvedBy?: string; // Admin UID
+  appliedAt?: any;
+  approvedAt?: any;
+}
+
+export interface LeaveBalance {
+  employeeId: string;
+  year: number;
+  casual: number;
+  sick: number;
+  earned: number;
+  unpaid: number;
+  maternity: number;
+  paternity: number;
+}
+
+export interface SalaryRecord {
+  id?: string;
+  employeeId: string;
+  month: string; // YYYY-MM format
+  baseSalary: number;
+  allowances?: Record<string, number>; // { DA: 5000, HRA: 3000 }
+  deductions?: Record<string, number>; // { tax: 5000, loan: 1000 }
+  netSalary: number;
+  status: 'pending' | 'approved' | 'paid';
+  paidDate?: any;
+  remarks?: string;
+  createdAt?: any;
+}
+
+export interface SalarySettings {
+  id?: string;
+  allowanceTypes: Array<{ name: string; percentage?: number; amount?: number }>;
+  deductionTypes: Array<{ name: string; percentage?: number; fixed?: number }>;
+  defaultLeaveBalance: Partial<LeaveBalance>;
+  workDays: string[]; // ['Monday', 'Tuesday', ...]
+  updatedAt?: any;
+}
+
+export interface Holiday {
+  id?: string;
+  name: string;
+  date: any;
+  type: 'national' | 'regional' | 'company';
+  description?: string;
+  createdAt?: any;
+}
+
 // Default permissions by role
 export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -217,6 +300,10 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'b2b-booking', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'accounts', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'users', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'employees', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'attendance', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'leaves', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'salary', canView: true, canCreate: true, canEdit: true, canDelete: true },
   ],
   manager: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -228,6 +315,10 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'b2b-booking', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'accounts', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'users', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'employees', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'attendance', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'leaves', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'salary', canView: true, canCreate: true, canEdit: true, canDelete: false },
   ],
   sales: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -239,6 +330,10 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'b2b-booking', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'employees', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'attendance', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leaves', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'salary', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   support: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -250,6 +345,10 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'b2b-booking', canView: true, canCreate: false, canEdit: true, canDelete: false },
     { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'employees', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'attendance', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leaves', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'salary', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   viewer: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -261,5 +360,24 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'b2b-booking', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'employees', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'attendance', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leaves', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'salary', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  ],
+  employee: [
+    { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leads', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'customers', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'services', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'invoices', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'quotations', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'b2b-booking', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'accounts', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'users', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'employees', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'attendance', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'leaves', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'salary', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
 };

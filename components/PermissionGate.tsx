@@ -14,6 +14,10 @@ export const ModuleAccess = {
   B2B_BOOKING: 'b2b-booking',
   USERS: 'users',
   ACCOUNTS: 'accounts',
+  EMPLOYEES: 'employees',
+  ATTENDANCE: 'attendance',
+  LEAVES: 'leaves',
+  SALARY: 'salary',
 } as const;
 
 interface PermissionGateProps {

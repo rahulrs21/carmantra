@@ -52,47 +52,8 @@ export default function UsersPage() {
       setLoading(false);
     });
 
-    // Set current user as online
-    if (currentUser?.uid) {
-      // Mark user as online immediately
-      const markOnline = async () => {
-        try {
-          await updateDoc(doc(db, 'users', currentUser.uid), {
-            isOnline: true,
-            lastLogin: Timestamp.now(),
-          });
-        } catch (error) {
-          // User doc might not exist yet
-          console.debug('Could not update online status:', error);
-        }
-      };
-
-      markOnline();
-
-      // Set a heartbeat to keep user marked as online (every 30 seconds)
-      const heartbeatInterval = setInterval(() => {
-        updateDoc(doc(db, 'users', currentUser.uid), {
-          isOnline: true,
-          lastActivityAt: Timestamp.now(),
-        }).catch(() => {
-          // Silently fail if document doesn't exist
-        });
-      }, 30000);
-
-      // Cleanup: set user as offline when component unmounts or user logs out
-      return () => {
-        clearInterval(heartbeatInterval);
-        updateDoc(doc(db, 'users', currentUser.uid), {
-          isOnline: false,
-        }).catch(() => {
-          // Silently fail
-        });
-        unsubscribe();
-      };
-    }
-
     return () => unsubscribe();
-  }, [currentUser?.uid]);
+  }, []);
 
   const handleOpenDialog = (user?: UserAccount) => {
     if (user) {
@@ -605,6 +566,7 @@ export default function UsersPage() {
                     <SelectItem value="manager">Manager (Most Access)</SelectItem>
                     <SelectItem value="sales">Sales (Leads & Quotes)</SelectItem>
                     <SelectItem value="support">Support (View & Edit)</SelectItem>
+                    <SelectItem value="employee">Employee (Leads, Services, Tasks)</SelectItem>
                     <SelectItem value="viewer">Viewer (Read Only)</SelectItem>
                   </SelectContent>
                 </Select>

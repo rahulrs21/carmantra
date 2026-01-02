@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, updateDoc, Timestamp } from 'firebase/firestore';
 import AdminLogout from '@/components/AdminLogout';
 import { startLeadCustomerSync } from '@/lib/firestore/leadSync';
 import { useUser } from '@/lib/userContext';
@@ -18,6 +18,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [showBottomNav, setShowBottomNav] = useState(true);
   const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
   const { role, displayName, photoURL } = useUser();
@@ -123,6 +124,18 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   }, [pathname]);
 
   async function handleLogout() {
+    // Mark user as offline before signing out
+    const currentUser = auth.currentUser;
+    if (currentUser?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          isOnline: false,
+        });
+      } catch (error) {
+        console.debug('Could not mark user as offline:', error);
+      }
+    }
+
     try {
       await signOut(auth);
     } catch (error) {
@@ -221,6 +234,28 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       label: 'Users',
       module: 'users',
       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+    },
+    { 
+      href: '/admin/employees', 
+      label: 'Employees',
+      module: 'employees',
+      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+      children: [
+        { href: '/admin/employees', label: 'All Employees', module: 'employees' },
+        { href: '/admin/employees/attendance', label: 'Attendance', module: 'employees' },
+      ]
+    },
+    { 
+      href: '/admin/my-leaves', 
+      label: 'Leaves',
+      module: 'leaves',
+      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+    },
+    { 
+      href: '/admin/my-salary', 
+      label: 'Salary',
+      module: 'salary',
+      icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
     },
     { 
       href: '/admin/account', 
@@ -367,91 +402,136 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
       {/* SIDEBAR - Desktop & Mobile Drawer */}
       <aside className={`
-        fixed h-full z-50 transition-transform duration-300 ease-in-out
-        w-64 bg-white dark:bg-gray-800 shadow-lg overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden
+        fixed z-50 transition-transform duration-300 ease-in-out
+        w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col overflow-hidden
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        lg:block mt-[60px] lg:mt-0
+        lg:block mt-[60px] lg:mt-0 h-[calc(100vh-60px)] lg:h-screen top-0 lg:top-0
       `}>
-        <div className="p-6">
-          <div className="mb-4 hidden lg:flex flex-col items-start gap-2">
-            {brandLogo ? (
-              <img src={brandLogo} alt={brandName} className="w-14 h-14 rounded" />
-            ) : (
-              <div className="w-14 h-14 rounded bg-orange-600 text-white flex items-center justify-center font-bold text-xl">
-                {brandName?.[0]?.toUpperCase() || 'C'}
-              </div>
-            )}
-            <div className="min-w-0 space-y-1">
-              <h2 className="text-2xl font-bold dark:text-white truncate">{brandName}</h2>
-            </div>
-          </div>
-          
-          {/* Welcome Message */}
-          {displayName && isLoggedIn && (
-            <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <UserAvatar displayName={displayName} photoURL={photoURL} />
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back,</p>
-                  <p className="text-base font-semibold text-gray-800 dark:text-white truncate">{displayName}</p>
+        <div className="flex-1 lg:flex-none lg:max-h-[calc(100vh-100px)] min-h-0 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgb(209,213,219)_transparent] dark:[scrollbar-color:rgb(55,65,81)_transparent]">
+          <div className="p-6">
+            <div className="mb-4 hidden lg:flex flex-col items-start gap-2">
+              {brandLogo ? (
+                <img src={brandLogo} alt={brandName} className="w-14 h-14 rounded" />
+              ) : (
+                <div className="w-14 h-14 rounded bg-orange-600 text-white flex items-center justify-center font-bold text-xl">
+                  {brandName?.[0]?.toUpperCase() || 'C'}
                 </div>
+              )}
+              <div className="min-w-0 space-y-1">
+                <h2 className="text-2xl font-bold dark:text-white truncate">{brandName}</h2>
               </div>
-              
-              {/* Theme Toggle - Desktop only */}
-              <button
-                onClick={toggleTheme}
-                className="hidden lg:block p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                aria-label="Toggle theme"
-              >
-                {theme === 'dark' ? (
-                  <Sun className="w-5 h-5 text-yellow-500" />
-                ) : (
-                  <Moon className="w-5 h-5 text-gray-600" />
-                )}
-              </button>
             </div>
-          )}
-          
-          {/* Role Badge with Pulse */}
-          {role && (
-            <div className="mb-6 flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-              </span>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(role)}`}>
-                {getRoleLabel(role)}
-              </span>
-            </div>
-          )}
-
-          <nav className={`space-y-3 ${!isLoggedIn ? 'blur-sm pointer-events-none' : ''}`}>
-            {visibleNavItems.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`relative flex items-center gap-3 p-2 rounded transition-colors ${
-                  isActive(item.href)
-                    ? 'bg-orange-600 text-white font-semibold'
-                    : 'hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-gray-300'
-                }`}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-                {item.href === '/admin/leads' && hasNewLead && (
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-label="New leads" />
-                )}
-              </a>
-            ))}
-
-            {isLoggedIn && (
-              <div onClick={() => setIsMobileMenuOpen(false)}>
-                <AdminLogout />
+            
+            {/* Welcome Message */}
+            {displayName && isLoggedIn && (
+              <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <UserAvatar displayName={displayName} photoURL={photoURL} />
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Welcome back,</p>
+                    <p className="text-base font-semibold text-gray-800 dark:text-white truncate">{displayName}</p>
+                  </div>
+                </div>
+                
+                {/* Theme Toggle - Desktop only */}
+                <button
+                  onClick={toggleTheme}
+                  className="hidden lg:block p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="w-5 h-5 text-yellow-500" />
+                  ) : (
+                    <Moon className="w-5 h-5 text-gray-600" />
+                  )}
+                </button>
               </div>
             )}
-          </nav>
+            
+            {/* Role Badge with Pulse */}
+            {role && (
+              <div className="mb-6 flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(role)}`}>
+                  {getRoleLabel(role)}
+                </span>
+              </div>
+            )}
+
+            <nav className={`space-y-2 lg:space-y-3 pb-6 lg:pb-4 ${!isLoggedIn ? 'blur-sm pointer-events-none' : ''}`}>
+              {visibleNavItems.map((item: any) => (
+                <div key={item.href}>
+                  {item.children ? (
+                    <div>
+                      <button
+                        onClick={() => setExpandedMenu(expandedMenu === item.href ? null : item.href)}
+                        className={`w-full relative flex items-center gap-3 px-3 py-2.5 lg:p-2 rounded-lg lg:rounded transition-all duration-200 group ${
+                          expandedMenu === item.href || item.children.some((child: any) => isActive(child.href))
+                            ? 'bg-orange-600 text-white font-semibold shadow-md'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:shadow-sm'
+                        }`}
+                      >
+                        <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                          {item.icon}
+                        </span>
+                        <span className="flex-1 truncate text-sm lg:text-base text-left">{item.label}</span>
+                        <svg className={`flex-shrink-0 w-4 h-4 transition-transform ${expandedMenu === item.href ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                      </button>
+                      {expandedMenu === item.href && (
+                        <div className="mt-2 ml-4 space-y-2 border-l-2 border-gray-300 dark:border-gray-600 pl-2">
+                          {item.children.map((child: any) => (
+                            <a
+                              key={child.href}
+                              href={child.href}
+                              onClick={() => setIsMobileMenuOpen(false)}
+                              className={`relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm ${
+                                isActive(child.href)
+                                  ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-semibold'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              }`}
+                            >
+                              <span className="w-2 h-2 rounded-full bg-current flex-shrink-0"></span>
+                              <span className="flex-1 truncate">{child.label}</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <a
+                      href={item.href}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`relative flex items-center gap-3 px-3 py-2.5 lg:p-2 rounded-lg lg:rounded transition-all duration-200 group ${
+                        isActive(item.href)
+                          ? 'bg-orange-600 text-white font-semibold shadow-md'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:shadow-sm'
+                      }`}
+                    >
+                      <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                        {item.icon}
+                      </span>
+                      <span className="flex-1 truncate text-sm lg:text-base">{item.label}</span>
+                      {item.href === '/admin/leads' && hasNewLead && (
+                        <span className="flex-shrink-0 h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-label="New leads" />
+                      )}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </nav>
+          </div>
         </div>
+
+        {isLoggedIn && (
+          <div onClick={() => setIsMobileMenuOpen(false)} className="flex-shrink-0 p-4 lg:p-5 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 overflow-hidden">
+            <AdminLogout />
+          </div>
+        )}
       </aside>
 
       {/* Main Content */}

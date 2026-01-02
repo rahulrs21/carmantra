@@ -55,8 +55,8 @@ export default function AdminLogin() {
         role = null;
       }
       
-      // Check if user has a valid role (admin, manager, sales, support, viewer)
-      const validRoles = ['admin', 'manager', 'sales', 'support', 'viewer'];
+      // Check if user has a valid role (admin, manager, sales, support, viewer, employee)
+      const validRoles = ['admin', 'manager', 'sales', 'support', 'viewer', 'employee'];
       if (!role || !validRoles.includes(role)) {
         // No valid role — sign out and show error
         await signOut(auth);
@@ -203,7 +203,16 @@ export default function AdminLogin() {
 
           <h1 className="text-2xl font-bold mb-4 text-center text-gray-800">Admin Login</h1>
 
-          {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-red-700 text-sm font-medium">{error}</p>
+              {error.includes('Invalid email or password') && (
+                <p className="text-red-600 text-xs mt-2">
+                  Don't have an account yet? <a href="/admin/setup" className="underline font-semibold hover:text-red-800">Create admin account</a>
+                </p>
+              )}
+            </div>
+          )}
           {grantError === 'permission_denied' && (
             <p className="text-yellow-600 mb-3 text-sm">We were unable to read your role from Firestore due to permissions. If you need admin access, request it below or ask the site owner to add a users/{'{uid}'} doc with role: 'admin'.</p>
           )}
@@ -269,6 +278,13 @@ export default function AdminLogin() {
               >
                 Forgot password?
               </button>
+            </div>
+
+            <div className="text-center text-xs text-gray-600 mt-4 pt-4 border-t border-gray-200">
+              <p>Need to set up admin access?</p>
+              <a href="/admin/setup" className="text-blue-600 hover:text-blue-700 font-semibold">
+                Create your first admin account →
+              </a>
             </div>
           </form>
 

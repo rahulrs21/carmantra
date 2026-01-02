@@ -106,6 +106,49 @@ service cloud.firestore {
     match /b2b-services/{docId=**} {
       allow read, write: if isAuthenticated();
     }
+
+    // Employees collection: admin/manager read/write, employees read own only
+    match /employees/{employeeId} {
+      allow read: if isAdmin() || 
+                     request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId == employeeId;
+      allow create, update, delete: if isAdmin() || 
+                                       (request.auth != null &&
+                                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'admin']);
+    }
+
+    // Employee Documents collection: owner, manager, admin can read/write
+    match /employeeDocuments/{docId} {
+      allow read: if isAdmin() || 
+                     (request.auth != null &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'admin']) ||
+                     (request.auth != null &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId == resource.data.employeeId);
+      allow create, update, delete: if isAdmin() || 
+                                      (request.auth != null &&
+                                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'admin']);
+    }
+
+    // Users collection: admin only
+    match /users/{userId} {
+      allow read: if isAdmin() || 
+                     (request.auth != null && request.auth.uid == userId);
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Attendance collection: employee can read own, manager/admin can read all
+    match /attendance/{docId} {
+      allow read: if isAdmin() || 
+                     (request.auth != null &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'admin']) ||
+                     (request.auth != null &&
+                      get(/databases/$(database)/documents/attendance/$(docId)).data.employeeId == 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId);
+      allow create, update, delete: if isAdmin() || 
+                                      (request.auth != null &&
+                                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['manager', 'admin']);
+    }
   }
 }
 

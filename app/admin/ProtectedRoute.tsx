@@ -23,7 +23,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
       try {
         // Read user document to verify role.
         const role = await getUserRole(user.uid);
-        const validRoles = ['admin', 'manager', 'sales', 'support', 'viewer'];
+        const validRoles = ['admin', 'manager', 'sales', 'support', 'viewer', 'employee'];
         if (!role || !validRoles.includes(role)) {
           // No valid role
           router.push("/admin/login");
