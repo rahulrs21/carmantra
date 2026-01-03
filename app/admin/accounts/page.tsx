@@ -15,6 +15,8 @@ interface DashboardStats {
   totalExpenses: number;
   outstandingPayments: number;
   pendingSalaries: number;
+  expenseCount: number;
+  salaryCount: number;
 }
 
 interface ChartData {
@@ -43,6 +45,8 @@ export default function AccountsPage() {
     totalExpenses: 0,
     outstandingPayments: 0,
     pendingSalaries: 0,
+    expenseCount: 0,
+    salaryCount: 0,
   });
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,14 +79,36 @@ export default function AccountsPage() {
       // Fetch expenses (filter by date in code to avoid composite index)
       const expensesQuery = query(collection(db, 'expenses'));
       const expensesSnap = await getDocs(expensesQuery);
-      const totalExpenses = expensesSnap.docs
-        .filter((doc) => {
-          const docDate = doc.data().date;
-          if (!docDate) return false;
-          const date = docDate.toDate ? docDate.toDate() : new Date(docDate);
-          return date >= start && date <= end;
-        })
-        .reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+      const filteredExpensesData = expensesSnap.docs.filter((doc) => {
+        const docDate = doc.data().date;
+        if (!docDate) return false;
+        const date = docDate.toDate ? docDate.toDate() : new Date(docDate);
+        return date >= start && date <= end;
+      });
+      const filteredExpenses = filteredExpensesData.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+      const expenseCount = filteredExpensesData.length;
+
+      // Fetch paid salary records
+      const salaryQuery = query(
+        collection(db, 'salaryRecords'),
+        where('status', '==', 'paid')
+      );
+      const salarySnap = await getDocs(salaryQuery);
+      const filteredSalariesData = salarySnap.docs.filter((doc) => {
+        const month = doc.data().month;
+        if (!month) return false;
+        // Convert month string (YYYY-MM) to date range
+        const [year, monthNum] = month.split('-');
+        const monthStart = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+        const monthEnd = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+        // Check if month overlaps with the selected date range
+        return monthStart <= end && monthEnd >= start;
+      });
+      const filteredSalaries = filteredSalariesData.reduce((sum, doc) => sum + (doc.data().netSalary || 0), 0);
+      const salaryCount = filteredSalariesData.length;
+
+      // Total expenses = filtered expenses + paid salaries
+      const totalExpenses = filteredExpenses + filteredSalaries;
 
       // Fetch outstanding payments
       const outstandingQuery = query(
@@ -101,6 +127,8 @@ export default function AccountsPage() {
         totalExpenses,
         outstandingPayments,
         pendingSalaries: 0, // Will be calculated with salary data
+        expenseCount,
+        salaryCount,
       });
 
       setLoading(false);
@@ -172,29 +200,48 @@ export default function AccountsPage() {
               <p className="text-xs text-gray-500 dark:text-gray-400">Currently viewing: <span className="font-medium text-gray-700 dark:text-gray-300">{rangeLabel}</span></p>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-              <div className="inline-flex rounded-md shadow-sm bg-gray-100 dark:bg-gray-800 items-center flex-shrink-0">
-                <button 
-                  className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors rounded-l-md ${rangeType==='30d' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} 
+              <div className="overflow-x-auto -mx-4 px-4 lg:overflow-visible lg:mx-0 lg:px-0">
+              <div className="inline-flex lg:flex rounded-md shadow-sm bg-gray-100 dark:bg-gray-800 items-center w-full lg:w-auto flex-shrink-0">
+                <button
+                  className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors rounded-l-md flex-1 lg:flex-none ${rangeType === '30d' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                   onClick={() => { setRangeType('30d'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}
                 >
                   Last 30d
                 </button>
-                <button 
-                  className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 ${rangeType==='yesterday' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} 
+                <button
+                  className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 flex-1 lg:flex-none ${rangeType === 'yesterday' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                   onClick={() => { setRangeType('yesterday'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}
                 >
                   Yesterday
                 </button>
-                <button 
-                  className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 ${rangeType==='today' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} 
+                <button
+                  className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 flex-1 lg:flex-none ${rangeType === 'today' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                   onClick={() => { setRangeType('today'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}
                 >
                   Today
                 </button>
+                <button
+                  className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 flex-1 lg:flex-none ${rangeType === 'thisMonth' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  onClick={() => { setRangeType('thisMonth'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}
+                >
+                  This Month
+                </button>
+                <button
+                  className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 flex-1 lg:flex-none ${rangeType === 'lastMonth' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  onClick={() => { setRangeType('lastMonth'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}
+                >
+                  Last Month
+                </button>
+                <button
+                  className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 flex-1 lg:flex-none ${rangeType === 'allTime' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                  onClick={() => { setRangeType('allTime'); setCustomRange({ from: null, to: null }); setSelectedRange(undefined); }}
+                >
+                  All Time
+                </button>
                 <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <button 
-                      className={`px-2 sm:px-3 py-1 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 rounded-r-md ${rangeType==='custom' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`} 
+                    <button
+                      className={`px-2 sm:px-3 py-2 text-xs sm:text-sm whitespace-nowrap transition-colors border-l dark:border-gray-700 rounded-r-md flex-1 lg:flex-none ${rangeType === 'custom' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                       onClick={() => setIsPopoverOpen(true)}
                     >
                       Custom
@@ -217,15 +264,15 @@ export default function AccountsPage() {
                         }}
                       />
                       <div className="flex items-center justify-end gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => { setSelectedRange(undefined); setCustomRange({ from: null, to: null }); setIsPopoverOpen(false); }}
                         >
                           Clear
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           onClick={() => {
                             if (!selectedRange) return setIsPopoverOpen(false);
                             let from: Date | null = null;
@@ -252,6 +299,7 @@ export default function AccountsPage() {
                 </Popover>
               </div>
             </div>
+            </div>
           </div>
         </section>
 
@@ -259,29 +307,29 @@ export default function AccountsPage() {
         {!loading && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-              <div className="text-sm text-gray-500 font-medium">Monthly Income</div>
+              <div className="text-sm text-gray-500 font-medium">Total Income</div>
               <div className="text-2xl font-bold text-gray-900 mt-2">AED {stats.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div className="text-xs text-gray-400 mt-1">From paid invoices</div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-              <div className="text-sm text-gray-500 font-medium">Monthly Expenses</div>
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+              <div className="text-sm text-gray-500 font-medium">Total Expenses</div>
               <div className="text-2xl font-bold text-gray-900 mt-2">AED {stats.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className="text-xs text-gray-400 mt-1">All expenses recorded</div>
+              <div className="text-xs text-gray-400 mt-1">Expenses + Paid Salaries</div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
               <div className="text-sm text-gray-500 font-medium">Outstanding Payments</div>
               <div className="text-2xl font-bold text-gray-900 mt-2">AED {stats.outstandingPayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div className="text-xs text-gray-400 mt-1">Pending & partial</div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
-              <div className="text-sm text-gray-500 font-medium">Net Profit</div>
+            <div className={`bg-white rounded-lg shadow p-6 border-l-4 ${stats.totalIncome - stats.totalExpenses >= 0 ? 'border-green-500' : 'border-red-500 animate-pulse'}`}>
+              <div className="text-sm text-gray-500 font-medium">Total Profit</div>
               <div className={`text-2xl font-bold mt-2 ${stats.totalIncome - stats.totalExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 AED {(stats.totalIncome - stats.totalExpenses).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className="text-xs text-gray-400 mt-1">Income - Expenses</div>
+              <div className="text-xs text-gray-400 mt-1">Total Income - Total Expenses</div>
             </div>
           </div>
         )}
@@ -313,7 +361,7 @@ export default function AccountsPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow p-6">
+        {/* <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
           <div className="flex flex-wrap gap-3">
             <PermissionGate module="accounts" action="create">
@@ -341,23 +389,26 @@ export default function AccountsPage() {
               </Button>
             </PermissionGate>
           </div>
-        </div>
+        </div> */}
 
         {/* Recent Transactions */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Financial Summary</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="text-sm text-blue-600 font-medium">Total Invoices This Month</div>
-              <div className="text-2xl font-bold text-blue-900 mt-2">{Math.random().toFixed(0)}</div>
+              <div className="text-sm text-blue-600 font-medium">Number of Expenses</div>
+              <div className="text-2xl font-bold text-blue-900 mt-2">{stats.expenseCount}</div>
+              <div className="text-xs text-blue-500 mt-1">In selected period</div>
             </div>
             <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="text-sm text-green-600 font-medium">Paid Invoices</div>
-              <div className="text-2xl font-bold text-green-900 mt-2">{Math.random().toFixed(0)}</div>
+              <div className="text-sm text-green-600 font-medium">Number of Paid Salaries</div>
+              <div className="text-2xl font-bold text-green-900 mt-2">{stats.salaryCount}</div>
+              <div className="text-xs text-green-500 mt-1">In selected period</div>
             </div>
             <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="text-sm text-orange-600 font-medium">Pending Invoices</div>
-              <div className="text-2xl font-bold text-orange-900 mt-2">{Math.random().toFixed(0)}</div>
+              <div className="text-sm text-orange-600 font-medium">Total Transactions</div>
+              <div className="text-2xl font-bold text-orange-900 mt-2">{stats.expenseCount + stats.salaryCount}</div>
+              <div className="text-xs text-orange-500 mt-1">Expenses + Salaries</div>
             </div>
           </div>
         </div>

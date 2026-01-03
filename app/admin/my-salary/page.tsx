@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { AlertCircle, Download } from 'lucide-react';
 import { ModuleAccess, ModuleAccessComponent } from '@/components/PermissionGate';
+import jsPDF from 'jspdf';
 
 export default function MySalaryPage() {
   const { role, user, displayName } = useUser();
@@ -90,36 +91,225 @@ export default function MySalaryPage() {
   };
 
   const downloadSalarySlip = (salary: SalaryRecord) => {
-    // Create a simple text-based salary slip
-    const content = `
-SALARY SLIP
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let yPosition = 15;
+      const margin = 15;
+      const contentWidth = pageWidth - (margin * 2);
 
-Employee: ${employee?.name}
-Employee ID: ${employee?.id}
-Month: ${salary.month}
+      // Helper function to draw a table
+      const drawTable = (
+        startY: number,
+        rows: Array<[string, string]>,
+        headerBgColor: [number, number, number],
+        headerTextColor: [number, number, number]
+      ) => {
+        let y = startY;
+        const colWidth = contentWidth / 2;
+        const rowHeight = 8;
 
-EARNINGS:
-Base Salary: ${salary.baseSalary.toFixed(2)}
-${salary.allowances ? Object.entries(salary.allowances).map(([key, value]) => `${key}: ${(value as number).toFixed(2)}`).join('\n') : ''}
+        // Draw header
+        doc.setFillColor(...headerBgColor);
+        doc.setTextColor(...headerTextColor);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.rect(margin, y, colWidth, rowHeight, 'F');
+        doc.rect(margin + colWidth, y, colWidth, rowHeight, 'F');
+        doc.text('Description', margin + 2, y + 5);
+        doc.text('Amount (AED)', margin + colWidth + contentWidth - 40, y + 5);
 
-DEDUCTIONS:
-${salary.deductions ? Object.entries(salary.deductions).map(([key, value]) => `${key}: ${(value as number).toFixed(2)}`).join('\n') : 'None'}
+        y += rowHeight;
 
-NET SALARY: ${salary.netSalary.toFixed(2)}
+        // Draw rows
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
 
-Status: ${salary.status.toUpperCase()}
-${salary.paidDate ? `Paid Date: ${new Date(salary.paidDate).toLocaleDateString()}` : ''}
+        rows.forEach((row, index) => {
+          const isLast = index === rows.length - 1;
+          
+          if (isLast) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFillColor(240, 240, 240);
+            doc.rect(margin, y, contentWidth, rowHeight, 'F');
+          }
 
-Remarks: ${salary.remarks || 'N/A'}
-    `;
+          doc.setDrawColor(200, 200, 200);
+          doc.line(margin, y, pageWidth - margin, y);
 
-    const element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(content));
-    element.setAttribute('download', `salary-slip-${salary.month}.txt`);
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+          doc.text(row[0], margin + 2, y + 5);
+          doc.text(row[1], pageWidth - margin - 10, y + 5, { align: 'right' });
+
+          y += rowHeight;
+        });
+
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margin, y, pageWidth - margin, y);
+
+        return y;
+      };
+
+      // Company Header
+      doc.setFontSize(18);
+      doc.setTextColor(25, 25, 112); // Midnight blue
+      doc.text('CARMANTRA', pageWidth / 2, yPosition, { align: 'center' });
+      
+      yPosition += 8;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Professional Salary Slip', pageWidth / 2, yPosition, { align: 'center' });
+
+      // Divider line
+      yPosition += 8;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+
+      // Employee Information Section
+      yPosition += 10;
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text('EMPLOYEE INFORMATION', margin, yPosition);
+
+      yPosition += 7;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+
+      const empInfoLeft = [
+        `Employee Name: ${employee?.name || 'N/A'}`,
+        `Employee ID: ${employee?.id || 'N/A'}`,
+        `Designation: ${employee?.position || 'N/A'}`,
+      ];
+
+      const monthDate = new Date(salary.month);
+      const monthYear = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+      const empInfoRight = [
+        `Salary Month: ${monthYear}`,
+        `Salary Status: ${salary.status.charAt(0).toUpperCase() + salary.status.slice(1)}`,
+        `Generated Date: ${new Date().toLocaleDateString()}`,
+      ];
+
+      empInfoLeft.forEach((text, index) => {
+        doc.text(text, margin, yPosition + index * 5);
+      });
+
+      empInfoRight.forEach((text, index) => {
+        doc.text(text, pageWidth / 2, yPosition + index * 5);
+      });
+
+      yPosition += 20;
+
+      // Earnings Table
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(25, 25, 112);
+      doc.text('EARNINGS', margin, yPosition);
+      yPosition += 7;
+
+      const earningsData: Array<[string, string]> = [
+        ['Base Salary', salary.baseSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })],
+      ];
+
+      if (salary.allowances && Object.keys(salary.allowances).length > 0) {
+        Object.entries(salary.allowances).forEach(([key, value]) => {
+          if (value > 0) {
+            earningsData.push([
+              `${key} Allowance`,
+              (value as number).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            ]);
+          }
+        });
+      }
+
+      const totalEarnings = salary.baseSalary + (salary.allowances 
+        ? Object.values(salary.allowances).reduce((sum, val) => sum + (val as number), 0)
+        : 0);
+
+      earningsData.push(['TOTAL EARNINGS', totalEarnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })]);
+
+      yPosition = drawTable(yPosition, earningsData, [25, 25, 112], [255, 255, 255]);
+
+      yPosition += 10;
+
+      // Deductions Table
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(25, 25, 112);
+      doc.text('DEDUCTIONS', margin, yPosition);
+      yPosition += 7;
+
+      const deductionsData: Array<[string, string]> = [];
+
+      if (salary.deductions && Object.keys(salary.deductions).length > 0) {
+        Object.entries(salary.deductions).forEach(([key, value]) => {
+          if (value > 0) {
+            deductionsData.push([
+              key,
+              (value as number).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            ]);
+          }
+        });
+      }
+
+      const totalDeductions = salary.deductions
+        ? Object.values(salary.deductions).reduce((sum, val) => sum + (val as number), 0)
+        : 0;
+
+      if (deductionsData.length > 0 || totalDeductions > 0) {
+        deductionsData.push(['TOTAL DEDUCTIONS', totalDeductions.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })]);
+      } else {
+        deductionsData.push(['No Deductions', '0.00']);
+      }
+
+      yPosition = drawTable(yPosition, deductionsData, [220, 53, 69], [255, 255, 255]);
+
+      yPosition += 15;
+
+      // Net Salary Section
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(25, 25, 112);
+      doc.text('NET SALARY', margin, yPosition);
+
+      doc.setFontSize(16);
+      doc.setTextColor(34, 139, 34); // Forest green
+      doc.text(
+        `AED ${salary.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        pageWidth - margin,
+        yPosition,
+        { align: 'right' }
+      );
+
+      // Footer
+      yPosition = pageHeight - 25;
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+
+      yPosition += 5;
+      if (salary.paidDate) {
+        const paidDate = salary.paidDate?.toDate?.() || salary.paidDate ? new Date(salary.paidDate) : null;
+        doc.text(`Paid Date: ${paidDate?.toLocaleDateString()}`, margin, yPosition);
+      }
+
+      doc.text('This is an electronically generated document.', pageWidth / 2, yPosition, { align: 'center' });
+      doc.text(`Page 1 of 1`, pageWidth - margin, yPosition, { align: 'right' });
+
+      yPosition += 5;
+      doc.setTextColor(150, 150, 150);
+      doc.setFontSize(8);
+      doc.text('For any queries regarding your salary, please contact your HR department.', pageWidth / 2, yPosition, { align: 'center' });
+
+      // Save PDF
+      doc.save(`salary-slip-${salary.month}.pdf`);
+      toast.success('Salary slip downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate salary slip PDF');
+    }
   };
 
   if (loading) {
@@ -179,7 +369,7 @@ Remarks: ${salary.remarks || 'N/A'}
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Base Salary:</span>
                         <span className="font-medium text-gray-900 dark:text-white">
-                          ₹{salary.baseSalary.toFixed(2)}
+                          AED {salary.baseSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
 
@@ -187,7 +377,7 @@ Remarks: ${salary.remarks || 'N/A'}
                         <div className="flex justify-between">
                           <span className="text-gray-600 dark:text-gray-400">Allowances:</span>
                           <span className="font-medium text-green-600 dark:text-green-400">
-                            +₹{totalAllowances.toFixed(2)}
+                            +AED {totalAllowances.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                       )}
@@ -196,7 +386,7 @@ Remarks: ${salary.remarks || 'N/A'}
                         <div className="flex justify-between">
                           <span className="text-gray-600 dark:text-gray-400">Deductions:</span>
                           <span className="font-medium text-red-600 dark:text-red-400">
-                            -₹{totalDeductions.toFixed(2)}
+                            -AED {totalDeductions.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                       )}
@@ -204,7 +394,7 @@ Remarks: ${salary.remarks || 'N/A'}
                       <div className="border-t border-gray-300 dark:border-gray-600 pt-2 flex justify-between">
                         <span className="font-semibold text-gray-900 dark:text-white">Net Salary:</span>
                         <span className="font-bold text-gray-900 dark:text-white">
-                          ₹{salary.netSalary.toFixed(2)}
+                          AED {salary.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>

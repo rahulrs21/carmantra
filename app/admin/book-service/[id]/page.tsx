@@ -10,6 +10,7 @@ import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import QuotationForm from '@/components/admin/QuotationForm';
 import { useUser } from '@/lib/userContext';
 import { saveContactPerson, listCustomers } from '@/lib/firestore/customers';
@@ -151,6 +152,23 @@ export default function BookServiceDetails() {
     fuelType: '',
     vinNumber: '',
     category: '',
+  });
+
+  // Expense state variables
+  const EXPENSE_CATEGORIES = ['Car Parts & Accessories', 'Ceramic Coating Materials',  
+  'Cleaning Supplies', 'Maintenance Supplies', 'Car Wash Materials', 'Polishing Materials',
+  'Paints & Coatings', 'PPF Wrapping Materials', 'Tyres & Rims', 'Inspection Tools & Equipment', 
+    'Fluids', 'Other'];
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [expenseFormData, setExpenseFormData] = useState({
+    category: '',
+    quantity: '',
+    amount: '',
+    description: '',
+    vendor: '',
+    date: new Date().toISOString().split('T')[0],
   });
 
   // Helper functions
@@ -457,6 +475,27 @@ export default function BookServiceDetails() {
       },
       (err) => {
         safeConsoleError('Invoice fetch error', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [id]);
+
+  // Fetch expenses for this service booking
+  useEffect(() => {
+    if (!id) return;
+    const expenseQuery = query(
+      collection(db, 'expenses'),
+      where('serviceBookingId', '==', id)
+    );
+    const unsubscribe = onSnapshot(
+      expenseQuery,
+      (snap) => {
+        const expensesList = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        setExpenses(expensesList);
+      },
+      (err) => {
+        safeConsoleError('Expenses fetch error', err);
       }
     );
 
@@ -1156,6 +1195,105 @@ export default function BookServiceDetails() {
     setEditing(false);
     setMulkiyaFiles([]);
     setMulkiyaPreview([]);
+  }
+
+  // Expense handlers
+  async function handleSaveExpense() {
+    if (!id || !expenseFormData.category || !expenseFormData.amount || !expenseFormData.date) {
+      setStatus('Please fill all required fields');
+      return;
+    }
+
+    try {
+      setStatus('Saving expense...');
+      const expenseData = {
+        serviceBookingId: id,
+        jobCardNo: service.jobCardNo,
+        category: expenseFormData.category,
+        quantity: parseInt(expenseFormData.quantity) || 1,
+        amount: parseFloat(expenseFormData.amount),
+        description: expenseFormData.description,
+        vendor: expenseFormData.vendor,
+        date: new Date(expenseFormData.date),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        createdBy: user?.uid,
+        createdByName: displayName,
+      };
+
+      if (editingExpenseId) {
+        // Update existing expense
+        await updateDoc(doc(db, 'expenses', editingExpenseId), {
+          ...expenseData,
+          updatedAt: Timestamp.now(),
+        });
+        setStatus('✓ Expense updated successfully');
+      } else {
+        // Add new expense
+        await addDoc(collection(db, 'expenses'), expenseData);
+        setStatus('✓ Expense added successfully');
+      }
+
+      // Reset form
+      setShowExpenseForm(false);
+      setEditingExpenseId(null);
+      setExpenseFormData({
+        category: '',
+        quantity: '',
+        amount: '',
+        description: '',
+        vendor: '',
+        date: new Date().toISOString().split('T')[0],
+      });
+
+      setTimeout(() => setStatus(null), 3000);
+    } catch (err: any) {
+      safeConsoleError('Save expense error', err);
+      setStatus('Failed to save expense');
+    }
+  }
+
+  async function handleDeleteExpense(expenseId: string) {
+    if (!confirm('Are you sure you want to delete this expense?')) return;
+
+    try {
+      setStatus('Deleting expense...');
+      await updateDoc(doc(db, 'expenses', expenseId), {
+        deletedAt: Timestamp.now(),
+        deletedBy: user?.uid,
+      });
+      setStatus('✓ Expense deleted successfully');
+      setTimeout(() => setStatus(null), 3000);
+    } catch (err: any) {
+      safeConsoleError('Delete expense error', err);
+      setStatus('Failed to delete expense');
+    }
+  }
+
+  function handleEditExpense(expense: any) {
+    setEditingExpenseId(expense.id);
+    setExpenseFormData({
+      category: expense.category,
+      quantity: expense.quantity?.toString() || '',
+      amount: expense.amount?.toString() || '',
+      description: expense.description || '',
+      vendor: expense.vendor || '',
+      date: expense.date ? new Date(expense.date.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    });
+    setShowExpenseForm(true);
+  }
+
+  function cancelExpenseForm() {
+    setShowExpenseForm(false);
+    setEditingExpenseId(null);
+    setExpenseFormData({
+      category: '',
+      quantity: '',
+      amount: '',
+      description: '',
+      vendor: '',
+      date: new Date().toISOString().split('T')[0],
+    });
   }
 
   const quotationStatus = quotation?.status || service?.quotationStatus || 'not_created';
@@ -2557,6 +2695,274 @@ export default function BookServiceDetails() {
                 )}
               </div>
             </div>
+          </Card>
+
+          {/* Expenses Card */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Expenses</h3>
+              {service.status !== 'completed' && service.status !== 'cancelled' && (
+                <Button
+                  size="sm"
+                  variant={showExpenseForm ? 'default' : 'outline'}
+                  onClick={() => {
+                    if (editingExpenseId) {
+                      cancelExpenseForm();
+                    } else {
+                      setShowExpenseForm(!showExpenseForm);
+                    }
+                  }}
+                  className="text-xs"
+                >
+                  {showExpenseForm ? 'Close' : '+ Add Expense'}
+                </Button>
+              )}
+            </div>
+
+            {/* Expense Form */}
+            {showExpenseForm && service.status !== 'completed' && service.status !== 'cancelled' && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+                  {/* Modal Header */}
+                  <div className="sticky top-0 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 p-6 border-b border-blue-500/20">
+                    <div>
+                      <h3 className="text-xl font-bold text-white">
+                        {editingExpenseId ? '✏️ Edit Expense' : '➕ Add New Expense'}
+                      </h3>
+                      <p className="text-blue-100 text-sm mt-1">
+                        {editingExpenseId ? 'Update expense details' : 'Record a new expense for this service'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={cancelExpenseForm}
+                      className="text-white hover:bg-blue-500/20 p-2 rounded-lg transition-colors duration-200"
+                      title="Close"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Modal Body */}
+                  <form className="p-6 space-y-6">
+                    {/* Category Row */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        📁 Category <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={expenseFormData.category}
+                        onChange={(e) => setExpenseFormData({ ...expenseFormData, category: e.target.value })}
+                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-sm dark:bg-gray-800 dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                      >
+                        <option value="">Select a category</option>
+                        {EXPENSE_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Amount & Quantity Row */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          📦 Quantity
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 2"
+                          value={expenseFormData.quantity}
+                          onChange={(e) => setExpenseFormData({ ...expenseFormData, quantity: e.target.value })}
+                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          💰 Amount (AED) <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 250.00"
+                          value={expenseFormData.amount}
+                          onChange={(e) => setExpenseFormData({ ...expenseFormData, amount: e.target.value })}
+                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        📝 Description
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="e.g. Engine oil, brake pads, etc."
+                        value={expenseFormData.description}
+                        onChange={(e) => setExpenseFormData({ ...expenseFormData, description: e.target.value })}
+                        className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                      />
+                    </div>
+
+                    {/* Vendor & Date Row */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          🏪 Vendor/Supplier
+                        </label>
+                        <Input
+                          type="text"
+                          placeholder="Supplier name (optional)"
+                          value={expenseFormData.vendor}
+                          onChange={(e) => setExpenseFormData({ ...expenseFormData, vendor: e.target.value })}
+                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          📅 Date <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          type="date"
+                          value={expenseFormData.date}
+                          onChange={(e) => setExpenseFormData({ ...expenseFormData, date: e.target.value })}
+                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Info Box */}
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-lg p-4">
+                      <p className="text-sm text-blue-800 dark:text-blue-300">
+                        <span className="font-semibold">💡 Tip:</span> This expense will be automatically added to your expense report and reflected in the financial summaries.
+                      </p>
+                    </div>
+                  </form>
+
+                  {/* Modal Footer */}
+                  <div className="sticky bottom-0 flex gap-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
+                    <Button
+                      type="button"
+                      onClick={cancelExpenseForm}
+                      variant="outline"
+                      className="flex-1 h-12 border-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSaveExpense}
+                      className="flex-1 h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      {editingExpenseId ? '💾 Update Expense' : '💾 Save Expense'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Expenses Table */}
+            {expenses.length > 0 ? (
+              <div className="overflow-x-auto -mx-6 sm:mx-0">
+                <table className="w-full text-xs sm:text-sm">
+                  <thead className="border-b bg-gray-50 dark:bg-gray-800 sticky top-0">
+                    <tr>
+                      <th className="text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Job Card</th>
+                      <th className="hidden sm:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Category</th>
+                      <th className="hidden md:table-cell text-center py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Qty</th>
+                      <th className="text-right py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Amount</th>
+                      <th className="hidden lg:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Description</th>
+                      <th className="hidden md:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Date</th>
+                      {service.status !== 'completed' && service.status !== 'cancelled' && (
+                        <th className="text-center py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Action</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses
+                      .filter((exp: any) => !exp.deletedAt)
+                      .map((expense: any, idx: number) => (
+                        <tr key={expense.id || idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                          <td className="py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300">
+                            <span className="font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-1 rounded text-xs">
+                              {expense.jobCardNo || '-'}
+                            </span>
+                          </td>
+                          <td className="hidden sm:table-cell py-3 px-2 sm:px-3">
+                            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium whitespace-nowrap">
+                              {expense.category}
+                            </span>
+                          </td>
+                          <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-center text-gray-700 dark:text-gray-300 text-xs">
+                            {expense.quantity || 1}
+                          </td>
+                          <td className="py-3 px-2 sm:px-3 text-right font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">
+                            AED {(expense.amount || 0).toFixed(2)}
+                          </td>
+                          <td className="hidden lg:table-cell py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300 truncate max-w-xs" title={expense.description}>
+                            {expense.description || '-'}
+                          </td>
+                          <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">
+                            {expense.date
+                              ? new Date(
+                                  expense.date.seconds ? expense.date.seconds * 1000 : expense.date
+                                ).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                })
+                              : '-'}
+                          </td>
+                          {service.status !== 'completed' && service.status !== 'cancelled' && (
+                            <td className="py-3 px-2 sm:px-3 text-center">
+                              <div className="flex gap-1 justify-center">
+                                <button
+                                  onClick={() => handleEditExpense(expense)}
+                                  className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors text-sm sm:text-xs"
+                                  title="Edit"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteExpense(expense.id)}
+                                  className="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors text-sm sm:text-xs"
+                                  title="Delete"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
+                {showExpenseForm ? 'No expenses yet. Add one below.' : 'No expenses added yet.'}
+              </div>
+            )}
+
+            {/* Total Expenses */}
+            {expenses.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-gray-700">Total Expenses:</span>
+                  <span className="text-lg font-bold text-red-600">
+                    AED{' '}
+                    {expenses
+                      .filter((exp: any) => !exp.deletedAt)
+                      .reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0)
+                      .toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
           </Card>
 
           <Card className="p-6">

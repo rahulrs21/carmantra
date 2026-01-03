@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 
-export type RangeType = '30d' | 'yesterday' | 'today' | 'custom';
+export type RangeType = '30d' | 'yesterday' | 'today' | 'thisMonth' | 'lastMonth' | 'allTime' | 'custom';
 
 interface DateRange {
   from: Date | null;
@@ -69,6 +69,22 @@ export function AccountsProvider({ children }: { children: React.ReactNode }) {
       const end = endOfDay(y);
       return { start, end, isDaily: false };
     }
+    if (rangeType === 'thisMonth') {
+      const start = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+      const end = endOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      return { start, end, isDaily: true };
+    }
+    if (rangeType === 'lastMonth') {
+      const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1);
+      const start = startOfDay(new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1));
+      const end = endOfDay(new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0));
+      return { start, end, isDaily: true };
+    }
+    if (rangeType === 'allTime') {
+      const start = startOfDay(new Date(2000, 0, 1));
+      const end = endOfDay(now);
+      return { start, end, isDaily: true };
+    }
     if (rangeType === 'custom') {
       const { from, to } = customRange;
       if (!from || !to) return null;
@@ -84,6 +100,9 @@ export function AccountsProvider({ children }: { children: React.ReactNode }) {
     if (rangeType === '30d') return 'Last 30 days';
     if (rangeType === 'today') return 'Today';
     if (rangeType === 'yesterday') return 'Yesterday';
+    if (rangeType === 'thisMonth') return 'This Month';
+    if (rangeType === 'lastMonth') return 'Last Month';
+    if (rangeType === 'allTime') return 'All Time';
     if (rangeType === 'custom' && customRange.from && customRange.to) return `${formatDateOnly(customRange.from)} — ${formatDateOnly(customRange.to)}`;
     return 'Custom range';
   }, [rangeType, customRange]);

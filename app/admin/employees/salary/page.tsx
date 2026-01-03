@@ -59,7 +59,7 @@ export default function SalaryPage() {
 
   // Fetch salaries
   useEffect(() => {
-    const q = query(collection(db, 'salaries'), orderBy('month', 'desc'));
+    const q = query(collection(db, 'salaryRecords'), orderBy('month', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -162,10 +162,10 @@ export default function SalaryPage() {
       };
 
       if (selectedSalary) {
-        await updateDoc(doc(db, 'salaries', selectedSalary.id!), salaryData);
+        await updateDoc(doc(db, 'salaryRecords', selectedSalary.id!), salaryData);
         toast.success('Salary updated successfully');
       } else {
-        await addDoc(collection(db, 'salaries'), {
+        await addDoc(collection(db, 'salaryRecords'), {
           ...salaryData,
           createdAt: Timestamp.now(),
         });
@@ -188,7 +188,7 @@ export default function SalaryPage() {
     }
 
     try {
-      await updateDoc(doc(db, 'salaries', salaryId), {
+      await updateDoc(doc(db, 'salaryRecords', salaryId), {
         status: 'approved',
       });
       toast.success('Salary approved');
@@ -205,7 +205,7 @@ export default function SalaryPage() {
     }
 
     try {
-      await updateDoc(doc(db, 'salaries', salaryId), {
+      await updateDoc(doc(db, 'salaryRecords', salaryId), {
         status: 'paid',
         paidDate: Timestamp.now(),
       });
@@ -254,7 +254,7 @@ export default function SalaryPage() {
   }
 
   return (
-    <ModuleAccessComponent module={ModuleAccess.SALARY}>
+    <ModuleAccessComponent module={ModuleAccess.EMPLOYEE_SALARY}>
       <div className="space-y-6 pb-20 sm:pb-6">
         {/* Header */}
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -343,23 +343,23 @@ export default function SalaryPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
                   <div>
                     <p className="text-gray-600">Base Salary</p>
-                    <p className="font-semibold text-lg">₹{salary.baseSalary.toLocaleString()}</p>
+                    <p className="font-semibold text-lg">AED {salary.baseSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                   <div>
                     <p className="text-gray-600">Allowances</p>
                     <p className="font-semibold text-lg">
-                      ₹{Object.values(salary.allowances || {}).reduce((a, b) => a + b, 0).toLocaleString()}
+                      AED {Object.values(salary.allowances || {}).reduce((a, b) => a + b, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">Deductions</p>
                     <p className="font-semibold text-lg">
-                      ₹{Object.values(salary.deductions || {}).reduce((a, b) => a + b, 0).toLocaleString()}
+                      AED {Object.values(salary.deductions || {}).reduce((a, b) => a + b, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="bg-indigo-50 p-3 rounded">
                     <p className="text-gray-600 text-xs">Net Salary</p>
-                    <p className="font-bold text-lg text-indigo-600">₹{salary.netSalary.toLocaleString()}</p>
+                    <p className="font-bold text-lg text-indigo-600">AED {salary.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                 </div>
 
@@ -402,13 +402,7 @@ export default function SalaryPage() {
                       Mark as Paid
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                  >
-                    <Download className="w-4 h-4 mr-1" />
-                    Download Slip
-                  </Button>
+                 
                 </div>
               </div>
             ))
@@ -544,7 +538,7 @@ export default function SalaryPage() {
 
                 <div className="border-t pt-4 bg-indigo-50 p-4 rounded">
                   <p className="text-sm text-gray-600">Net Salary</p>
-                  <p className="text-2xl font-bold text-indigo-600">₹{calculateNetSalary().toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-indigo-600">AED {calculateNetSalary().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
               </div>
               <DialogFooter>
@@ -578,20 +572,20 @@ export default function SalaryPage() {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span>Base Salary</span>
-                        <span>₹{selectedSalary.baseSalary.toLocaleString()}</span>
+                        <span>AED {selectedSalary.baseSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                       {Object.entries(selectedSalary.allowances || {}).map(([key, value]) => (
                         value > 0 && (
                           <div key={key} className="flex justify-between">
                             <span>{key} Allowance</span>
-                            <span>₹{value.toLocaleString()}</span>
+                            <span>AED {value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         )
                       ))}
                       <div className="border-t pt-1 flex justify-between font-semibold">
                         <span>Total Earnings</span>
                         <span>
-                          ₹{(selectedSalary.baseSalary + Object.values(selectedSalary.allowances || {}).reduce((a, b) => a + b, 0)).toLocaleString()}
+                          AED {(selectedSalary.baseSalary + Object.values(selectedSalary.allowances || {}).reduce((a, b) => a + b, 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>
@@ -604,13 +598,13 @@ export default function SalaryPage() {
                         value > 0 && (
                           <div key={key} className="flex justify-between">
                             <span>{key}</span>
-                            <span>₹{value.toLocaleString()}</span>
+                            <span>AED {value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         )
                       ))}
                       <div className="border-t pt-1 flex justify-between font-semibold">
                         <span>Total Deductions</span>
-                        <span>₹{Object.values(selectedSalary.deductions || {}).reduce((a, b) => a + b, 0).toLocaleString()}</span>
+                        <span>AED {Object.values(selectedSalary.deductions || {}).reduce((a, b) => a + b, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   </div>
@@ -618,7 +612,7 @@ export default function SalaryPage() {
                   <div className="bg-indigo-50 p-4 rounded">
                     <div className="flex justify-between items-center">
                       <span className="font-semibold">Net Salary</span>
-                      <span className="text-2xl font-bold text-indigo-600">₹{selectedSalary.netSalary.toLocaleString()}</span>
+                      <span className="text-2xl font-bold text-indigo-600">AED {selectedSalary.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   </div>
                 </div>

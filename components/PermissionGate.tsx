@@ -18,6 +18,8 @@ export const ModuleAccess = {
   ATTENDANCE: 'attendance',
   LEAVES: 'leaves',
   SALARY: 'salary',
+  EMPLOYEE_LEAVES: 'employee-leaves',
+  EMPLOYEE_SALARY: 'employee-salary',
 } as const;
 
 interface PermissionGateProps {

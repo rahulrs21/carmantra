@@ -27,7 +27,9 @@ export default function LeavesPage() {
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject' | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [formData, setFormData] = useState({
     type: 'casual' as const,
     startDate: '',
@@ -40,7 +42,7 @@ export default function LeavesPage() {
 
   // Fetch all leaves
   useEffect(() => {
-    const q = query(collection(db, 'leaves'), orderBy('appliedAt', 'desc'));
+    const q = query(collection(db, 'leaveRequests'), orderBy('appliedAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -134,15 +136,60 @@ export default function LeavesPage() {
     }
 
     try {
-      await updateDoc(doc(db, 'leaves', leaveId), {
+      // Update leave status
+      await updateDoc(doc(db, 'leaveRequests', leaveId), {
         status: 'approved',
         approvedBy: currentUser?.uid,
         approvedAt: Timestamp.now(),
       });
 
-      toast.success('Leave approved');
+      // Add attendance records for leave dates
+      if (selectedLeave) {
+        const startDate = selectedLeave.startDate.toDate?.() || new Date(selectedLeave.startDate);
+        const endDate = selectedLeave.endDate.toDate?.() || new Date(selectedLeave.endDate);
+        
+        // Create attendance entry for each day of leave
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          
+          // Check if attendance record already exists
+          const q = query(
+            collection(db, 'attendance'),
+            where('employeeId', '==', selectedLeave.employeeId),
+            where('date', '==', dateStr)
+          );
+          
+          const querySnapshot = await getDocs(q);
+          
+          if (querySnapshot.empty) {
+            // Create new attendance record
+            await addDoc(collection(db, 'attendance'), {
+              employeeId: selectedLeave.employeeId,
+              date: dateStr,
+              status: 'leave',
+              leaveType: selectedLeave.type,
+              leaveRequestId: leaveId,
+              createdAt: Timestamp.now(),
+            });
+          } else {
+            // Update existing record
+            const docId = querySnapshot.docs[0].id;
+            await updateDoc(doc(db, 'attendance', docId), {
+              status: 'leave',
+              leaveType: selectedLeave.type,
+              leaveRequestId: leaveId,
+            });
+          }
+          
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
+
+      toast.success('Leave approved and attendance updated');
       setIsApprovalDialogOpen(false);
       setSelectedLeave(null);
+      setApprovalAction(null);
     } catch (error: any) {
       console.error('Error approving leave:', error);
       toast.error('Failed to approve leave');
@@ -161,7 +208,7 @@ export default function LeavesPage() {
     }
 
     try {
-      await updateDoc(doc(db, 'leaves', leaveId), {
+      await updateDoc(doc(db, 'leaveRequests', leaveId), {
         status: 'rejected',
         rejectionReason: rejectReason,
         approvedBy: currentUser?.uid,
@@ -172,6 +219,7 @@ export default function LeavesPage() {
       setIsApprovalDialogOpen(false);
       setSelectedLeave(null);
       setRejectReason('');
+      setApprovalAction(null);
     } catch (error: any) {
       console.error('Error rejecting leave:', error);
       toast.error('Failed to reject leave');
@@ -181,6 +229,12 @@ export default function LeavesPage() {
   const filteredLeaves = leaves.filter((leave) => {
     if (filterStatus !== 'all' && leave.status !== filterStatus) return false;
     if (isEmployee && leave.employeeId !== currentUser?.uid) return false;
+    
+    // Filter by month
+    const leaveMonth = leave.startDate.toDate?.() || new Date(leave.startDate);
+    const leaveMonthStr = leaveMonth.toISOString().slice(0, 7);
+    if (leaveMonthStr !== filterMonth) return false;
+    
     return true;
   });
 
@@ -213,7 +267,7 @@ export default function LeavesPage() {
   };
 
   return (
-    <ModuleAccessComponent module={ModuleAccess.LEAVES}>
+    <ModuleAccessComponent module={ModuleAccess.EMPLOYEE_LEAVES}>
       <div className="space-y-6 pb-20 sm:pb-6">
         {/* Header */}
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -236,7 +290,7 @@ export default function LeavesPage() {
 
         {/* Filter */}
         {isAdmin && (
-          <div className="bg-white p-4 rounded-lg shadow">
+          <div className="bg-white p-4 rounded-lg shadow flex flex-col sm:flex-row gap-4">
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Filter by status" />
@@ -248,6 +302,12 @@ export default function LeavesPage() {
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
+            <Input
+              type="month"
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className="w-full sm:w-48"
+            />
           </div>
         )}
 
@@ -295,6 +355,7 @@ export default function LeavesPage() {
                       size="sm"
                       onClick={() => {
                         setSelectedLeave(leave);
+                        setApprovalAction('approve');
                         setIsApprovalDialogOpen(true);
                         setRejectReason('');
                       }}
@@ -308,6 +369,7 @@ export default function LeavesPage() {
                       variant="outline"
                       onClick={() => {
                         setSelectedLeave(leave);
+                        setApprovalAction('reject');
                         setIsApprovalDialogOpen(true);
                         setRejectReason('');
                       }}
@@ -399,7 +461,12 @@ export default function LeavesPage() {
         </Dialog>
 
         {/* Approval Dialog */}
-        <Dialog open={isApprovalDialogOpen} onOpenChange={setIsApprovalDialogOpen}>
+        <Dialog open={isApprovalDialogOpen} onOpenChange={(open) => {
+          setIsApprovalDialogOpen(open);
+          if (!open) {
+            setApprovalAction(null);
+          }
+        }}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>
@@ -429,6 +496,8 @@ export default function LeavesPage() {
                         placeholder="Optional - provide reason for rejection"
                         value={rejectReason}
                         onChange={(e) => setRejectReason(e.target.value)}
+                        disabled={approvalAction === 'approve'}
+                        className="disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                     </div>
                     <DialogFooter className="gap-2">
@@ -438,6 +507,7 @@ export default function LeavesPage() {
                         onClick={() => {
                           setIsApprovalDialogOpen(false);
                           setSelectedLeave(null);
+                          setApprovalAction(null);
                         }}
                       >
                         Cancel
@@ -445,15 +515,23 @@ export default function LeavesPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => handleReject(selectedLeave.id!)}
-                        className="text-red-600 hover:text-red-700"
+                        onClick={() => {
+                          setApprovalAction('reject');
+                          handleReject(selectedLeave.id!);
+                        }}
+                        disabled={approvalAction === 'approve'}
+                        className="text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Reject
                       </Button>
                       <Button
                         type="button"
-                        onClick={() => handleApprove(selectedLeave.id!)}
-                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => {
+                          setApprovalAction('approve');
+                          handleApprove(selectedLeave.id!);
+                        }}
+                        disabled={approvalAction === 'reject'}
+                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Approve
                       </Button>

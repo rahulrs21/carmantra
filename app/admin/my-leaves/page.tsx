@@ -27,6 +27,7 @@ export default function MyLeavesPage() {
     endDate: '',
     reason: '',
   });
+  const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7));
 
   // Get employee ID from current user
   useEffect(() => {
@@ -259,6 +260,16 @@ export default function MyLeavesPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Filter */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <Input
+            type="month"
+            value={filterMonth}
+            onChange={(e) => setFilterMonth(e.target.value)}
+            className="w-full sm:w-48"
+          />
+        </div>
+
         {/* Leaves List */}
         <div className="space-y-4">
           {leaves.length === 0 ? (
@@ -269,7 +280,11 @@ export default function MyLeavesPage() {
               </AlertDescription>
             </Alert>
           ) : (
-            leaves.map((leave) => {
+            leaves.filter((leave) => {
+              const leaveDate = leave.startDate?.toDate?.() || new Date(leave.startDate);
+              const leaveMonthStr = leaveDate.toISOString().slice(0, 7);
+              return leaveMonthStr === filterMonth;
+            }).map((leave) => {
               const startDate = leave.startDate?.toDate?.() || new Date(leave.startDate);
               const endDate = leave.endDate?.toDate?.() || new Date(leave.endDate);
               const appliedDate = leave.appliedAt?.toDate?.() || new Date(leave.appliedAt);
