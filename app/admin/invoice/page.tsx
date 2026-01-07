@@ -233,6 +233,7 @@ export default function InvoicesPage() {
               <option value="all">All Status</option>
               <option value="paid">Paid</option>
               <option value="unpaid">Unpaid</option>
+              <option value="partial">Partial</option>
             </select>
             <div className="flex flex-col gap-1">
               <Popover
@@ -306,6 +307,7 @@ export default function InvoicesPage() {
                 <option value="all" className=''>All Status</option>
                 <option value="paid">Paid</option>
                 <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
               </select>
               <div className="flex flex-col gap-1">
                 <Popover

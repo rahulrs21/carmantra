@@ -298,8 +298,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   
   // Filter nav items based on user permissions
   const visibleNavItems = navItems.filter(item => {
-    // Allow Send Form for employees
-    if (role === 'employee' && item.href === '/admin/send-form') {
+    // Allow Send Form for employees and admins
+    if ((role === 'employee' || role === 'admin' || role === 'manager' || role === 'sales') && item.href === '/admin/send-form') {
       return true;
     }
     // Hide Leads and Customers from employees (but allow Send Form)

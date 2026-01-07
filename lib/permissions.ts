@@ -35,6 +35,7 @@ export function getRoleLabel(role: UserRole): string {
     support: 'Support',
     viewer: 'Viewer',
     employee: 'Employee',
+    accounts: 'Accounts',
   };
   return labels[role] || role;
 }
@@ -47,6 +48,7 @@ export function getRoleBadgeColor(role: UserRole): string {
     support: 'bg-yellow-100 text-yellow-800',
     viewer: 'bg-gray-100 text-gray-800',
     employee: 'bg-indigo-100 text-indigo-800',
+    accounts: 'bg-cyan-100 text-cyan-800',
   };
   return colors[role] || 'bg-gray-100 text-gray-800';
 }

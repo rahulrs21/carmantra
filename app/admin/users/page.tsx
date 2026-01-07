@@ -11,6 +11,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -25,6 +34,9 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState(true);
+  const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [formData, setFormData] = useState({
     email: '',
@@ -135,7 +147,7 @@ export default function UsersPage() {
         await updateDoc(doc(db, 'users', editingUser.id!), {
           displayName: formData.displayName,
           role: formData.role,
-          permissions: DEFAULT_PERMISSIONS[formData.role],
+          permissions: useCustomPermissions ? formData.customPermissions : DEFAULT_PERMISSIONS[formData.role],
           updatedAt: Timestamp.now(),
         });
         toast.success('User updated successfully');
@@ -159,10 +171,36 @@ export default function UsersPage() {
             createdBy: currentUser?.uid,
           });
 
-          // TODO: Send email with invite link
-          const inviteLink = `${window.location.origin}/admin/accept-invite?token=${inviteToken}`;
-          console.log('Invite link:', inviteLink);
-          toast.success(`User invited! Send this link: ${inviteLink}`);
+          // Send invite email via API
+          const inviteLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invite?token=${inviteToken}`;
+          
+          try {
+            const emailResponse = await fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                emailType: 'user-invite',
+                email: formData.email,
+                displayName: formData.displayName,
+                inviteLink,
+                inviteExpiresIn: 7,
+                senderName: currentUser?.displayName || 'Car Mantra Admin',
+              }),
+            });
+
+            const emailData = await emailResponse.json();
+
+            if (!emailResponse.ok || !emailData.success) {
+              console.error('❌ Failed to send invite email:', emailData.error);
+              toast.error('User created but failed to send invite email. Please send manually.');
+            } else {
+              console.log('✅ Invite email sent successfully:', emailData.id);
+              toast.success(`Invite email sent to ${formData.email}`);
+            }
+          } catch (emailError) {
+            console.error('❌ Error sending invite email:', emailError);
+            toast.error('User created but failed to send invite email. Please send manually.');
+          }
         } else {
           // Create user with email/password
           if (!formData.password) {
@@ -183,7 +221,7 @@ export default function UsersPage() {
               role: formData.role,
               status: 'active',
               isOnline: true,
-              permissions: DEFAULT_PERMISSIONS[formData.role],
+              permissions: useCustomPermissions ? formData.customPermissions : DEFAULT_PERMISSIONS[formData.role],
               createdAt: Timestamp.now(),
               createdBy: currentUser?.uid,
             });
@@ -222,23 +260,62 @@ export default function UsersPage() {
     }
 
     // Find the user to delete
-    const userToDelete = users.find(u => u.id === userId);
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setUserToDelete(user);
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
     
     // Prevent deleting the last admin
-    if (userToDelete?.role === 'admin' && adminCount <= 1) {
+    if (userToDelete.role === 'admin' && adminCount <= 1) {
       toast.error('Cannot delete the last administrator. At least one admin must remain.');
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
       return;
     }
 
-    if (!confirm('Are you sure you want to delete this user?')) return;
-
     try {
-      await deleteDoc(doc(db, 'users', userId));
-      toast.success('User deleted successfully');
+      // First, delete from Firebase Auth via API
+      const deleteAuthResponse = await fetch('/api/admin/delete-user', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          uid: userToDelete.id,
+          email: userToDelete.email,
+        }),
+      });
+
+      if (!deleteAuthResponse.ok) {
+        const errorData = await deleteAuthResponse.json();
+        console.warn('Auth deletion warning:', errorData.message);
+        // Continue with Firestore deletion even if Auth deletion fails
+      }
+
+      // Then delete from Firestore
+      await deleteDoc(doc(db, 'users', userToDelete.id!));
+      toast.success(`${userToDelete.displayName || 'Customer'} has been deleted`);
+      
+      // Show delete status message
+      setDeleteStatus(false);
+      
+      // Hide after 3 seconds
+      setTimeout(() => {
+        setDeleteStatus(true);
+      }, 3000);
+
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+
     } catch (error: any) {
       console.error('Error deleting user:', error);
       toast.error('Failed to delete user');
-    }
+    }  
   };
 
   const toggleStatus = async (user: UserAccount) => {
@@ -303,6 +380,12 @@ export default function UsersPage() {
           </Button>
         </PermissionGate>
       </header>
+
+      {deleteStatus===false && (
+        <div className='bg-red-200 text-red-800 p-4 rounded-md text-center animate-pulse'>
+          {`${userToDelete?.displayName || 'Customer'} has been deleted`}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -539,7 +622,7 @@ export default function UsersPage() {
                       id="sendInvite"
                       checked={formData.sendInvite}
                       onChange={(e) => setFormData({ ...formData, sendInvite: e.target.checked })}
-                      className="rounded"
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
                     />
                     <Label htmlFor="sendInvite" className="font-normal cursor-pointer">
                       Send invite link instead (user sets their own password)
@@ -566,6 +649,7 @@ export default function UsersPage() {
                     <SelectItem value="manager">Manager (Most Access)</SelectItem>
                     <SelectItem value="sales">Sales (Leads & Quotes)</SelectItem>
                     <SelectItem value="support">Support (View & Edit)</SelectItem>
+                    <SelectItem value="accounts">Accounts (Invoices & Accounts)</SelectItem>
                     <SelectItem value="employee">Employee (Leads, Services, Tasks)</SelectItem>
                     <SelectItem value="viewer">Viewer (Read Only)</SelectItem>
                   </SelectContent>
@@ -579,7 +663,7 @@ export default function UsersPage() {
                   id="customPermissions"
                   checked={useCustomPermissions}
                   onChange={(e) => setUseCustomPermissions(e.target.checked)}
-                  className="rounded"
+                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
                 />
                 <Label htmlFor="customPermissions" className="font-normal cursor-pointer">
                   Customize permissions for this user
@@ -678,6 +762,56 @@ export default function UsersPage() {
           </form>
         </DialogContent>
       </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600">Delete User</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-3 mt-4">
+            <div>
+              <div className="font-semibold text-gray-900">Are you sure you want to delete this user?</div>
+              <div className="text-sm text-gray-600 mt-1">This action cannot be undone.</div>
+            </div>
+            {userToDelete && (
+              <div className="bg-gray-50 p-3 rounded-lg space-y-2 mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-500">NAME:</span>
+                  <span className="text-sm font-semibold text-gray-900">{userToDelete.displayName || 'No name'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-500">EMAIL:</span>
+                  <span className="text-sm text-gray-700">{userToDelete.email}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-500">ROLE:</span>
+                  <Badge className={getRoleBadgeColor(userToDelete.role)}>
+                    {getRoleLabel(userToDelete.role)}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-500">STATUS:</span>
+                  <Badge
+                    variant={userToDelete.status === 'active' ? 'default' : 'secondary'}
+                    className={userToDelete.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}
+                  >
+                    {userToDelete.status}
+                  </Badge>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete User
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </ModuleAccessComponent>
   );

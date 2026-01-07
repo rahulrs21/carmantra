@@ -4,6 +4,7 @@ import { render } from '@react-email/render';
 import BookingConfirmationEmail from '@/components/emails/BookingConfirmationEmail';
 import QuotationEmail from '@/components/emails/QuotationEmail';
 import InvoiceEmail from '@/components/emails/InvoiceEmail';
+import InviteEmail from '@/components/emails/InviteEmail';
 
 const resend = new Resend(process.env.RESEND_API_KEY || '');
 
@@ -145,6 +146,41 @@ export async function POST(req: NextRequest) {
             } catch (templateErr: any) {
                 console.error('❌ Job completion email template error:', templateErr);
                 return NextResponse.json({ success: false, error: 'Failed to render email template' });
+            }
+        } else if (emailType === 'user-invite') {
+            // User Invite Email
+            const { displayName, inviteLink, inviteExpiresIn = 7, senderName = 'Car Mantra Admin' } = data;
+
+            if (!displayName || !inviteLink) {
+                console.error('❌ Invite email error: Missing required fields (displayName, inviteLink)');
+                return NextResponse.json({ 
+                    success: false, 
+                    error: 'Missing required fields for invite email' 
+                });
+            }
+
+            console.log('✅ Sending invite email to:', email);
+
+            try {
+                const html = await render(
+                    InviteEmail({
+                        displayName,
+                        email,
+                        inviteLink,
+                        inviteExpiresIn,
+                        senderName,
+                    })
+                );
+
+                emailPayload = {
+                    ...emailPayload,
+                    to: email,
+                    subject: 'You\'re Invited to Join Car Mantra CRM!',
+                    html,
+                };
+            } catch (templateErr: any) {
+                console.error('❌ Invite email template error:', templateErr);
+                return NextResponse.json({ success: false, error: 'Failed to render invite email template' });
             }
         } else {
             // Default Contact Form Email Template

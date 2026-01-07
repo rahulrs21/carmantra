@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useAccounts } from '@/lib/accountsContext';
+import { invoicesService } from '@/lib/firestore/b2b-service';
 
 interface DashboardStats {
   totalIncome: number;
@@ -17,6 +18,7 @@ interface DashboardStats {
   pendingSalaries: number;
   expenseCount: number;
   salaryCount: number;
+  totalPaymentAmount: number;
 }
 
 interface ChartData {
@@ -47,11 +49,13 @@ export default function AccountsPage() {
     pendingSalaries: 0,
     expenseCount: 0,
     salaryCount: 0,
+    totalPaymentAmount: 0,
   });
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     fetchDashboardData();
   }, [activeRange]);
 
@@ -61,13 +65,13 @@ export default function AccountsPage() {
     try {
       const { start, end } = activeRange;
 
-      // Fetch paid invoices (filter by date in code to avoid composite index)
+      // Fetch B2C paid invoices
       const paidInvoicesQuery = query(
         collection(db, 'invoices'),
         where('paymentStatus', '==', 'paid')
       );
       const invoicesSnap = await getDocs(paidInvoicesQuery);
-      const totalIncome = invoicesSnap.docs
+      const b2cTotalIncome = invoicesSnap.docs
         .filter((doc) => {
           const createdAt = doc.data().createdAt;
           if (!createdAt) return false;
@@ -75,6 +79,47 @@ export default function AccountsPage() {
           return docDate >= start && docDate <= end;
         })
         .reduce((sum, doc) => sum + (doc.data().total || 0), 0);
+
+      // Fetch B2B paid invoices
+      let b2bTotalIncome = 0;
+      try {
+        const companiesRef = collection(db, 'companies');
+        const companiesSnapshot = await getDocs(companiesRef);
+
+        for (const companyDoc of companiesSnapshot.docs) {
+          const servicesRef = collection(db, 'companies', companyDoc.id, 'services');
+          const servicesSnapshot = await getDocs(servicesRef);
+
+          for (const serviceDoc of servicesSnapshot.docs) {
+            try {
+              const invoicesList = await invoicesService.fetchInvoices(companyDoc.id, serviceDoc.id);
+              
+              if (invoicesList && invoicesList.length > 0) {
+                const paidInvoices = invoicesList.filter((inv: any) => inv.status === 'paid');
+                paidInvoices.forEach((invoice: any) => {
+                  const invoiceDate = invoice.invoiceDate;
+                  const docDate = invoiceDate instanceof Date 
+                    ? invoiceDate 
+                    : (invoiceDate?.seconds 
+                      ? new Date(invoiceDate.seconds * 1000)
+                      : (invoiceDate?.toDate ? invoiceDate.toDate() : new Date()));
+                  
+                  if (docDate >= start && docDate <= end) {
+                    b2bTotalIncome += invoice.totalAmount || invoice.total || 0;
+                  }
+                });
+              }
+            } catch (error) {
+              console.error(`Error fetching B2B invoices:`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching B2B data:', error);
+      }
+
+      // Total income = B2C + B2B
+      const totalIncome = b2cTotalIncome + b2bTotalIncome;
 
       // Fetch expenses (filter by date in code to avoid composite index)
       const expensesQuery = query(collection(db, 'expenses'));
@@ -107,8 +152,8 @@ export default function AccountsPage() {
       const filteredSalaries = filteredSalariesData.reduce((sum, doc) => sum + (doc.data().netSalary || 0), 0);
       const salaryCount = filteredSalariesData.length;
 
-      // Total expenses = filtered expenses + paid salaries
-      const totalExpenses = filteredExpenses + filteredSalaries;
+      // Total expenses = filtered expenses only (NOT including salaries)
+      const totalExpenses = filteredExpenses;
 
       // Fetch outstanding payments
       const outstandingQuery = query(
@@ -122,6 +167,26 @@ export default function AccountsPage() {
         return sum + (total - paid);
       }, 0);
 
+      // Fetch total payment amount (all payments with amountPaid)
+      const allPaymentsQuery = query(collection(db, 'invoices'));
+      const allPaymentsSnap = await getDocs(allPaymentsQuery);
+      const totalPaymentAmount = allPaymentsSnap.docs
+        .filter((doc) => {
+          const createdAt = doc.data().createdAt;
+          if (!createdAt) return false;
+          const docDate = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+          return docDate >= start && docDate <= end;
+        })
+        .reduce((sum, doc) => {
+          const paymentStatus = doc.data().paymentStatus;
+          if (paymentStatus === 'paid') {
+            return sum + (doc.data().total || 0);
+          } else if (paymentStatus === 'partial') {
+            return sum + (doc.data().partialPaidAmount || 0);
+          }
+          return sum;
+        }, 0);
+
       setStats({
         totalIncome,
         totalExpenses,
@@ -129,6 +194,7 @@ export default function AccountsPage() {
         pendingSalaries: 0, // Will be calculated with salary data
         expenseCount,
         salaryCount,
+        totalPaymentAmount,
       });
 
       setLoading(false);
@@ -304,25 +370,37 @@ export default function AccountsPage() {
         </section>
 
         {/* Dashboard Stats */}
-        {!loading && (
+        {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-white rounded-lg shadow p-6 border-l-4 border-gray-200 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-24 mb-4"></div>
+                <div className="h-8 bg-gray-200 rounded w-32 mb-3"></div>
+                <div className="h-3 bg-gray-200 rounded w-40"></div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <a href="/admin/accounts/payments" target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500 block hover:shadow-lg hover:scale-105 transition-all cursor-pointer">
               <div className="text-sm text-gray-500 font-medium">Total Income</div>
               <div className="text-2xl font-bold text-gray-900 mt-2">AED {stats.totalIncome.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className="text-xs text-gray-400 mt-1">From paid invoices</div>
-            </div>
+              <div className="text-xs text-gray-400 mt-1">From paid invoices (B2C + B2B)</div>
+            </a>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+          
+
+            <a href="/admin/accounts/expenses" target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500 block hover:shadow-lg hover:scale-105 transition-all cursor-pointer">
               <div className="text-sm text-gray-500 font-medium">Total Expenses</div>
               <div className="text-2xl font-bold text-gray-900 mt-2">AED {stats.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className="text-xs text-gray-400 mt-1">Expenses + Paid Salaries</div>
-            </div>
+              <div className="text-xs text-gray-400 mt-1">Expenses Only</div>
+            </a>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
+            <a href="/admin/accounts/payments?status=outstanding" target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500 block hover:shadow-lg hover:scale-105 transition-all cursor-pointer">
               <div className="text-sm text-gray-500 font-medium">Outstanding Payments</div>
               <div className="text-2xl font-bold text-gray-900 mt-2">AED {stats.outstandingPayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div className="text-xs text-gray-400 mt-1">Pending & partial</div>
-            </div>
+            </a>
 
             <div className={`bg-white rounded-lg shadow p-6 border-l-4 ${stats.totalIncome - stats.totalExpenses >= 0 ? 'border-green-500' : 'border-red-500 animate-pulse'}`}>
               <div className="text-sm text-gray-500 font-medium">Total Profit</div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, Timestamp, getDocs } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -33,11 +33,14 @@ interface Payment {
 
 export default function PaymentHistoryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [b2bPayments, setB2BPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    return searchParams.get('status') || 'all';
+  });
   const [methodFilter, setMethodFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -244,7 +247,11 @@ export default function PaymentHistoryPage() {
     }
 
     if (statusFilter !== 'all') {
-      result = result.filter((p) => p.paymentStatus === statusFilter);
+      if (statusFilter === 'outstanding') {
+        result = result.filter((p) => p.paymentStatus === 'partial' || p.paymentStatus === 'unpaid');
+      } else {
+        result = result.filter((p) => p.paymentStatus === statusFilter);
+      }
       console.log(`🏷️ After status filter: ${result.length} payments`);
     }
 
@@ -434,6 +441,7 @@ export default function PaymentHistoryPage() {
               className="border rounded px-3 py-2 text-sm h-10 dark:bg-gray-800"
             >
               <option value="all">All Status</option>
+              <option value="outstanding">Outstanding Payments</option>
               <option value="paid">Paid</option>
               <option value="partial">Partial</option>
               <option value="unpaid">Unpaid</option>
@@ -445,7 +453,7 @@ export default function PaymentHistoryPage() {
             >
               <option value="all">All Methods</option>
               <option value="cash">Cash</option>
-              <option value="card">Card</option>
+              <option value="card">Card Payment</option>
               <option value="online">Online</option>
               <option value="bank_transfer">Bank Transfer</option>
             </select>
@@ -453,7 +461,7 @@ export default function PaymentHistoryPage() {
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
             <div className="text-sm text-blue-600 font-medium">Total Records</div>
             <div className="text-2xl font-bold text-blue-900 mt-1">{filtered.length}</div>
@@ -465,6 +473,14 @@ export default function PaymentHistoryPage() {
           <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
             <div className="text-sm text-purple-600 font-medium">Paid Records</div>
             <div className="text-2xl font-bold text-purple-900 mt-1">{filtered.filter((p) => p.paymentStatus === 'paid').length}</div>
+          </div>
+          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+            <div className="text-sm text-yellow-600 font-medium">Partial Records</div>
+            <div className="text-2xl font-bold text-yellow-900 mt-1">{filtered.filter((p) => p.paymentStatus === 'partial').length}</div>
+          </div>
+          <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+            <div className="text-sm text-red-600 font-medium">Unpaid Records</div>
+            <div className="text-2xl font-bold text-red-900 mt-1">{filtered.filter((p) => p.paymentStatus === 'unpaid').length}</div>
           </div>
         </div>
 
@@ -521,7 +537,13 @@ export default function PaymentHistoryPage() {
                           {payment.paymentStatus.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{formatDateTime(payment.paymentDate)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {payment.paymentDate instanceof Date 
+                          ? payment.paymentDate.toLocaleDateString('en-GB')
+                          : (payment.paymentDate?.seconds 
+                            ? new Date(payment.paymentDate.seconds * 1000).toLocaleDateString('en-GB')
+                            : 'N/A')}
+                      </td>
                       <td className="px-6 py-4 text-sm">
                         <PermissionGate module="accounts" action="view">
                           <button

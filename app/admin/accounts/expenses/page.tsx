@@ -264,14 +264,14 @@ export default function ExpenseManagementPage() {
   const currentMonthPaidSalaries = paidSalaries.filter((s) => s.month === currentMonthStr);
   const totalMonthlyPaidSalaries = currentMonthPaidSalaries.reduce((sum, s) => sum + s.netSalary, 0);
   
-  // Combined total for current month
-  const totalMonthly = totalMonthlyExpenses + totalMonthlyPaidSalaries;
+  // Combined total for current month (excluding salaries)
+  const totalMonthly = totalMonthlyExpenses;
   
-  // Calculate total filtered salary expenses (only paid)
+  // Calculate total filtered salary expenses (only paid) - NOT INCLUDED IN TOTALS
   const totalFilteredSalary = paidSalaries.reduce((sum, s) => sum + s.netSalary, 0);
   
-  // Total All Time (from filtered expenses + filtered paid salaries)
-  const totalAll = filtered.reduce((sum, e) => sum + e.amount, 0) + totalFilteredSalary;
+  // Total All Time (from filtered expenses only - EXCLUDING salaries)
+  const totalAll = filtered.reduce((sum, e) => sum + e.amount, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -642,9 +642,9 @@ export default function ExpenseManagementPage() {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-red-50 rounded-lg p-4 border border-red-200 animate-accordion-down">
-            <div className="text-sm text-red-600 font-medium">Total (Expenses + Salaries)</div>
+            <div className="text-sm text-red-600 font-medium">Total (Expenses Only)</div>
             <div className="text-2xl font-bold text-red-900 mt-1">AED {totalAll.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <div className="text-xs text-red-600 mt-1">{filtered.length} expenses + {paidSalaries.length} paid salaries</div>
+            <div className="text-xs text-red-600 mt-1">{filtered.length} expenses</div>
           </div>
 
           {/* <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -749,7 +749,7 @@ export default function ExpenseManagementPage() {
           )}
         </div>
 
-        {/* Employee Salary Expenses */}
+        {/* COMMENTED OUT - Employee Salary Expenses - NOT included in totals
         {paidSalaries.length > 0 && (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-4 sm:p-6 border-b flex flex-col sm:flex-row sm:items-center sm:justify-start gap-4  ">
@@ -829,6 +829,7 @@ export default function ExpenseManagementPage() {
             </div>
           </div>
         )}
+        */}
 
         {/* Edit Salary Modal */}
         {isEditSalaryModalOpen && editingSalary && (
