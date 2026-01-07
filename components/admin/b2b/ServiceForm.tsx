@@ -37,10 +37,12 @@ import { Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const serviceSchema = z.object({
   title: z.string().min(1, 'Service title is required'),
   type: z.string().min(1, 'Service type is required'),
+  jobCardNo: z.string().min(1, 'Job Card number is required'),
   serviceDate: z.date({
     errorMap: () => ({ message: 'Service date is required' }),
   }),
@@ -54,6 +56,13 @@ type ServiceSchemaType = z.infer<typeof serviceSchema>;
 interface ServiceFormProps {
   companyId: string;
   onSuccess?: () => void;
+}
+
+// Utility function to generate unique JobCard number
+function generateJobCardNo(): string {
+  const prefix = 'B';
+  const timestamp = Date.now().toString().slice(-6);
+  return `${prefix}${timestamp}`;
 }
 
 const SERVICE_TYPES = [
@@ -71,6 +80,7 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
   const createService = useCreateService();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -80,6 +90,7 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
     defaultValues: {
       title: '',
       type: '',
+      jobCardNo: generateJobCardNo(),
       serviceDate: new Date(),
       notes: '',
     },
@@ -125,6 +136,7 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
       const formData: ServiceFormData = {
         title: data.title,
         type: data.type,
+        jobCardNo: data.jobCardNo,
         serviceDate: data.serviceDate,
         dateRangeStart: data.dateRangeStart,
         dateRangeEnd: data.dateRangeEnd,
@@ -143,16 +155,29 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
         userId: user.uid,
       });
 
-      console.log('[ServiceForm] Service created successfully:', result);
+      // Get the service ID from the result
+      const serviceId = result?.id || (typeof result === 'string' ? result : null);
       
+      // Close dialog immediately
+      setOpen(false);
+      
+      // Reset form
+      form.reset();
+      
+      // Show success toast
       toast({
         title: 'Success',
-        description: 'Service created successfully',
+        description: 'Service created successfully. Redirecting...',
       });
 
-      form.reset();
-      setOpen(false);
-      onSuccess?.();
+      // Redirect first before calling onSuccess to avoid page refresh interference
+      if (serviceId && companyId) {
+        // Redirect to the created service detail page using Next.js router (prevents full page reload)
+        router.push(`/admin/b2b-booking/companies/${companyId}/services/${serviceId}`);
+      } else {
+        // If no service ID, just refresh parent
+        onSuccess?.();
+      }
     } catch (error: any) {
       console.error('[ServiceForm] Error creating service:', error);
       const errorMessage = error?.message || 'Failed to create service';
@@ -190,7 +215,7 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="title"
@@ -199,6 +224,25 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
                     <FormLabel>Service Title *</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., Full Car Wash" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="jobCardNo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Job Card Number *</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="e.g., J123456" 
+                        {...field}
+                        readOnly
+                        className="bg-gray-100 cursor-not-allowed"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

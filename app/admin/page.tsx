@@ -49,6 +49,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { role } = useUser();
 
   // Check authentication state
   useEffect(() => {
@@ -921,6 +922,7 @@ export default function AdminDashboard() {
         </div>
       </section>
 
+      {role !== 'employee' && (
       <section id="dashboard-leads">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-4">
           <h2 className="text-xl sm:text-2xl font-semibold">Latest Leads</h2>
@@ -1022,6 +1024,7 @@ export default function AdminDashboard() {
           )}
         </div>
       </section>
+      )}
       </div>
     </ModuleAccessComponent>
   );

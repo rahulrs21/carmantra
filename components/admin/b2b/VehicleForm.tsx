@@ -56,9 +56,10 @@ interface VehicleFormProps {
   vehicle?: any; // For edit mode
   onSuccess?: () => void;
   trigger?: React.ReactNode; // Custom trigger for edit button
+  disabled?: boolean; // Disable add/edit for employee role
 }
 
-export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger }: VehicleFormProps) {
+export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger, disabled = false }: VehicleFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
   const addVehicle = useAddVehicle();
@@ -146,25 +147,25 @@ export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger 
   const isLoading = isEditMode ? updateVehicle.isPending : addVehicle.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Dialog open={open} onOpenChange={disabled ? undefined : setOpen}>
+      <DialogTrigger asChild disabled={disabled}>
         {trigger ? (
           trigger
         ) : (
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2" disabled={disabled}>
             <Plus size={16} />
             Add Vehicle
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{isEditMode ? 'Edit Vehicle' : 'Add Vehicle to Service'}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <FormField
                 control={form.control}
                 name="plateNumber"
@@ -337,11 +338,11 @@ export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger 
               )}
             />
 
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
+              <Button variant="outline" onClick={() => setOpen(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                 {isLoading ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Vehicle' : 'Add Vehicle')}
               </Button>
             </div>

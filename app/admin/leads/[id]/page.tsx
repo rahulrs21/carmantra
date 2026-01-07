@@ -411,6 +411,52 @@ export default function LeadDetailsPage() {
         convertedAt: Timestamp.now(),
       });
 
+      // Send booking confirmation email
+      try {
+        const customerEmail = lead.email;
+        const customerName = lead.name || 'Customer';
+        const customerPhone = lead.phone || '';
+
+        if (customerEmail) {
+          console.log('📧 Sending booking confirmation email to:', customerEmail);
+
+          const emailResponse = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              emailType: 'booking-confirmation',
+              name: customerName,
+              email: customerEmail,
+              phone: customerPhone,
+              service: bookingForm.category,
+              jobCardNo,
+              scheduledDate: scheduledDateTime.toISOString(),
+              vehicleDetails: {
+                vehicleBrand: bookingForm.vehicleBrand,
+                modelName: bookingForm.modelName,
+                numberPlate: bookingForm.numberPlate,
+              },
+            }),
+          });
+
+          const emailResult = await emailResponse.json();
+
+          if (!emailResponse.ok || !emailResult.success) {
+            console.warn('⚠️ Email sending warning:', emailResult.error || 'Unknown error');
+          } else {
+            console.log('✅ Booking email sent successfully:', {
+              to: customerEmail,
+              resendId: emailResult.id,
+            });
+          }
+        } else {
+          console.warn('⚠️ No customer email provided for booking confirmation');
+        }
+      } catch (emailErr: any) {
+        console.error('❌ Booking confirmation email error:', emailErr);
+        // Don't fail the booking if email fails
+      }
+
       setBookingStatus('✓ Service booked successfully!');
       setTimeout(() => {
         router.push(`/admin/book-service/${bookingRef.id}`);

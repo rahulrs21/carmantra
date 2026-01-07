@@ -31,6 +31,7 @@ export interface B2BService {
   companyId: string;
   title: string;
   type: string; // 'car-wash', 'detailing', 'ppf', etc.
+  jobCardNo?: string; // Unique job card number
   status: ServiceStatus;
   serviceDate: Timestamp | Date;
   dateRangeStart?: Timestamp | Date;
@@ -261,6 +262,7 @@ export interface CompanyFormData {
 export interface ServiceFormData {
   title: string;
   type: string;
+  jobCardNo?: string;
   serviceDate: Date;
   dateRangeStart?: Date;
   dateRangeEnd?: Date;

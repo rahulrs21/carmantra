@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useContext } from 'react';
 import {
   useServiceById,
   useVehicles,
@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/firebase';
+import { useUser } from '@/lib/userContext';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, Timestamp } from 'firebase/firestore';
 
 interface ServiceDetailPageProps {
@@ -42,6 +43,8 @@ const EXPENSE_CATEGORIES = ['Car Parts & Accessories', 'Ceramic Coating Material
 
 export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
   const { id, serviceId } = use(params);
+  const { role } = useUser();
+  const isEmployeeRole = role === 'employee';
   const { data: service, isLoading: serviceLoading, refetch: refetchService } = useServiceById(
     id,
     serviceId
@@ -66,6 +69,24 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
   });
 
   const totals = useCalculateTotals(vehicles, referrals);
+
+  // Restrict access for employees
+  if (isEmployeeRole) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-6">You don't have permission to view this page.</p>
+          <Link href="/admin">
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              Go to Dashboard
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Fetch expenses for this service
   useEffect(() => {
@@ -206,79 +227,102 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
 
       setNewStatus(status);
       
-      // Reload to reflect changes
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      // Refetch service data to reflect changes
+      await refetchService();
     } catch (error) {
       console.error('[ServiceDetail] Error updating status:', error);
     }
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto pb-8 px-2 md:px-4">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-6 flex flex-col md:flex-row md:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <Link href={`/admin/b2b-booking/companies/${id}`}>
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button variant="outline" size="sm" className="gap-2 w-full sm:w-auto">
               <ChevronLeft size={16} />
               Back
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold">{service.title}</h1>
-            <p className="text-gray-600">Service ID: {serviceId}</p>
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold">{service.title}</h1>
+            <p className="text-sm sm:text-base text-gray-600">Service ID: {serviceId}</p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-600">Total Service Amount</p>
-          <p className="text-3xl font-bold">AED {totals.totalAmount.toLocaleString('en-AE')}</p>
+        <div className='flex justify-between border border-blue-200 p-2 rounded-xl items-center gap-4'>
+          <div className="bg-blue-100 dark:bg-gray-800 rounded-lg px-4 py-2 flex items-center justify-center sm:justify-start">
+            <p className="text-sm sm:text-base">Job Card: <span className="font-semibold">{service.jobCardNo}</span></p>
+          </div>
+          <div className="text-center sm:text-right">
+            <p className="text-xs sm:text-sm text-gray-600">Total Service Amount</p>
+            <p className="text-2xl sm:text-3xl font-bold">AED {totals.totalAmount.toLocaleString('en-AE')}</p>
+          </div>
         </div>
       </div>
 
       {/* Service Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Service Type</CardTitle>
+            <CardTitle className="text-xs sm:text-sm">Company</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold">{service.type}</p>
+            <p className="text-base sm:text-lg font-semibold">{company?.name || 'N/A'}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Service Date</CardTitle>
+            <CardTitle className="text-xs sm:text-sm">Service Type: <span className="text-sm sm:text-base uppercase">{service.type}</span></CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold">
-              {new Date(
-                service.serviceDate instanceof Date
-                  ? service.serviceDate
-                  : (service.serviceDate as any).toDate()
-              ).toLocaleDateString()}
+            <p className="text-xs">Notes: <span className="text-sm sm:text-base">{service.notes}</span></p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs sm:text-sm">Service Date</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-base sm:text-lg font-semibold">
+              {(() => {
+                const date = new Date(
+                  service.serviceDate instanceof Date
+                    ? service.serviceDate
+                    : (service.serviceDate as any).toDate()
+                );
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                return `${day}/${month}/${year}`;
+              })()}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Company</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold">{company?.name || 'N/A'}</p>
-          </CardContent>
-        </Card>
+        
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Status</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm">Status</CardTitle>
+
+              {service.status !== 'completed' && (
+                
+                <div className="group relative cursor-help">
+                  <div className="w-4 h-4 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-bold">!</div>
+                  <div className="absolute -top-3 -left-2 md:left-1/3 transform translate-x-1/2  px-3 py-2 bg-yellow-600 text-white text-xs rounded-lg whitespace-nowrap  transition-opacity pointer-events-none z-50 animate-pulse">
+                    Select 'Completed' when done
+                  </div>
+                </div>
+              )} 
+            </div>
           </CardHeader>
           <CardContent>
-            <Select value={service.status} onValueChange={handleStatusChange}>
-              <SelectTrigger className="w-full">
+            <Select value={service.status} onValueChange={handleStatusChange} disabled={isEmployeeRole}>
+              <SelectTrigger className={`w-full h-10 ${isEmployeeRole ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -297,36 +341,26 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
           <CardTitle>Financial Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div>
-              <p className="text-sm text-gray-600">Vehicle Services Total</p>
-              <p className="text-2xl font-bold">AED {totals.subtotal.toLocaleString('en-AE')}</p>
+              <p className="text-xs sm:text-sm text-gray-600">Vehicle Services Total</p>
+              <p className="text-lg sm:text-2xl font-bold">AED {totals.subtotal.toLocaleString('en-AE')}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Referral Commissions</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-xs sm:text-sm text-gray-600">Referral Commissions</p>
+              <p className="text-lg sm:text-2xl font-bold text-green-600">
                 AED {totals.referralTotal.toLocaleString('en-AE')}
               </p>
             </div>
-            <div className="border-l-2 pl-6">
-              <p className="text-sm text-gray-600">Service Total</p>
-              <p className="text-3xl font-bold">AED {totals.totalAmount.toLocaleString('en-AE')}</p>
+            <div className="border-l-2 pl-4 sm:pl-6">
+              <p className="text-xs sm:text-sm text-gray-600">Service Total</p>
+              <p className="text-xl sm:text-3xl font-bold">AED {totals.totalAmount.toLocaleString('en-AE')}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Notes */}
-      {service.notes && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-sm">Service Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-700">{service.notes}</p>
-          </CardContent>
-        </Card>
-      )}
+      
 
       {/* Vehicles Section */}
       <div className="mb-6">
@@ -335,7 +369,8 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
           serviceId={serviceId}
           vehicles={vehicles}
           isLoading={vehiclesLoading}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => refetchService()}
+          disabled={isEmployeeRole}
         />
       </div>
 
@@ -349,7 +384,8 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
           referrals={referrals}
           vehicleIds={vehicles.map((v: any) => v.id)}
           isLoading={referralsLoading}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => refetchService()}
+          disabled={isEmployeeRole}
         />
       </div>
 
@@ -378,15 +414,15 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
 
         {/* Expense Form Modal */}
         {showExpenseForm && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
               {/* Modal Header */}
-              <div className="sticky top-0 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 p-6 border-b border-blue-500/20">
+              <div className="sticky top-0 flex items-start sm:items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 p-4 sm:p-6 border-b border-blue-500/20 gap-2">
                 <div>
-                  <h3 className="text-xl font-bold text-white">
+                  <h3 className="text-lg sm:text-xl font-bold text-white">
                     {editingExpenseId ? '✏️ Edit Expense' : '➕ Add New Expense'}
                   </h3>
-                  <p className="text-blue-100 text-sm mt-1">
+                  <p className="text-blue-100 text-xs sm:text-sm mt-1">
                     {editingExpenseId ? 'Update expense details' : 'Record a new expense for this service'}
                   </p>
                 </div>
@@ -402,7 +438,7 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
               </div>
 
               {/* Modal Body */}
-              <form className="p-6 space-y-6">
+              <form className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Category Row */}
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -437,7 +473,7 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
                 </div>
 
                 {/* Amount & Quantity Row */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                       📦 Quantity
@@ -468,7 +504,7 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
                 
 
                 {/* Vendor & Date Row */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                       🏪 Vendor/Supplier
@@ -504,19 +540,19 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
               </form>
 
               {/* Modal Footer */}
-              <div className="sticky bottom-0 flex gap-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
+              <div className="sticky bottom-0 flex flex-col sm:flex-row gap-2 sm:gap-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 sm:p-6">
                 <Button
                   type="button"
                   onClick={cancelExpenseForm}
                   variant="outline"
-                  className="flex-1 h-12 border-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+                  className="w-full sm:flex-1 h-10 sm:h-12 border-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="button"
                   onClick={handleSaveExpense}
-                  className="flex-1 h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+                  className="w-full sm:flex-1 h-10 sm:h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
                 >
                   {editingExpenseId ? '💾 Update Expense' : '💾 Save Expense'}
                 </Button>
@@ -528,7 +564,7 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
         {/* Expenses Table */}
         <CardContent>
           {expenses.length > 0 ? (
-            <div className="overflow-x-auto -mx-6 sm:mx-0">
+            <div className="overflow-x-auto -mx-4 sm:-mx-6 md:mx-0">
               <table className="w-full text-xs sm:text-sm">
                 <thead className="border-b bg-gray-50 dark:bg-gray-800 sticky top-0">
                   <tr>
@@ -571,12 +607,15 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
                         </td>
                         <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">
                           {expense.date
-                            ? new Date(
-                                expense.date.seconds ? expense.date.seconds * 1000 : expense.date
-                              ).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                              })
+                            ? (() => {
+                                const date = new Date(
+                                  expense.date.seconds ? expense.date.seconds * 1000 : expense.date
+                                );
+                                const day = String(date.getDate()).padStart(2, '0');
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const year = date.getFullYear();
+                                return `${day}/${month}/${year}`;
+                              })()
                             : '-'}
                         </td>
                         {service.status !== 'completed' && service.status !== 'cancelled' && (
@@ -612,10 +651,10 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
 
           {/* Total Expenses */}
           {expenses.length > 0 && (
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex justify-between items-center">
+            <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                 <span className="font-semibold text-gray-700 dark:text-gray-300">Total Expenses:</span>
-                <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                <span className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400">
                   AED{' '}
                   {expenses
                     .filter((exp: any) => !exp.deletedAt)

@@ -1,7 +1,9 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useServices, useCompanyById } from '@/hooks/useB2B';
+import { useUser } from '@/lib/userContext';
 import { quotationsService, invoicesService } from '@/lib/firestore/b2b-service';
 import { ServiceList } from '@/components/admin/b2b/ServiceList';
 import { QuotationList } from '@/components/admin/b2b/QuotationList';
@@ -20,6 +22,21 @@ interface CompanyDetailPageProps {
 
 export default function CompanyDetailPage({ params }: CompanyDetailPageProps) {
   const { id } = use(params);
+  const router = useRouter();
+  const { role } = useUser();
+  
+  // Block access for EMPLOYEE role users
+  useEffect(() => {
+    if (role === 'employee') {
+      router.push('/admin/b2b-booking');
+    }
+  }, [role, router]);
+
+  // Don't render if employee role
+  if (role === 'employee') {
+    return <div className="p-8 text-center">Access denied. You do not have permission to view this page.</div>;
+  }
+
   const { data: company, isLoading: companyLoading, refetch: refetchCompany } = useCompanyById(id);
   const { services, isLoading: servicesLoading } = useServices(id);
   const [quotations, setQuotations] = useState<any[]>([]);

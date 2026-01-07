@@ -3,12 +3,14 @@ import React from 'react';
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, Timestamp, addDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import Link from 'next/link';
+import { doc, getDoc, updateDoc, Timestamp, addDoc, collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { safeConsoleError } from '@/lib/safeConsole';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import QuotationForm from '@/components/admin/QuotationForm';
@@ -22,7 +24,8 @@ export default function BookServiceDetails() {
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
-  const { displayName, user } = useUser();
+  const { displayName, user, role } = useUser();
+  const isEmployee = role === 'employee';
   const [service, setService] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
@@ -92,6 +95,23 @@ export default function BookServiceDetails() {
   const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
   const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
   const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
+  
+  // Task Management State
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<{id: string, name: string, email: string}[]>([]);
+  const [observerUsers, setObserverUsers] = useState<{id: string, name: string, role: string}[]>([]);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [newTaskData, setNewTaskData] = useState({
+    assignedTo: [] as string[],
+    observedByUserId: '' as string,
+    observedByRole: '' as 'admin' | 'manager' | 'sales' | 'accounts' | '',
+    observedByName: '' as string,
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    category: 'service' as 'maintenance' | 'service' | 'inspection' | 'other',
+    description: '' as string,
+    deadline: '',
+  });
+  
   type EditFormType = {
     companyName: string;
     contactName: string;
@@ -501,6 +521,131 @@ export default function BookServiceDetails() {
 
     return () => unsubscribe();
   }, [id]);
+
+  // Fetch tasks for this booking
+  useEffect(() => {
+    if (!id) return;
+
+    const q = query(
+      collection(db, 'tasks'),
+      where('serviceBookingId', '==', id)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const taskList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setTasks(taskList);
+    });
+
+    return () => unsub();
+  }, [id]);
+
+  // Fetch employees
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'employees'));
+        const empList = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            name: doc.data().name || '',
+            email: doc.data().email || '',
+          }))
+          .filter(emp => emp.email)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setEmployees(empList);
+      } catch (error) {
+        safeConsoleError('Error fetching employees', error);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  // Fetch observer users from users collection
+  useEffect(() => {
+    const fetchObserverUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const usersList = snapshot.docs
+          .map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.displayName || data.name || 'User',
+              role: data.role || '',
+            };
+          })
+          .filter(user => ['admin', 'manager', 'sales', 'accounts'].includes(user.role))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setObserverUsers(usersList);
+      } catch (error) {
+        safeConsoleError('Error fetching observer users', error);
+      }
+    };
+    fetchObserverUsers();
+  }, []);
+
+  // Handle Add Task from booking detail
+  async function handleAddTask() {
+    if (newTaskData.assignedTo.length === 0 || !newTaskData.deadline) {
+      setStatus('Please select employees and deadline');
+      return;
+    }
+
+    try {
+      setStatus('Creating task...');
+      const assignedNames = newTaskData.assignedTo
+        .map(id => employees.find(emp => emp.id === id)?.name || '')
+        .filter(Boolean);
+
+      const taskData = {
+        title: `Service Task: ${service?.jobCardNo}`,
+        description: newTaskData.description || `Service: ${service?.category}\nCustomer: ${service?.firstName} ${service?.lastName}\nVehicle: ${service?.vehicleBrand} ${service?.modelName}`,
+        assignedTo: newTaskData.assignedTo,
+        assignedToNames: assignedNames,
+        createdBy: user?.uid || 'unknown',
+        priority: newTaskData.priority,
+        category: newTaskData.category,
+        status: 'notStarted',
+        deadline: newTaskData.deadline,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        observedByUserId: newTaskData.observedByUserId,
+        observedByRole: newTaskData.observedByRole,
+        observedByName: newTaskData.observedByName,
+        serviceBookingId: id,
+        jobCardNo: service?.jobCardNo,
+        bookingDetails: {
+          customerName: `${service?.firstName} ${service?.lastName}`,
+          vehicleBrand: service?.vehicleBrand,
+          vehicleModel: service?.modelName,
+          numberPlate: service?.numberPlate,
+          serviceCategory: service?.category,
+        },
+        comments: 0,
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+      setStatus('✓ Task created successfully');
+      setShowAddTaskModal(false);
+      setNewTaskData({
+        assignedTo: [],
+        observedByUserId: '',
+        observedByRole: '',
+        observedByName: '',
+        priority: 'medium',
+        category: 'service',
+        description: '',
+        deadline: '',
+      });
+      setTimeout(() => setStatus(null), 3000);
+    } catch (err: any) {
+      safeConsoleError('Task creation error', err);
+      setStatus('Failed to create task');
+    }
+  }
 
   // Close reschedule panel when a quotation is present
   useEffect(() => {
@@ -1373,6 +1518,7 @@ export default function BookServiceDetails() {
       brand: service.vehicleBrand || '',
       model: service.modelName || '',
       plate: service.numberPlate || '',
+      vin: service.vinNumber || '',
     },
     serviceCategory: service.category || '',
     items: [{ description: service.category || 'Service', quantity: 1, rate: 0, amount: 0 }],
@@ -1478,7 +1624,7 @@ export default function BookServiceDetails() {
   if (!service) return <div className="p-6 text-center text-red-600">Service not found</div>;
 
   return (
-    <div className="space-y-6 px-3 sm:px-0 pb-8">
+    <div className="space-y-6 px-1 md:px-3 sm:px-0 pb-8">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold">Service Booking</h1>
@@ -1488,7 +1634,7 @@ export default function BookServiceDetails() {
       </header>
 
       {status && (
-        <div className={`p-4 rounded ${status.includes('success') || status.includes('completed') || status.includes('rescheduled') ? 'bg-green-50 text-green-800' : 'bg-blue-50 text-blue-800'}`}>
+        <div className={`p-2 md:p-4 rounded ${status.includes('success') || status.includes('completed') || status.includes('rescheduled') ? 'bg-green-50 text-green-800' : 'bg-blue-50 text-blue-800'}`}>
           {status}
         </div>
       )}
@@ -1550,7 +1696,7 @@ export default function BookServiceDetails() {
           )}
 
           {/* Service Details */}
-          <Card className="p-6">
+          <Card className="p-3 md:p-6">
             <h2 className="text-xl font-semibold mb-4">Service Details</h2>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
@@ -1597,10 +1743,10 @@ export default function BookServiceDetails() {
           </Card>
 
           {/* Customer Details */}
-          <Card className="p-6">
+          <Card className="p-3 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Customer Details</h2>
-              {!editing && service.status !== 'cancelled' && service.status !== 'completed' && (
+              {!editing && !isEmployee && service.status !== 'cancelled' && service.status !== 'completed' && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1936,7 +2082,7 @@ export default function BookServiceDetails() {
           </Card>
 
           {/* Vehicle Details */}
-          <Card className="p-6">
+          <Card className="p-3 md:p-6">
             <h2 className="text-xl font-semibold mb-4">Vehicle Details</h2>
             <div className="space-y-3 text-sm">
               {editing && customerType === 'b2c' ? (
@@ -2346,8 +2492,258 @@ export default function BookServiceDetails() {
             </div>
           </Card>
 
+          {/* Assigned Tasks Card */}
+          <Card className="p-3 md:p-6 border-2 border-blue-200 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg sm:text-xl font-semibold text-blue-700">Assigned Tasks ({tasks.length})</h2>
+              </div>
+              {!isEmployee && service?.status !== 'cancelled' && service?.status !== 'completed' && (
+                <Button
+                  onClick={() => setShowAddTaskModal(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-sm w-full sm:w-auto"
+                  size="sm"
+                >
+                  + Add Task
+                </Button>
+              )}
+            </div>
+
+            {tasks.length === 0 ? (
+              <p className="text-sm text-gray-500">No tasks assigned yet</p>
+            ) : (
+              <div className="space-y-3">
+                {tasks.map((task) => (
+                  <div key={task.id} className="p-3 sm:p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm sm:text-base text-gray-900 break-words">{task.title}</p>
+                        <p className="text-xs text-gray-600 mt-1">{task.jobCardNo}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
+                        task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                        task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs mb-2">
+                      <div>
+                        <span className="text-gray-600">Assigned To:</span>
+                        <p className="font-medium text-gray-900">{task.assignedToNames?.join(', ') || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Observed By:</span>
+                        <p className="font-medium text-gray-900">{task.observedByName ? `${task.observedByName} (${task.observedByRole})` : '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Status:</span>
+                        <p className={`font-medium ${
+                          task.status === 'notStarted' ? 'text-red-800 bg-red-200 mx-2 px-2 py-1 rounded inline-block' :
+                          task.status === 'completed' ? 'text-yellow-800 bg-yellow-200 mx-2 px-2 py-1 rounded inline-block' :
+                          task.status === 'inProgress' ? 'text-blue-800 bg-blue-200 mx-2 px-2 py-1 rounded inline-block' :
+                          'text-green-800 bg-green-300 mx-2 px-2 py-1 rounded inline-block'
+                        }`}>
+                          {task.status === 'notStarted' ? 'Not Started' :
+                           task.status === 'inProgress' ? 'In Progress' :
+                           task.status === 'completed' ? 'Completed' :
+                           'Verified'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Deadline:</span>
+                        <p className="font-medium text-gray-900">{new Date(task.deadline).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+
+                    {task.description && (
+                      <p className="text-xs text-gray-600 mb-2 break-words">Description: {task.description}</p>
+                    )}
+
+                    {!isEmployee && (
+                      <div className="flex gap-2">
+                        <Link href={`/admin/tasks/${task.id}`} target="_blank">
+                          <Button variant="ghost" size="sm" className="text-xs bg-black/5 hover:bg-black/10 text-black">
+                            View Task
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Add Task Modal */}
+          {showAddTaskModal && (
+            <Dialog open={showAddTaskModal} onOpenChange={setShowAddTaskModal}>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add Task for {service?.jobCardNo}</DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  {/* Employees */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
+                      {employees.length === 0 ? (
+                        <p className="text-sm text-gray-500 col-span-2">No employees found</p>
+                      ) : (
+                        employees.map(emp => (
+                          <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newTaskData.assignedTo.includes(emp.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNewTaskData(prev => ({
+                                    ...prev,
+                                    assignedTo: [...prev.assignedTo, emp.id],
+                                  }));
+                                } else {
+                                  setNewTaskData(prev => ({
+                                    ...prev,
+                                    assignedTo: prev.assignedTo.filter(id => id !== emp.id),
+                                  }));
+                                }
+                              }}
+                              className="w-4 h-4 rounded"
+                            />
+                            <span className="text-sm text-gray-700">{emp.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Observer User */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Observed By</label>
+                    <select
+                      value={newTaskData.observedByUserId}
+                      onChange={(e) => {
+                        const selectedUser = observerUsers.find(u => u.id === e.target.value);
+                        setNewTaskData(prev => ({
+                          ...prev,
+                          observedByUserId: e.target.value,
+                          observedByRole: (selectedUser?.role as 'admin' | 'manager' | 'sales' | 'accounts') || '',
+                          observedByName: selectedUser?.name || '',
+                        }));
+                      }}
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                    >
+                      <option value="">Select Observer...</option>
+                      {observerUsers.length === 0 ? (
+                        <option disabled>No users found with admin roles</option>
+                      ) : (
+                        observerUsers.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} - {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    {newTaskData.observedByName && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        Selected: {newTaskData.observedByName} ({newTaskData.observedByRole})
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Priority & Category */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
+                      <select
+                        value={newTaskData.priority}
+                        onChange={(e) => setNewTaskData(prev => ({
+                          ...prev,
+                          priority: e.target.value as any,
+                        }))}
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                      <select
+                        value={newTaskData.category}
+                        onChange={(e) => setNewTaskData(prev => ({
+                          ...prev,
+                          category: e.target.value as any,
+                        }))}
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                      >
+                        <option value="maintenance">Maintenance</option>
+                        <option value="service">Service</option>
+                        <option value="inspection">Inspection</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                    <textarea
+                      value={newTaskData.description}
+                      onChange={(e) => setNewTaskData(prev => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))}
+                      placeholder="Enter task details and instructions..."
+                      rows={3}
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
+                    />
+                  </div>
+
+                  {/* Deadline */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline</label>
+                    <Input
+                      type="date"
+                      value={newTaskData.deadline}
+                      onChange={(e) => setNewTaskData(prev => ({
+                        ...prev,
+                        deadline: e.target.value,
+                      }))}
+                      className="border-2 border-gray-300 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowAddTaskModal(false)}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleAddTask}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    >
+                      Create Task
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+
           {/* Pre-Inspection Capture & View */}
-          <Card className="p-6 border-2 border-orange-200 space-y-6">
+          <Card className="p-3 md:p-6 border-2 border-orange-200 space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-semibold text-orange-700">Pre-Inspection Checklist</h2>
@@ -2657,51 +3053,54 @@ export default function BookServiceDetails() {
 
         {/* Actions Sidebar */}
         <div className="space-y-4">
-          <Card className="p-6">
-            <h3 className="font-semibold mb-3">Quotation</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-600">Status</span>
-                {quotationLoading ? (
-                  <span className="text-xs text-gray-500">Loading…</span>
-                ) : (
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${quotationBadgeClass}`}>
-                    {quotationLabelMap[quotationStatus] || quotationStatus}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500">Invoice unlocks after the quotation is accepted.</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  className={`flex-1 ${isCancelled || service.status === 'completed' ? 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' : 'bg-orange-600 hover:bg-orange-700 text-white dark:border-orange-500 dark:bg-orange-500 dark:hover:bg-orange-600'}`}
-                  onClick={() => setShowQuotationModal(true)}
-                  disabled={isCancelled || service.status === 'completed'}
-                  title={service.status === 'completed' ? 'Cannot update quotation - work is completed' : ''}
-                >
-                  {quotation ? 'Update Quotation' : 'Create Quotation'}
-                </Button>
-                {quotation?.id && (
-                  <a
-                    href={`/admin/quotation/${quotation.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex-1 px-4 py-2 border rounded text-center text-sm font-medium ${isCancelled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-600 dark:text-gray-300 '}`}
-                    tabIndex={isCancelled ? -1 : 0}
-                    aria-disabled={isCancelled}
-                    style={isCancelled ? { pointerEvents: 'none' } : {}}
+          {!isEmployee && (
+            <Card className="p-6">
+              <h3 className="font-semibold mb-3">Quotation</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Status</span>
+                  {quotationLoading ? (
+                    <span className="text-xs text-gray-500">Loading…</span>
+                  ) : (
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${quotationBadgeClass}`}>
+                      {quotationLabelMap[quotationStatus] || quotationStatus}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Invoice unlocks after the quotation is accepted.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    className={`flex-1 ${isCancelled || service.status === 'completed' ? 'bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' : 'bg-orange-600 hover:bg-orange-700 text-white dark:border-orange-500 dark:bg-orange-500 dark:hover:bg-orange-600'}`}
+                    onClick={() => setShowQuotationModal(true)}
+                    disabled={isCancelled || service.status === 'completed'}
+                    title={service.status === 'completed' ? 'Cannot update quotation - work is completed' : ''}
                   >
-                    View Quotation
-                  </a>
-                )}
+                    {quotation ? 'Update Quotation' : 'Create Quotation'}
+                  </Button>
+                  {quotation?.id && (
+                    <a
+                      href={`/admin/quotation/${quotation.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex-1 px-4 py-2 border rounded text-center text-sm font-medium ${isCancelled ? 'opacity-60 cursor-not-allowed bg-gray-100 text-gray-400' : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 dark:border-gray-600 dark:text-gray-300 '}`}
+                      tabIndex={isCancelled ? -1 : 0}
+                      aria-disabled={isCancelled}
+                      style={isCancelled ? { pointerEvents: 'none' } : {}}
+                    >
+                      View Quotation
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {/* Expenses Card */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Expenses</h3>
-              {service.status !== 'completed' && service.status !== 'cancelled' && (
+          {!isEmployee && (
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Expenses</h3>
+                {service.status !== 'completed' && service.status !== 'cancelled' && (
                 <Button
                   size="sm"
                   variant={showExpenseForm ? 'default' : 'outline'}
@@ -2886,6 +3285,11 @@ export default function BookServiceDetails() {
                   <tbody>
                     {expenses
                       .filter((exp: any) => !exp.deletedAt)
+                      .sort((a: any, b: any) => {
+                        const dateA = a.date?.seconds ? a.date.seconds * 1000 : new Date(a.date).getTime();
+                        const dateB = b.date?.seconds ? b.date.seconds * 1000 : new Date(b.date).getTime();
+                        return dateB - dateA; // Descending order (newest first)
+                      })
                       .map((expense: any, idx: number) => (
                         <tr key={expense.id || idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                           <td className="py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300">
@@ -2894,7 +3298,7 @@ export default function BookServiceDetails() {
                             </span>
                           </td>
                           <td className="hidden sm:table-cell py-3 px-2 sm:px-3">
-                            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium whitespace-nowrap">
+                            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium whitespace-nowrap"> 
                               {expense.category}
                             </span>
                           </td>
@@ -2964,58 +3368,61 @@ export default function BookServiceDetails() {
               </div>
             )}
           </Card>
+          )}
 
-          <Card className="p-6">
-            <h3 className="font-semibold mb-4">Actions</h3>
-            <div className="space-y-3">
-              {service.status !== 'completed' && service.status !== 'cancelled' && (
-                <>
-                  <Button
-                    variant={rescheduling ? 'default' : 'outline'}
-                    className={`w-full ${rescheduleDisabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed dark:border dark:border-white' : ''}`}
-                    onClick={() => {
-                      if (rescheduleDisabled) return;
-                      setRescheduling(!rescheduling);
-                    }}
-                    disabled={rescheduleDisabled}
-                    title={rescheduleDisabled ? 'Rescheduling disabled after a quotation is created' : undefined}
-                  >
-                    {rescheduling ? 'Close' : 'Reschedule'}
-                  </Button>
-                  <Button
-                    className={`w-full ${canInvoice ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500'}`}
-                    onClick={markComplete}
-                    disabled={!canInvoice}
-                    title={canInvoice ? 'Create invoice and mark complete' : 'Requires accepted quotation'}
-                  >
-                    {canInvoice ? 'Create Invoice & Complete Service' : 'Mark Complete (needs quote)'}
-                  </Button>
-                  {!canInvoice && (
-                    <p className="text-[11px] text-red-600">Accept the quotation before generating an invoice.</p>
-                  )}
-                </>
-              )}
-              <Button
-                variant="destructive"
-                className={`w-full ${service.status === 'completed' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
-                onClick={() => deleteService()}
-                disabled={service.status === 'cancelled' || service.status === 'completed'}
-              >
-                {service.status === 'cancelled'
-                  ? 'Cancelled'
-                  : service.status === 'completed'
-                    ? 'Work is Completed'
-                    : 'Cancel Booking'}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => router.push('/admin/book-service')}
-              >
-                Back to List
-              </Button>
-            </div>
-          </Card>
+          {!isEmployee && (
+            <Card className="p-3 md:p-6">
+              <h3 className="font-semibold mb-4">Actions</h3>
+              <div className="space-y-3">
+                {service.status !== 'completed' && service.status !== 'cancelled' && (
+                  <>
+                    <Button
+                      variant={rescheduling ? 'default' : 'outline'}
+                      className={`w-full ${rescheduleDisabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed dark:border dark:border-white' : ''}`}
+                      onClick={() => {
+                        if (rescheduleDisabled) return;
+                        setRescheduling(!rescheduling);
+                      }}
+                      disabled={rescheduleDisabled}
+                      title={rescheduleDisabled ? 'Rescheduling disabled after a quotation is created' : undefined}
+                    >
+                      {rescheduling ? 'Close' : 'Reschedule'}
+                    </Button>
+                    <Button
+                      className={`w-full ${canInvoice ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500'}`}
+                      onClick={markComplete}
+                      disabled={!canInvoice}
+                      title={canInvoice ? 'Create invoice and mark complete' : 'Requires accepted quotation'}
+                    >
+                      {canInvoice ? 'Create Invoice & Complete Service' : 'Mark Complete (needs quote)'}
+                    </Button>
+                    {!canInvoice && (
+                      <p className="text-[11px] text-red-600">Accept the quotation before generating an invoice.</p>
+                    )}
+                  </>
+                )}
+                <Button
+                  variant="destructive"
+                  className={`w-full ${service.status === 'completed' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}`}
+                  onClick={() => deleteService()}
+                  disabled={service.status === 'cancelled' || service.status === 'completed'}
+                >
+                  {service.status === 'cancelled'
+                    ? 'Cancelled'
+                    : service.status === 'completed'
+                      ? 'Work is Completed'
+                      : 'Cancel Booking'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => router.push('/admin/book-service')}
+                >
+                  Back to List
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Invoice Section */}
           {Array.isArray(service.invoices) && service.invoices.length > 0 && (
@@ -3063,7 +3470,7 @@ export default function BookServiceDetails() {
             </Card>
           )}
           {!service.invoices && service.invoiceId && (
-            <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
+            <Card className="p-3 md:p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
               <div className="flex items-center gap-2 mb-4">
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -3092,7 +3499,7 @@ export default function BookServiceDetails() {
           )}
 
           {/* History */}
-          <Card className="p-6">
+          <Card className="p-3 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">History</h3>
               <span className="text-[11px] text-gray-500">Latest activity</span>
@@ -3125,7 +3532,7 @@ export default function BookServiceDetails() {
 
           {/* Reschedule Form */}
           {rescheduling && !rescheduleDisabled && service.status !== 'completed' && service.status !== 'cancelled' && (
-            <Card className="p-6 bg-blue-50">
+            <Card className="p-3 md:p-6 bg-blue-50">
               <h3 className="font-semibold mb-3 dark:text-gray-800">Reschedule Service</h3>
               <div className="space-y-3">
                 <div>
@@ -3299,7 +3706,7 @@ export default function BookServiceDetails() {
       {/* Quotation Modal */}
       {showQuotationModal && service && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowQuotationModal(false)} />
-          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full z-10 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-2xl max-w-7xl w-full z-10 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">{quotation ? 'Update Quotation' : 'Create Quotation'}</h2>
               <button
@@ -3311,10 +3718,11 @@ export default function BookServiceDetails() {
                 </svg>
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-2 md:p-6">
               <QuotationForm
                 quotation={quotation || quotationSeed}
                 serviceBookingId={service.id}
+                jobCardNo={service.jobCardNo}
                 vehiclesList={service?.customerType === 'b2b' ? (Array.isArray(service.vehicles) ? service.vehicles : []) : undefined}
                 onCreated={(quoteId, meta) => {
                   setShowQuotationModal(false);

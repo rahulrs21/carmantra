@@ -281,10 +281,10 @@ export default function AdminLogin() {
             </div>
 
             <div className="text-center text-xs text-gray-600 mt-4 pt-4 border-t border-gray-200">
-              <p>Need to set up admin access?</p>
-              <a href="/admin/setup" className="text-blue-600 hover:text-blue-700 font-semibold">
+              {/* <p>Need to set up admin access?</p> */}
+              {/* <a href="/admin/setup" className="text-blue-600 hover:text-blue-700 font-semibold">
                 Create your first admin account →
-              </a>
+              </a> */}
             </div>
           </form>
 

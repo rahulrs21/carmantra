@@ -20,11 +20,18 @@ interface Task {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   category: 'maintenance' | 'service' | 'inspection' | 'other';
   status: 'notStarted' | 'inProgress' | 'completed' | 'verified';
-  deadline: string;
+  deadline: string | { seconds: number } | Date;
   createdAt: { seconds: number };
   updatedAt: { seconds: number };
   completedAt?: { seconds: number };
   comments: number;
+  observedByUserId?: string;
+  observedByRole?: string;
+  observedByName?: string;
+  jobCardNo?: string;
+  companyId?: string;
+  serviceBookingId?: string;
+  vehicleId?: string;
 }
 
 interface Employee {
@@ -33,13 +40,19 @@ interface Employee {
   email: string;
 }
 
+interface ObserverUser {
+  id: string;
+  name: string;
+  role: string;
+}
+
 const TASK_CATEGORIES = ['Maintenance', 'Service', 'Inspection', 'Other'];
 const TASK_PRIORITIES = ['Low', 'Medium', 'High', 'Urgent'];
 const TASK_STATUSES = [
   { key: 'notStarted', label: 'Not Started', color: 'bg-gray-100 text-gray-800' },
   { key: 'inProgress', label: 'In Progress', color: 'bg-blue-100 text-blue-800' },
-  { key: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
-  { key: 'verified', label: 'Verified', color: 'bg-purple-100 text-purple-800' },
+  { key: 'completed', label: 'Completed', color: 'bg-yellow-100 text-yellow-800' },
+  { key: 'verified', label: 'Verified', color: 'bg-green-300 text-green-800' },
 ];
 
 const PRIORITY_COLORS = {
@@ -49,22 +62,67 @@ const PRIORITY_COLORS = {
   urgent: 'bg-red-100 text-red-800',
 };
 
+// Helper function to parse deadline from various formats
+function parseDeadlineDate(deadline: string | { seconds: number } | Date | undefined): Date | null {
+  if (!deadline) return null;
+
+  try {
+    // If it's a Firestore Timestamp object
+    if (typeof deadline === 'object' && 'seconds' in deadline) {
+      return new Date(deadline.seconds * 1000);
+    }
+    // If it's already a Date
+    if (deadline instanceof Date) {
+      return deadline;
+    }
+    // If it's a string
+    if (typeof deadline === 'string') {
+      const date = new Date(deadline);
+      // Check if the date is valid
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing deadline:', error);
+  }
+  return null;
+}
+
+// Format date as DD/MM/YYYY
+function formatDateDDMMYYYY(date: Date | null): string {
+  if (!date) return 'No deadline';
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${day}/${month}/${year}`;
+}
+
 export default function TaskManagementPage() {
   const { role } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [observerUsers, setObserverUsers] = useState<ObserverUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterDateRange, setFilterDateRange] = useState<string>('thisMonth');
+  const [customDateStart, setCustomDateStart] = useState<string>('');
+  const [customDateEnd, setCustomDateEnd] = useState<string>('');
 
   // Form state with proper typing
   const [formData, setFormData] = useState<{
     title: string;
     description: string;
     assignedTo: string[];
+    observedByUserId: string;
+    observedByRole: 'admin' | 'manager' | 'sales' | 'accounts' | '';
+    observedByName: string;
     priority: 'low' | 'medium' | 'high' | 'urgent';
     category: 'maintenance' | 'service' | 'inspection' | 'other';
     deadline: string;
@@ -72,12 +130,58 @@ export default function TaskManagementPage() {
     title: '',
     description: '',
     assignedTo: [],
+    observedByUserId: '',
+    observedByRole: '',
+    observedByName: '',
     priority: 'medium',
     category: 'maintenance',
     deadline: '',
   });
 
   const isAuthorized = role && ['admin', 'manager', 'sales'].includes(role);
+
+  // Date filter helper functions
+  const getDateRangeForFilter = (rangeType: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let startDate: Date, endDate: Date;
+
+    switch (rangeType) {
+      case 'today':
+        startDate = new Date(today);
+        endDate = new Date(today);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'yesterday':
+        startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - 1);
+        endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'thisMonth':
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'lastMonth':
+        startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'custom':
+        startDate = customDateStart ? new Date(customDateStart) : today;
+        endDate = customDateEnd ? new Date(customDateEnd) : today;
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      default:
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
+    }
+
+    return { startDate, endDate };
+  };
 
   // Fetch employees
   useEffect(() => {
@@ -100,6 +204,30 @@ export default function TaskManagementPage() {
     fetchEmployees();
   }, []);
 
+  // Fetch observer users from users collection
+  useEffect(() => {
+    const fetchObserverUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const usersList = snapshot.docs
+          .map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.displayName || data.name || 'User',
+              role: data.role || '',
+            };
+          })
+          .filter(user => ['admin', 'manager', 'sales', 'accounts'].includes(user.role))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setObserverUsers(usersList);
+      } catch (error) {
+        console.error('Error fetching observer users:', error);
+      }
+    };
+    fetchObserverUsers();
+  }, []);
+
   // Fetch tasks
   useEffect(() => {
     const q = query(collection(db, 'tasks'));
@@ -108,7 +236,7 @@ export default function TaskManagementPage() {
         id: doc.id,
         ...doc.data(),
       })) as Task[];
-      
+
       setTasks(taskList.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds));
       setLoading(false);
     });
@@ -139,6 +267,9 @@ export default function TaskManagementPage() {
         category: formData.category,
         status: 'notStarted',
         deadline: formData.deadline,
+        observedByUserId: formData.observedByUserId,
+        observedByRole: formData.observedByRole,
+        observedByName: formData.observedByName,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         comments: 0,
@@ -161,6 +292,9 @@ export default function TaskManagementPage() {
         title: '',
         description: '',
         assignedTo: [],
+        observedByUserId: '',
+        observedByRole: '',
+        observedByName: '',
         priority: 'medium',
         category: 'maintenance',
         deadline: '',
@@ -186,10 +320,16 @@ export default function TaskManagementPage() {
 
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         task.description.toLowerCase().includes(searchTerm.toLowerCase());
+      task.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
     const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
-    return matchesSearch && matchesStatus && matchesPriority;
+
+    // Date filter
+    const { startDate, endDate } = getDateRangeForFilter(filterDateRange);
+    const taskDate = new Date(task.createdAt.seconds * 1000);
+    const matchesDate = taskDate >= startDate && taskDate <= endDate;
+
+    return matchesSearch && matchesStatus && matchesPriority && matchesDate;
   });
 
   const getStatusIcon = (status: string) => {
@@ -205,8 +345,10 @@ export default function TaskManagementPage() {
     }
   };
 
-  const isOverdue = (deadline: string) => {
-    return new Date(deadline) < new Date() ? true : false;
+  const isOverdue = (deadline: string | { seconds: number } | Date | undefined) => {
+    const deadlineDate = parseDeadlineDate(deadline);
+    if (!deadlineDate) return false;
+    return deadlineDate < new Date() ? true : false;
   };
 
   return (
@@ -246,6 +388,9 @@ export default function TaskManagementPage() {
                       title: '',
                       description: '',
                       assignedTo: [],
+                      observedByUserId: '',
+                      observedByRole: '',
+                      observedByName: '',
                       priority: 'medium',
                       category: 'maintenance',
                       deadline: '',
@@ -261,128 +406,165 @@ export default function TaskManagementPage() {
               {/* Modal Body */}
               <div className="p-4 sm:p-6">
                 <form onSubmit={handleCreateTask} className="space-y-4">
-              {/* Title */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Task Title *</label>
-                <Input
-                  type="text"
-                  placeholder="e.g., Service Vehicle Oil Change"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="border-2 border-gray-300 focus:border-orange-500"
-                />
-              </div>
+                  {/* Title */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Task Title *</label>
+                    <Input
+                      type="text"
+                      placeholder="e.g., Service Vehicle Oil Change"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      className="border-2 border-gray-300 focus:border-orange-500"
+                    />
+                  </div>
 
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                <textarea
-                  placeholder="Detailed task description..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 resize-none"
-                  rows={4}
-                />
-              </div>
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                    <textarea
+                      placeholder="Detailed task description..."
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 resize-none"
+                      rows={4}
+                    />
+                  </div>
 
-              {/* Assign To */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To *</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
-                  {employees.map(emp => (
-                    <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.assignedTo.includes(emp.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setFormData(prev => ({
-                              ...prev,
-                              assignedTo: [...prev.assignedTo, emp.id],
-                            }));
-                          } else {
-                            setFormData(prev => ({
-                              ...prev,
-                              assignedTo: prev.assignedTo.filter(id => id !== emp.id),
-                            }));
-                          }
-                        }}
-                        className="w-4 h-4 rounded"
-                      />
-                      <span className="text-sm text-gray-700">{emp.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                  {/* Assign To */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To *</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
+                      {employees.map(emp => (
+                        <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.assignedTo.includes(emp.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  assignedTo: [...prev.assignedTo, emp.id],
+                                }));
+                              } else {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  assignedTo: prev.assignedTo.filter(id => id !== emp.id),
+                                }));
+                              }
+                            }}
+                            className="w-4 h-4 rounded"
+                          />
+                          <span className="text-sm text-gray-700">{emp.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Priority & Category */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Priority *</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
-                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500"
-                  >
-                    {TASK_PRIORITIES.map(p => (
-                      <option key={p} value={p.toLowerCase()}>{p}</option>
-                    ))}
-                  </select>
-                </div>
+                  {/* Priority & Category */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Priority *</label>
+                      <select
+                        value={formData.priority}
+                        onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500"
+                      >
+                        {TASK_PRIORITIES.map(p => (
+                          <option key={p} value={p.toLowerCase()}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
-                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500"
-                  >
-                    {TASK_CATEGORIES.map(c => (
-                      <option key={c} value={c.toLowerCase()}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                      <select
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500"
+                      >
+                        {TASK_CATEGORIES.map(c => (
+                          <option key={c} value={c.toLowerCase()}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
-              {/* Deadline */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline *</label>
-                <Input
-                  type="date"
-                  value={formData.deadline}
-                  onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                  className="border-2 border-gray-300 focus:border-orange-500"
-                />
-              </div>
+                  {/* Observed By */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Observed By</label>
+                    <select
+                      value={formData.observedByUserId}
+                      onChange={(e) => {
+                        const selectedUser = observerUsers.find(u => u.id === e.target.value);
+                        setFormData(prev => ({
+                          ...prev,
+                          observedByUserId: e.target.value,
+                          observedByRole: (selectedUser?.role as 'admin' | 'manager' | 'sales' | 'accounts') || '',
+                          observedByName: selectedUser?.name || '',
+                        }));
+                      }}
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                    >
+                      <option value="">Select Observer...</option>
+                      {observerUsers.length === 0 ? (
+                        <option disabled>No users found with admin roles</option>
+                      ) : (
+                        observerUsers.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} - {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    {formData.observedByName && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        Selected: {formData.observedByName} ({formData.observedByRole})
+                      </p>
+                    )}
+                  </div>
 
-              {/* Buttons */}
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setEditingTaskId(null);
-                    setFormData({
-                      title: '',
-                      description: '',
-                      assignedTo: [],
-                      priority: 'medium',
-                      category: 'maintenance',
-                      deadline: '',
-                    });
-                  }}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1 bg-orange-600 hover:bg-orange-700"
-                >
-                  {editingTaskId ? 'Update Task' : 'Create Task'}
-                </Button>
-              </div>
+                  {/* Deadline */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline *</label>
+                    <Input
+                      type="date"
+                      value={formData.deadline}
+                      onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                      className="border-2 border-gray-300 focus:border-orange-500"
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateForm(false);
+                        setEditingTaskId(null);
+                        setFormData({
+                          title: '',
+                          description: '',
+                          assignedTo: [],
+                          observedByUserId: '',
+                          observedByRole: '',
+                          observedByName: '',
+                          priority: 'medium',
+                          category: 'maintenance',
+                          deadline: '',
+                        });
+                      }}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1 bg-orange-600 hover:bg-orange-700"
+                    >
+                      {editingTaskId ? 'Update Task' : 'Create Task'}
+                    </Button>
+                  </div>
                 </form>
               </div>
             </div>
@@ -391,7 +573,7 @@ export default function TaskManagementPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Input
               type="text"
               placeholder="🔍 Search tasks..."
@@ -421,7 +603,43 @@ export default function TaskManagementPage() {
                 <option key={p} value={p.toLowerCase()}>{p}</option>
               ))}
             </select>
+
+            <select
+              value={filterDateRange}
+              onChange={(e) => setFilterDateRange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-lg text-sm"
+            >
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="thisMonth">This Month</option>
+              <option value="lastMonth">Last Month</option>
+              <option value="custom">Custom Range</option>
+            </select>
           </div>
+
+          {/* Custom date range inputs */}
+          {filterDateRange === 'custom' && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
+                <Input
+                  type="date"
+                  value={customDateStart}
+                  onChange={(e) => setCustomDateStart(e.target.value)}
+                  className="border-2 border-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                <Input
+                  type="date"
+                  value={customDateEnd}
+                  onChange={(e) => setCustomDateEnd(e.target.value)}
+                  className="border-2 border-gray-300"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tasks List */}
@@ -449,6 +667,7 @@ export default function TaskManagementPage() {
                     <th className="hidden md:table-cell text-left px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700">Assigned To</th>
                     <th className="hidden sm:table-cell text-left px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700">Priority</th>
                     <th className="hidden sm:table-cell text-left px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700">Status</th>
+                    <th className="hidden lg:table-cell text-left px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700">Observer</th>
                     <th className="hidden lg:table-cell text-left px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700">Deadline</th>
                     <th className="text-center px-4 sm:px-6 py-3 text-sm font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -457,9 +676,24 @@ export default function TaskManagementPage() {
                   {filteredTasks.map(task => (
                     <tr key={task.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                       <td className="px-4 sm:px-6 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{task.title}</p>
-                          <p className="text-xs text-gray-500 mt-1">{task.category}</p>
+                        <div> 
+                          <p className="text-xs font-medium text-gray-900 break-words">
+                            {task.title}
+                            {task.jobCardNo && task.companyId && (
+                              <>
+                                {": "}
+                                {task.jobCardNo} 
+                              </>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {task.category}
+                            {task.jobCardNo && task.companyId && (
+                              <> 
+                                <span className=" text-xs text-blue-500 ml-2">| B2B Service</span>
+                              </>
+                            )}  
+                          </p>
                         </div>
                       </td>
 
@@ -483,21 +717,29 @@ export default function TaskManagementPage() {
                       <td className="hidden sm:table-cell px-4 sm:px-6 py-4">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(task.status)}
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                            TASK_STATUSES.find(s => s.key === task.status)?.color || ''
-                          }`}>
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${TASK_STATUSES.find(s => s.key === task.status)?.color || ''
+                            }`}>
                             {TASK_STATUSES.find(s => s.key === task.status)?.label}
                           </span>
                         </div>
                       </td>
 
                       <td className="hidden lg:table-cell px-4 sm:px-6 py-4">
-                        <span className={`text-xs font-medium ${
-                          isOverdue(task.deadline) && task.status !== 'completed' && task.status !== 'verified'
+                        {task.observedByName ? (
+                          <span className="text-xs font-medium text-purple-700 bg-purple-100 px-3 py-1 rounded-full capitalize">
+                            {task.observedByName} ({task.observedByRole})
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">-</span>
+                        )}
+                      </td>
+
+                      <td className="hidden lg:table-cell px-4 sm:px-6 py-4">
+                        <span className={`text-xs font-medium ${isOverdue(task.deadline) && task.status !== 'completed' && task.status !== 'verified'
                             ? 'text-red-600 font-bold'
                             : 'text-gray-700'
-                        }`}>
-                          {new Date(task.deadline).toLocaleDateString()}
+                          }`}>
+                          {formatDateDDMMYYYY(parseDeadlineDate(task.deadline))}
                         </span>
                       </td>
 
@@ -508,25 +750,40 @@ export default function TaskManagementPage() {
                               <button
                                 onClick={() => {
                                   setEditingTaskId(task.id);
+                                  const deadlineDate = parseDeadlineDate(task.deadline);
+                                  const deadlineString = deadlineDate
+                                    ? deadlineDate.toISOString().split('T')[0]
+                                    : '';
                                   const formDataToSet: typeof formData = {
                                     title: task.title,
                                     description: task.description,
                                     assignedTo: task.assignedTo,
+                                    observedByUserId: task.observedByUserId || '',
+                                    observedByRole: (task.observedByRole as 'admin' | 'manager' | 'sales' | 'accounts' | '') || '',
+                                    observedByName: task.observedByName || '',
                                     priority: task.priority as any,
                                     category: task.category as any,
-                                    deadline: task.deadline,
+                                    deadline: deadlineString,
                                   };
                                   setFormData(formDataToSet);
                                   setShowCreateForm(true);
                                 }}
-                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                disabled={task.status === 'verified'}
+                                className={`p-1.5 rounded transition-colors ${task.status === 'verified'
+                                    ? 'text-gray-400 cursor-not-allowed'
+                                    : 'text-blue-600 hover:bg-blue-100'
+                                  }`}
                                 title="Edit"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDeleteTask(task.id)}
-                                className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                disabled={task.status === 'verified'}
+                                className={`p-1.5 rounded transition-colors ${task.status === 'verified'
+                                    ? 'text-gray-400 cursor-not-allowed'
+                                    : 'text-red-600 hover:bg-red-100'
+                                  }`}
                                 title="Delete"
                               >
                                 <Trash2 className="w-4 h-4" />

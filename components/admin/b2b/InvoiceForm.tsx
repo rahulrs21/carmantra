@@ -38,7 +38,6 @@ const invoiceSchema = z.object({
   amountStatus: z.enum(['pending', 'paid', 'cancelled']).optional(),
   cancellationReason: z.string().optional(),
   paymentMethod: z.string().optional(),
-  dueDate: z.string().optional(),
   showReferralCommission: z.boolean().optional(),
   notes: z.string().optional(),
 });
@@ -112,7 +111,6 @@ export function InvoiceForm({
       amountStatus: invoice?.amountStatus || 'pending',
       cancellationReason: invoice?.cancellationReason || '',
       paymentMethod: invoice?.paymentMethod || quotationPaymentMethod || '',
-      dueDate: invoice?.dueDate || '',
       showReferralCommission: invoice?.showReferralCommission || false,
       notes: invoice?.notes || '',
     },
@@ -299,20 +297,6 @@ export function InvoiceForm({
                     <FormLabel>Payment Method</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., Bank Transfer, Cash, Check" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="dueDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Due Date</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

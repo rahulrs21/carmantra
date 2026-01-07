@@ -13,12 +13,14 @@ export default function QuotationForm({
   onCreated, 
   onCancel,
   serviceBookingId,
+  jobCardNo,
   vehiclesList,
 }: { 
   quotation?: any; 
   onCreated?: (id: string, meta?: { status?: string }) => void; 
   onCancel?: () => void;
   serviceBookingId?: string;
+  jobCardNo?: string;
   vehiclesList?: any[];
 }) {
   const [customerType, setCustomerType] = useState<'b2c' | 'b2b'>('b2c');
@@ -45,6 +47,7 @@ export default function QuotationForm({
   const [status, setStatus] = useState('pending');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [expandCustomerVehicle, setExpandCustomerVehicle] = useState(false);
 
   const linkedServiceId = serviceBookingId || quotation?.serviceBookingId;
 
@@ -234,6 +237,7 @@ export default function QuotationForm({
         paymentTerms,
         notes,
         status,
+        jobCardNo: jobCardNo || quotation?.jobCardNo,
         updatedAt: Timestamp.now(),
       };
 
@@ -351,243 +355,275 @@ export default function QuotationForm({
         </div>
       )}
 
-      {/* Customer Information */}
-      <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-        <div className="flex items-center justify-between gap-3 mb-1">
-          <div>
-            <h3 className="font-semibold text-gray-900">Customer Information</h3>
-            {/* <p className="text-xs text-gray-500">Toggle B2C or B2B and fill the matching fields</p> */}
-          </div>
-          <div className="flex gap-2 text-xs">
-            <button
-              type="button"
-              disabled={customerType === 'b2b'}
-              className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
-              onClick={() => setCustomerType('b2c')}
+      {/* Customer & Vehicle Information - Collapsible Section */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setExpandCustomerVehicle(!expandCustomerVehicle)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-150 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <svg 
+              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${expandCustomerVehicle ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
             >
-              B2C
-            </button>
-            <button
-              type="button"
-              disabled={customerType === 'b2c'}
-              className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
-              onClick={() => setCustomerType('b2b')}
-            >
-              B2B
-            </button>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+            <span className="text-sm font-semibold text-gray-700">Dropdown to view more about customer & vehicle info</span>
           </div>
-        </div>
+          <span className="text-xs font-medium text-gray-500 bg-white px-2 py-1 rounded">
+            {expandCustomerVehicle ? 'Hide' : 'Show'}
+          </span>
+        </button>
 
-        {customerType === 'b2b' ? (
-          <div className="grid grid-cols-2 gap-3 opacity-80 select-none pointer-events-none">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
-              <input
-                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
-                value={companyName}
-                readOnly
-                tabIndex={-1}
-                placeholder="Enter company name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
-              <input
-                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
-                value={contactName}
-                readOnly
-                tabIndex={-1}
-                placeholder="Enter contact person"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Mobile</label>
-              <input
-                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
-                value={contactMobile}
-                readOnly
-                tabIndex={-1}
-                placeholder="e.g., +971 50 123 4567"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
-              <input
-                type="email"
-                className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
-                value={contactEmail}
-                readOnly
-                tabIndex={-1}
-                placeholder="contact@company.com"
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
-              <input 
-                className="w-full border border-gray-300 p-2 rounded" 
-                value={customerName} 
-                onChange={e => setCustomerName(e.target.value)} 
-                placeholder="Enter customer name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-              <input 
-                className="w-full border border-gray-300 p-2 rounded" 
-                value={customerMobile} 
-                onChange={e => setCustomerMobile(e.target.value)}
-                placeholder="e.g., +971 50 123 4567"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input 
-                type="email"
-                className="w-full border border-gray-300 p-2 rounded" 
-                value={customerEmail} 
-                onChange={e => setCustomerEmail(e.target.value)}
-                placeholder="customer@example.com"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Vehicle Information */}
-      <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900">Vehicle Information</h3>
-          {customerType === 'b2b' && vehiclesList && vehiclesList.length > 0 && (
-            <span className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium">
-              {vehiclesList.length} vehicle{vehiclesList.length > 1 ? 's' : ''} added
-            </span>
-          )}
-        </div>
-        {customerType === 'b2b' ? (
-          <div className="space-y-4">
-            {vehiclesList && vehiclesList.length > 0 ? (
-              <>
-                <div className="mb-2 text-sm text-gray-700 font-medium">
-                  Number of Vehicles: <span className="font-bold">{vehiclesList.length}</span>
+        {/* Collapsible Content */}
+        {expandCustomerVehicle && (
+          <div className="bg-white border-t border-gray-200 space-y-3 p-2 md:p-6">
+            {/* Customer Information */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Customer Information</h3>
                 </div>
-                {vehiclesList.map((vehicle, idx) => (
-                  <div key={idx} className="rounded-lg border border-gray-100 bg-gray-50/60 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-gray-800">Vehicle {idx + 1}</span>
-                      {vehicle.category ? (
-                        <span className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-800 ml-2">Category: {vehicle.category}</span>
-                      ) : null}
+                <div className="flex gap-2 text-xs">
+                  <button
+                    type="button"
+                    disabled={customerType === 'b2b'}
+                    className={`px-3 py-1 rounded border ${customerType === 'b2c' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700'}`}
+                    onClick={() => setCustomerType('b2c')}
+                  >
+                    B2C
+                  </button>
+                  <button
+                    type="button"
+                    disabled={customerType === 'b2c'}
+                    className={`px-3 py-1 rounded border ${customerType === 'b2b' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'}`}
+                    onClick={() => setCustomerType('b2b')}
+                  >
+                    B2B
+                  </button>
+                </div>
+              </div>
+
+              {customerType === 'b2b' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 opacity-80 select-none pointer-events-none">
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                    <input
+                      className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                      value={companyName}
+                      readOnly
+                      tabIndex={-1}
+                      placeholder="Enter company name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person *</label>
+                    <input
+                      className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                      value={contactName}
+                      readOnly
+                      tabIndex={-1}
+                      placeholder="Enter contact person"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Mobile</label>
+                    <input
+                      className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                      value={contactMobile}
+                      readOnly
+                      tabIndex={-1}
+                      placeholder="e.g., +971 50 123 4567"
+                    />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                    <input
+                      type="email"
+                      className="w-full border border-gray-200 bg-gray-100 p-2 rounded font-semibold"
+                      value={contactEmail}
+                      readOnly
+                      tabIndex={-1}
+                      placeholder="contact@company.com"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
+                    <input 
+                      className="w-full border border-gray-300 p-2 rounded" 
+                      value={customerName} 
+                      onChange={e => setCustomerName(e.target.value)} 
+                      placeholder="Enter customer name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
+                    <input 
+                      className="w-full border border-gray-300 p-2 rounded" 
+                      value={customerMobile} 
+                      onChange={e => setCustomerMobile(e.target.value)}
+                      placeholder="e.g., +971 50 123 4567"
+                    />
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input 
+                      type="email"
+                      className="w-full border border-gray-300 p-2 rounded" 
+                      value={customerEmail} 
+                      onChange={e => setCustomerEmail(e.target.value)}
+                      placeholder="customer@example.com"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Vehicle Information */}
+            <div className="border-t border-gray-200 pt-6 space-y-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Vehicle Information</h3>
+                {customerType === 'b2b' && vehiclesList && vehiclesList.length > 0 && (
+                  <span className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+                    {vehiclesList.length} vehicle{vehiclesList.length > 1 ? 's' : ''} added
+                  </span>
+                )}
+              </div>
+              {customerType === 'b2b' ? (
+                <div className="space-y-4">
+                  {vehiclesList && vehiclesList.length > 0 ? (
+                    <>
+                      <div className="mb-2 text-sm text-gray-700 font-medium">
+                        Number of Vehicles: <span className="font-bold">{vehiclesList.length}</span>
+                      </div>
+                      {vehiclesList.map((vehicle, idx) => (
+                        <div key={idx} className="rounded-lg border border-gray-100 bg-gray-50/60 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-800">Vehicle {idx + 1}</span>
+                            {vehicle.category ? (
+                              <span className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-800 ml-2">Category: {vehicle.category}</span>
+                            ) : null}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                            <div className="flex justify-between sm:flex-col">
+                              <span className="text-gray-600 sm:text-xs sm:font-medium">Type:</span>
+                              <span className="font-semibold">{vehicle.vehicleType || '-'}</span>
+                            </div>
+                            <div className="flex justify-between sm:flex-col">
+                              <span className="text-gray-600 sm:text-xs sm:font-medium">Brand:</span>
+                              <span className="font-semibold">{vehicle.vehicleBrand || '-'}</span>
+                            </div>
+                            <div className="flex justify-between sm:flex-col">
+                              <span className="text-gray-600 sm:text-xs sm:font-medium">Model:</span>
+                              <span className="font-semibold">{vehicle.modelName || '-'}</span>
+                            </div>
+                            <div className="flex justify-between sm:flex-col">
+                              <span className="text-gray-600 sm:text-xs sm:font-medium">Number Plate:</span>
+                              <span className="font-semibold">{vehicle.numberPlate || '-'}</span>
+                            </div>
+                            <div className="flex justify-between sm:flex-col">
+                              <span className="text-gray-600 sm:text-xs sm:font-medium">Fuel Type:</span>
+                              <span className="font-semibold">{vehicle.fuelType || '-'}</span>
+                            </div>
+                            <div className="flex justify-between sm:flex-col">
+                              <span className="text-gray-600 sm:text-xs sm:font-medium">VIN:</span>
+                              <span className="font-semibold">{vehicle.vinNumber || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="text-sm text-gray-500">No vehicles added.</div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
+                      <select 
+                        className="w-full border border-gray-300 p-2 rounded" 
+                        value={vehicleType} 
+                        onChange={e => setVehicleType(e.target.value)}
+                      >
+                        <option value="">Select Type</option>
+                        <option value="sedan">Sedan</option>
+                        <option value="suv">SUV</option>
+                        <option value="hatchback">Hatchback</option>
+                        <option value="coupe">Coupe</option>
+                        <option value="truck">Truck</option>
+                      </select>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Type:</span>
-                        <span className="font-semibold">{vehicle.vehicleType || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Brand:</span>
-                        <span className="font-semibold">{vehicle.vehicleBrand || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Model:</span>
-                        <span className="font-semibold">{vehicle.modelName || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Number Plate:</span>
-                        <span className="font-semibold">{vehicle.numberPlate || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Fuel Type:</span>
-                        <span className="font-semibold">{vehicle.fuelType || '-'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">VIN:</span>
-                        <span className="font-semibold">{vehicle.vinNumber || '-'}</span>
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                      <input 
+                        className="w-full border border-gray-300 p-2 rounded" 
+                        value={vehicleBrand} 
+                        onChange={e => setVehicleBrand(e.target.value)}
+                        placeholder="e.g., Toyota"
+                      />
                     </div>
                   </div>
-                ))}
-              </>
-            ) : (
-              <div className="text-sm text-gray-500">No vehicles added.</div>
-            )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                      <input 
+                        className="w-full border border-gray-300 p-2 rounded" 
+                        value={vehicleModel} 
+                        onChange={e => setVehicleModel(e.target.value)}
+                        placeholder="e.g., Camry"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Plate Number</label>
+                      <input 
+                        className="w-full border border-gray-300 p-2 rounded" 
+                        value={vehiclePlate} 
+                        onChange={e => setVehiclePlate(e.target.value)}
+                        placeholder="e.g., ABC-1234"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
+                      <input
+                        className="w-full border border-gray-300 p-2 rounded"
+                        value={vehicleVin}
+                        onChange={e => setVehicleVin(e.target.value)}
+                        placeholder="Enter VIN"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
+                      <input 
+                        className="w-full border border-gray-300 p-2 rounded" 
+                        value={serviceCategory} 
+                        onChange={e => setServiceCategory(e.target.value)}
+                        placeholder="e.g., Car Wash, Oil Change"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
-                <select 
-                  className="w-full border border-gray-300 p-2 rounded" 
-                  value={vehicleType} 
-                  onChange={e => setVehicleType(e.target.value)}
-                >
-                  <option value="">Select Type</option>
-                  <option value="sedan">Sedan</option>
-                  <option value="suv">SUV</option>
-                  <option value="hatchback">Hatchback</option>
-                  <option value="coupe">Coupe</option>
-                  <option value="truck">Truck</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-                <input 
-                  className="w-full border border-gray-300 p-2 rounded" 
-                  value={vehicleBrand} 
-                  onChange={e => setVehicleBrand(e.target.value)}
-                  placeholder="e.g., Toyota"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-                <input 
-                  className="w-full border border-gray-300 p-2 rounded" 
-                  value={vehicleModel} 
-                  onChange={e => setVehicleModel(e.target.value)}
-                  placeholder="e.g., Camry"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plate Number</label>
-                <input 
-                  className="w-full border border-gray-300 p-2 rounded" 
-                  value={vehiclePlate} 
-                  onChange={e => setVehiclePlate(e.target.value)}
-                  placeholder="e.g., ABC-1234"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">VIN (optional)</label>
-                <input
-                  className="w-full border border-gray-300 p-2 rounded"
-                  value={vehicleVin}
-                  onChange={e => setVehicleVin(e.target.value)}
-                  placeholder="Enter VIN"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Service Category</label>
-                <input 
-                  className="w-full border border-gray-300 p-2 rounded" 
-                  value={serviceCategory} 
-                  onChange={e => setServiceCategory(e.target.value)}
-                  placeholder="e.g., Car Wash, Oil Change"
-                />
-              </div>
-            </div>
-          </>
         )}
       </div>
-
       {/* Service Items */}
       <div>
+
+         <div>
+          <p className='text-md text-center mb-2 w-full border  border-blue-100 py-2'>Job Card: <span className='bg-blue-300 p-1 rounded font-semibold'>{jobCardNo || 'N/A'}</span></p>
+        </div>
+       
         <div className="flex items-center justify-between mb-3">
           <label className="block text-sm font-medium text-gray-700">Service Items *</label>
           <button 
@@ -791,7 +827,7 @@ export default function QuotationForm({
             value={paymentTerms}
             onChange={e => setPaymentTerms(e.target.value)}
             placeholder="e.g., 50% upfront, 50% on completion"
-            rows={2}
+            rows={1}
           />
         </div>
       </div>

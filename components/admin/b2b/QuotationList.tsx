@@ -14,11 +14,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useDeleteQuotation, useCreateInvoice } from '@/hooks/useB2B';
-import { Download, Edit, Trash2, FileText, Trash } from 'lucide-react';
+import { Download, Edit, Trash2, FileText, Trash, Mail } from 'lucide-react';
 import { useContext } from 'react';
 import { UserContext } from '@/lib/userContext';
 import { useToast } from '@/hooks/use-toast';
@@ -59,6 +59,39 @@ const formatDateDDMMYYYY = (date: any) => {
   return `${day}/${month}/${year}`;
 };
 
+// Helper function to get date range based on filter type
+const getDateRange = (filterType: string, customStartDate?: Date, customEndDate?: Date): { start: Date; end: Date } => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  let start = new Date(today);
+  let end = new Date(today);
+  end.setHours(23, 59, 59, 999);
+
+  switch (filterType) {
+    case 'today':
+      break; // Already set to today
+    case 'yesterday':
+      start.setDate(start.getDate() - 1);
+      end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case '30days':
+      start.setDate(start.getDate() - 30);
+      break;
+    case 'custom':
+      if (customStartDate && customEndDate) {
+        start = new Date(customStartDate);
+        start.setHours(0, 0, 0, 0);
+        end = new Date(customEndDate);
+        end.setHours(23, 59, 59, 999);
+      }
+      break;
+  }
+
+  return { start, end };
+};
+
 export function QuotationList({
   companyId,
   serviceId,
@@ -83,6 +116,14 @@ export function QuotationList({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [emailSuccessOpen, setEmailSuccessOpen] = useState(false);
+  const [emailSuccessData, setEmailSuccessData] = useState<{ email: string; quotationNumber: string } | null>(null);
+  const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | '30days' | 'custom'>('today');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [creatingInvoiceId, setCreatingInvoiceId] = useState<string | null>(null);
+  const [invoiceSuccessOpen, setInvoiceSuccessOpen] = useState(false);
 
   // Get newly created quotation ID from sessionStorage on mount
   useEffect(() => {
@@ -212,6 +253,8 @@ export function QuotationList({
     }
 
     try {
+      setCreatingInvoiceId(quotation.id);
+
       // Use serviceId from quotation object if prop serviceId is empty
       const actualServiceId = serviceId || quotation.serviceId;
       const result = await createInvoice.mutateAsync({
@@ -226,11 +269,8 @@ export function QuotationList({
         sessionStorage.setItem('newInvoiceId', result.id);
       }
       
-      toast({
-        title: 'Success',
-        description: 'Invoice created successfully',
-      });
-      onRefresh();
+      // Show success modal
+      setInvoiceSuccessOpen(true);
     } catch (error) {
       console.error('Error creating invoice:', error);
       toast({
@@ -238,6 +278,8 @@ export function QuotationList({
         description: 'Failed to create invoice',
         variant: 'destructive',
       });
+    } finally {
+      setCreatingInvoiceId(null);
     }
   };
 
@@ -294,6 +336,8 @@ export function QuotationList({
             serviceAmount: vehicleServiceCost,
             service: v.serviceTitle || quotation.serviceTitle || 'Service',
             services: v.services || [],
+            jobCardNo: v.jobCardNo || null, // Include jobCardNo from vehicle
+            serviceDate: v.serviceDate || null, // Include service date
           };
         }) || [],
         referralTotal: quotation.referralTotal || 0,
@@ -319,8 +363,189 @@ export function QuotationList({
     }
   };
 
+  const handleSendEmail = async (quotation: any) => {
+    try {
+      setSendingEmailId(quotation.id);
+
+      // Remove "new" badge on interaction
+      setNewQuotationIds((prev) => {
+        const updated = new Set(prev);
+        updated.delete(quotation.id);
+        return updated;
+      });
+
+      // Fetch company data to get email and details
+      let companyData: any = {};
+      if (companyId) {
+        try {
+          const companyDoc = await getDoc(doc(db, 'companies', companyId));
+          if (companyDoc.exists()) {
+            companyData = companyDoc.data();
+          }
+        } catch (err) {
+          console.warn('Could not fetch company data:', err);
+        }
+      }
+
+      const companyEmail = quotation.email || quotation.companyEmail || companyData.email;
+      const companyPhone = quotation.phone || quotation.companyPhone || companyData.phone;
+      const companyName = quotation.companyName || companyData.name;
+      const companyAddress = quotation.companyAddress || companyData.address;
+      const companyCity = quotation.companyCity || companyData.city;
+
+      if (!companyEmail) {
+        toast({
+          title: 'Error',
+          description: 'No email address found for this company',
+          variant: 'destructive',
+        });
+        setSendingEmailId(null);
+        return;
+      }
+
+      // Generate PDF for attachment
+      let pdfAttachment = null;
+      try {
+        const pdfDataUrl = await generateQuotationPDFBlob({
+          quotationNumber: quotation.quotationNumber,
+          date: quotation.quotationDate instanceof Date
+            ? quotation.quotationDate
+            : (quotation.quotationDate as any).toDate?.() || new Date(),
+          company: {
+            name: quotation.companyName || companyData.name || 'N/A',
+            phone: quotation.phone || quotation.companyPhone || companyData.phone,
+            email: quotation.email || quotation.companyEmail || companyData.email,
+            trn: quotation.companyTRN || companyData.trn,
+            address: quotation.companyAddress || companyData.address,
+            city: quotation.companyCity || companyData.city,
+            state: quotation.companyState || companyData.state,
+            zipCode: quotation.companyZipCode || companyData.zipCode,
+          },
+          serviceTitle: quotation.serviceTitle || 'Service',
+          vehicles: quotation.vehicles?.map((v: any) => {
+            let vehicleServiceCost = 0;
+            if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+              vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+            } else {
+              vehicleServiceCost = v.serviceAmount || 0;
+            }
+            return {
+              plate: v.plateNumber || 'N/A',
+              brand: v.brand || 'N/A',
+              model: v.model || 'N/A',
+              year: v.year || 0,
+              serviceAmount: vehicleServiceCost,
+              service: v.serviceTitle || quotation.serviceTitle || 'Service',
+              services: v.services || [],
+              jobCardNo: v.jobCardNo || null,
+              serviceDate: v.serviceDate || null,
+            };
+          }) || [],
+          referralTotal: quotation.referralTotal || 0,
+          subtotal: quotation.subtotal || 0,
+          grandTotal: quotation.totalAmount || 0,
+          status: quotation.status || 'draft',
+          notes: quotation.notes,
+          validityDate: quotation.validityDate,
+          paymentTerms: quotation.paymentTerms,
+          showReferralCommission: quotation.showReferralCommission,
+        });
+
+        // Convert data URL to base64 for attachment
+        if (pdfDataUrl) {
+          const base64Data = pdfDataUrl.split(',')[1] || pdfDataUrl;
+          pdfAttachment = {
+            name: `Quotation_${quotation.quotationNumber}.pdf`,
+            data: base64Data,
+          };
+        }
+      } catch (pdfErr) {
+        console.warn('Could not generate PDF attachment:', pdfErr);
+        // Continue without PDF attachment
+      }
+
+      // Prepare vehicle data for email
+      const vehicles = quotation.vehicles?.map((v: any) => {
+        let vehicleServiceCost = 0;
+        if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+          vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+        } else {
+          vehicleServiceCost = v.serviceAmount || 0;
+        }
+        return {
+          plate: v.plateNumber || 'N/A',
+          brand: v.brand || 'N/A',
+          model: v.model || 'N/A',
+          year: v.year || 0,
+          serviceAmount: vehicleServiceCost,
+        };
+      }) || [];
+
+      // Prepare email payload
+      const emailPayload: any = {
+        emailType: 'quotation-created',
+        name: companyName || 'Valued Customer',
+        email: companyEmail,
+        phone: companyPhone,
+        companyName: companyName,
+        jobCardNo: quotation.jobCardNo || quotation.vehicles?.[0]?.jobCardNo || 'N/A',
+        quotationNumber: quotation.quotationNumber,
+        total: quotation.totalAmount || 0,
+        validityDays: 30,
+        serviceTitle: quotation.serviceTitle || 'Service',
+        vehicles: vehicles,
+        companyAddress: companyAddress,
+        companyCity: companyCity,
+        companyEmail: companyEmail,
+        companyPhone: companyPhone,
+      };
+
+      // Add attachment if PDF was generated
+      if (pdfAttachment) {
+        emailPayload.attachment = pdfAttachment;
+      }
+
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailPayload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send email');
+      }
+
+      // Show success modal
+      setEmailSuccessData({
+        email: companyEmail,
+        quotationNumber: quotation.quotationNumber,
+      });
+      setEmailSuccessOpen(true);
+    } catch (error) {
+      console.error('Error sending quotation email:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to send quotation email',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
+
   // Sort and paginate quotations
-  const sortedQuotations = [...quotations].sort((a, b) => {
+  const dateRange = getDateRange(dateFilterType, customStartDate ? new Date(customStartDate) : undefined, customEndDate ? new Date(customEndDate) : undefined);
+  
+  const filteredQuotations = quotations.filter((quotation) => {
+    const quotationDate = quotation.quotationDate instanceof Date ? quotation.quotationDate : (quotation.quotationDate as any).toDate?.() || new Date();
+    return quotationDate >= dateRange.start && quotationDate <= dateRange.end;
+  });
+
+  const sortedQuotations = [...filteredQuotations].sort((a, b) => {
     const dateA = a.quotationDate instanceof Date ? a.quotationDate : (a.quotationDate as any).toDate?.() || new Date();
     const dateB = b.quotationDate instanceof Date ? b.quotationDate : (b.quotationDate as any).toDate?.() || new Date();
     return sortOrder === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
@@ -338,6 +563,60 @@ export function QuotationList({
           <CardDescription>All quotations for this service</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Date Filter Controls */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Calendar size={18} className="text-gray-600" />
+                <span className="font-medium text-gray-700">Filter by Date:</span>
+              </div>
+              <Select value={dateFilterType} onValueChange={(val: any) => {
+                setDateFilterType(val);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="30days">Last 30 Days</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {dateFilterType === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => {
+                      setCustomStartDate(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="Start Date"
+                  />
+                  <span className="text-gray-600">to</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => {
+                      setCustomEndDate(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    placeholder="End Date"
+                  />
+                </div>
+              )}
+
+              <span className="text-sm text-gray-600 ml-auto">
+                Showing {filteredQuotations.length} quotation(s)
+              </span>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             {/* Bulk Delete Section */}
             {selectedQuotations.size > 0 && (
@@ -379,7 +658,7 @@ export function QuotationList({
                     </button>
                   </TableHead>
                   <TableHead>Services</TableHead>
-                  <TableHead className="min-w-64">Vehicles & Cost</TableHead>
+                  <TableHead className="min-w-64">JobCardNo | Vehicles: Cost</TableHead>
                   <TableHead className="text-right">Referral Fee (AED)</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
@@ -437,8 +716,15 @@ export function QuotationList({
                               }
                               return (
                                 <div key={v.plateNumber} className="text-sm">
-                                  <span className="font-mono text-gray-600">{v.plateNumber}:</span>
-                                  <span className="font-semibold ml-2">AED {vehicleServiceCost.toLocaleString('en-AE')}</span>
+                                  <div className="flex items-center gap-2">
+                                    {v.jobCardNo && (
+                                      <span className="font-mono font-semibold text-blue-600 text-xs" title={`Service Date: ${v.serviceDate ? new Date(v.serviceDate instanceof Date ? v.serviceDate : v.serviceDate?.toDate?.()).toLocaleDateString() : 'N/A'}`}>
+                                        {v.jobCardNo} |
+                                      </span>
+                                    )}
+                                    <span className="font-mono text-gray-600">{v.plateNumber}:</span>
+                                    <span className="font-medium ">AED {vehicleServiceCost.toLocaleString('en-AE')}</span>
+                                  </div>
                                 </div>
                               );
                             })
@@ -549,6 +835,27 @@ export function QuotationList({
                             Download Quotation
                           </span>
                           </div>
+
+                          <div className='relative inline-block group'>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1 text-blue-600"
+                              onClick={() => handleSendEmail(quotation)}
+                              disabled={sendingEmailId === quotation.id}
+                            >
+                              <Mail size={16} />
+                            </Button>
+                            <span
+                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+           whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
+           opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                          >
+                            {sendingEmailId === quotation.id ? 'Sending...' : 'Send Email'}
+                          </span>
+                          </div>
+
                           {quotation.status === 'accepted' && (
 
                             <div className='relative inline-block group'>
@@ -567,7 +874,7 @@ export function QuotationList({
            whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
            opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                           >
-                            Make Invoice
+                            Generate Invoice
                           </span>
                             </div>
                           )}
@@ -669,11 +976,11 @@ export function QuotationList({
               <div>
                 <p className="text-sm font-medium text-gray-600">Date</p>
                 <p className="text-sm text-gray-800">
-                  {new Date(
+                  {formatDateDDMMYYYY(
                     selectedQuotation.quotationDate instanceof Date
                       ? selectedQuotation.quotationDate
                       : (selectedQuotation.quotationDate as any).toDate?.() || new Date()
-                  ).toLocaleDateString()}
+                  )}
                 </p>
               </div>
               <div>
@@ -723,6 +1030,99 @@ export function QuotationList({
         fileName={pdfFileName}
         title="Quotation Preview"
       />
+
+      {/* Email Success Modal */}
+      <AlertDialog open={emailSuccessOpen} onOpenChange={setEmailSuccessOpen}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-green-600">
+              ✓ Email Sent Successfully
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Quotation has been sent to the customer
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {emailSuccessData && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2 my-4">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Quotation Number</p>
+                <p className="text-sm font-semibold text-gray-800">{emailSuccessData.quotationNumber}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-600">Sent To</p>
+                <p className="text-sm font-semibold text-gray-800 break-all">{emailSuccessData.email}</p>
+              </div>
+              <div className="pt-2 border-t border-green-200">
+                <p className="text-xs text-green-700">
+                  📎 Quotation PDF attached to email
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-center gap-2">
+            <AlertDialogAction
+              onClick={() => setEmailSuccessOpen(false)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Done
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Loading Blur Overlay */}
+      {sendingEmailId && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 shadow-xl">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+              <p className="text-gray-700 font-medium">Sending quotation email...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Creation Loading Blur Overlay */}
+      {creatingInvoiceId && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 shadow-xl">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
+              <p className="text-gray-700 font-medium">Creating invoice...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Success Modal */}
+      <AlertDialog open={invoiceSuccessOpen} onOpenChange={setInvoiceSuccessOpen}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-green-600">
+              ✓ Invoice Created Successfully
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Your invoice has been created and is ready to use
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 my-4 text-center">
+            <p className="text-sm font-semibold text-green-700">
+              Done, please check invoice section
+            </p>
+          </div>
+          <div className="flex justify-center gap-2">
+            <AlertDialogAction
+              onClick={() => {
+                setInvoiceSuccessOpen(false);
+                onRefresh();
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Done
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

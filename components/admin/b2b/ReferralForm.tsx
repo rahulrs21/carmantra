@@ -55,6 +55,7 @@ interface ReferralFormProps {
   referral?: any; // For edit mode
   onSuccess?: () => void;
   trigger?: React.ReactNode; // Custom trigger for edit button
+  disabled?: boolean; // Disable add/edit for employee role
 }
 
 export function ReferralForm({
@@ -64,6 +65,7 @@ export function ReferralForm({
   referral,
   onSuccess,
   trigger,
+  disabled = false,
 }: ReferralFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
@@ -184,12 +186,12 @@ export function ReferralForm({
   const isLoading = isEditMode ? updateReferral.isPending : addReferral.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Dialog open={open} onOpenChange={disabled ? undefined : setOpen}>
+      <DialogTrigger asChild disabled={disabled}>
         {trigger ? (
           trigger
         ) : (
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2" disabled={disabled}>
             <Plus size={16} />
             Add Referral
           </Button>

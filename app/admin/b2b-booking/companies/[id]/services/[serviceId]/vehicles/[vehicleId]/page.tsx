@@ -1,7 +1,8 @@
 'use client';
 
 import { use, useState, useEffect } from 'react';
-import { useVehicleById, usePreInspections, useUpdateVehicle } from '@/hooks/useB2B';
+import { useVehicleById, usePreInspections, useUpdateVehicle, useServiceById } from '@/hooks/useB2B';
+import { useUser } from '@/lib/userContext';
 import { PreInspectionList } from '@/components/admin/b2b/PreInspectionList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import Link from 'next/link';
 import {
   Select,
@@ -27,6 +34,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { collection, query, where, onSnapshot, addDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface VehicleDetailPageProps {
   params: Promise<{
@@ -45,11 +54,15 @@ const STATUS_BADGE_CONFIG = {
 
 export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
   const { id, serviceId, vehicleId } = use(params);
+  const { role } = useUser();
+  const isEmployeeRole = role === 'employee';
+
   const { data: vehicle, isLoading: vehicleLoading } = useVehicleById(
     id,
     serviceId,
     vehicleId
   );
+  const { data: service } = useServiceById(id, serviceId);
   const { preInspections, isLoading: preInspectionsLoading } = usePreInspections(
     id,
     serviceId,
@@ -65,6 +78,26 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
   const [editingService, setEditingService] = useState<{ id: string; description: string; amount: number } | null>(null);
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showCompletionWarning, setShowCompletionWarning] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<string | null>(null);
+
+  // Task management states
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [observerUsers, setObserverUsers] = useState<any[]>([]);
+  const [companyName, setCompanyName] = useState<string>('N/A');
+  const [newTaskData, setNewTaskData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+    category: 'service' as 'maintenance' | 'service' | 'inspection' | 'other',
+    assignedTo: [] as string[],
+    observedByUserId: '',
+    observedByRole: '',
+    observedByName: '',
+    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  });
 
   // Update status and services when vehicle data loads
   useEffect(() => {
@@ -76,7 +109,153 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
     }
   }, [vehicle]);
 
+  // Fetch tasks for this vehicle
+  useEffect(() => {
+    if (!serviceId || !vehicleId) return;
+    const taskQuery = query(
+      collection(db, 'tasks'),
+      where('serviceBookingId', '==', serviceId),
+      where('vehicleId', '==', vehicleId)
+    );
+    const unsubscribe = onSnapshot(taskQuery, (snap) => {
+      const fetchedTasks = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setTasks(fetchedTasks);
+    });
+    return () => unsubscribe();
+  }, [serviceId, vehicleId]);
+
+  // Fetch employees
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const empSnapshot = await getDocs(collection(db, 'employees'));
+        const empList = empSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setEmployees(empList);
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  // Fetch company name
+  useEffect(() => {
+    const fetchCompanyName = async () => {
+      try {
+        if (!id) return;
+        const companySnapshot = await getDocs(collection(db, 'companies'));
+        const company = companySnapshot.docs.find(doc => doc.id === id);
+        if (company) {
+          setCompanyName(company.data()?.name || 'N/A');
+        }
+      } catch (error) {
+        console.error('Error fetching company name:', error);
+      }
+    };
+    fetchCompanyName();
+  }, [id]);
+
+  // Fetch observer users from users collection
+  useEffect(() => {
+    const fetchObserverUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        const usersList = snapshot.docs
+          .map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.displayName || data.name || 'User',
+              role: data.role || '',
+            };
+          })
+          .filter(user => ['admin', 'manager', 'sales', 'accounts'].includes(user.role))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setObserverUsers(usersList);
+      } catch (error) {
+        console.error('Error fetching observer users:', error);
+      }
+    };
+    fetchObserverUsers();
+  }, []);
+
+  const handleAddTask = async () => {
+    if (!newTaskData.title || newTaskData.assignedTo.length === 0 || !newTaskData.observedByUserId) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in all required fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const assignedToNames = newTaskData.assignedTo
+        .map(empId => employees.find(e => e.id === empId)?.name)
+        .filter(Boolean);
+
+      const taskData = {
+        title: newTaskData.title,
+        description: newTaskData.description,
+        priority: newTaskData.priority,
+        category: newTaskData.category,
+        assignedTo: newTaskData.assignedTo,
+        assignedToNames,
+        observedByUserId: newTaskData.observedByUserId,
+        observedByRole: newTaskData.observedByRole,
+        observedByName: newTaskData.observedByName,
+        status: 'notStarted',
+        deadline: new Date(newTaskData.deadline),
+        serviceBookingId: serviceId,
+        vehicleId: vehicleId,
+        companyId: id,
+        jobCardNo: service?.jobCardNo,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+      toast({
+        title: 'Success',
+        description: 'Task created successfully',
+      });
+
+      setShowAddTaskModal(false);
+      setNewTaskData({
+        title: '',
+        description: '',
+        priority: 'medium',
+        category: 'service',
+        assignedTo: [],
+        observedByUserId: '',
+        observedByRole: '',
+        observedByName: '',
+        deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      });
+    } catch (error) {
+      console.error('Error creating task:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create task',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleStatusChange = async (newStatus: string) => {
+    // Check if trying to mark as completed without services
+    if (newStatus === 'completed' && services.length === 0) {
+      setShowCompletionWarning(true);
+      setPendingStatusChange(newStatus);
+      return;
+    }
+
     try {
       setStatus(newStatus);
       await updateVehicleMutation.mutateAsync({
@@ -97,6 +276,35 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         variant: 'destructive',
       });
       // Revert status
+      if (vehicle?.status) {
+        setStatus(vehicle.status);
+      }
+    }
+  };
+
+  const handleForceCompletion = async () => {
+    if (!pendingStatusChange) return;
+    try {
+      setStatus(pendingStatusChange);
+      await updateVehicleMutation.mutateAsync({
+        companyId: id,
+        serviceId,
+        vehicleId,
+        data: { status: pendingStatusChange },
+      });
+      toast({
+        title: 'Success',
+        description: `Vehicle status updated to ${pendingStatusChange}`,
+      });
+      setShowCompletionWarning(false);
+      setPendingStatusChange(null);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update vehicle status',
+        variant: 'destructive',
+      });
       if (vehicle?.status) {
         setStatus(vehicle.status);
       }
@@ -291,25 +499,67 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto pb-4 px-2 md:px-4">
       {/* Header */}
-      <div className="mb-6 flex items-center gap-4">
-        <Link
-          href={`/admin/b2b-booking/companies/${id}/services/${serviceId}`}
-        >
-          <Button variant="outline" size="sm" className="gap-2">
-            <ChevronLeft size={16} />
-            Back
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold">{vehicle.brand} {vehicle.model}</h1>
-          <p className="text-gray-600">Plate: {vehicle.plateNumber}</p>
+      <div className="mb-6 flex flex-col md:flex-row  items-center gap-4">
+
+        <div className='flex justify-between md:justify-start gap-2 w-full items-center'>
+
+          {!isEmployeeRole && (
+            <Link
+              href={`/admin/b2b-booking/companies/${id}/services/${serviceId}`}
+            >
+              <Button variant="outline" size="sm" className="gap-2">
+                <ChevronLeft size={16} />
+                Back
+              </Button>
+            </Link>
+          )}
+          <div>
+            <h1 className="text-3xl font-bold">{vehicle.brand} {vehicle.model} </h1>
+            <p className="text-gray-600">Plate: {vehicle.plateNumber}</p>
+          </div>
+        </div>
+
+        <div className="bg-blue-100 flex justify-center items-center dark:bg-gray-800 rounded-lg px-4 py-2  md:ml-auto">
+          {service?.jobCardNo && (
+            <p className="text-sm sm:text-base">Job Card: <span className='font-semibold'>{service?.jobCardNo || '-'}</span></p>
+          )}
         </div>
       </div>
 
+      {/* Service Details */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Service Title</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-base font-semibold text-purple-500">{service?.title || '-'}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Service Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-base font-semibold">{service?.type || '-'}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Company Name</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-base font-semibold">{companyName}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Vehicle Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Plate Number</CardTitle>
@@ -364,32 +614,15 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
       </div>
 
       {/* Status and Other Info */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Select value={status} onValueChange={handleStatusChange} disabled={updateVehicleMutation.isPending}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in-progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-6">
+        
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Color</CardTitle>
+            <CardTitle className="text-sm">Color: <p className="text-lg font-semibold">{vehicle.color || '-'}</p></CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold">{vehicle.color || '-'}</p>
+            <p className='text-xs'>Notes: <span className="text-xs font-semibold"> {vehicle.notes || '-'}</span></p>
           </CardContent>
         </Card>
 
@@ -411,27 +644,41 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
           </CardContent>
         </Card>
 
-        {/* <Card>
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Pre-Inspections</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold">{vehicle.preInspectionCount || 0}</p>
-          </CardContent>
-        </Card> */}
-      </div>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm">Status</CardTitle>
 
-      {/* Vehicle Notes */}
-      {vehicle.notes && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Vehicle Notes</CardTitle>
+              {status !== 'completed' && (
+                
+                <div className="group relative cursor-help">
+                  <div className="w-4 h-4 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-bold">!</div>
+                  <div className="absolute -top-3 -left-2 md:left-1/3 transform translate-x-1/2  px-3 py-2 bg-yellow-600 text-white text-xs rounded-lg whitespace-nowrap  transition-opacity pointer-events-none z-50 animate-pulse">
+                    Select 'Completed' when done
+                  </div>
+                </div>
+              )} 
+            </div>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-700">{vehicle.notes}</p>
+            <Select value={status} onValueChange={handleStatusChange} disabled={updateVehicleMutation.isPending || isEmployeeRole}>
+              <SelectTrigger className={`w-full ${isEmployeeRole ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
           </CardContent>
         </Card>
-      )}
+
+
+      </div>
+
+
 
       {/* Services Section */}
       <Card className="mb-6">
@@ -446,6 +693,7 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
                 size="sm"
                 onClick={() => setShowAddService(true)}
                 className="gap-2"
+                disabled={isEmployeeRole}
               >
                 <Plus size={16} />
                 Add Service
@@ -509,15 +757,14 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
               {services.map((service, index) => (
                 <div
                   key={service.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, service.id)}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, service.id)}
-                  className={`flex items-start justify-between p-3 border rounded-lg transition-all cursor-move ${
-                    draggedServiceId === service.id
-                      ? 'opacity-50 bg-blue-100'
+                  draggable={!isEmployeeRole}
+                  onDragStart={(e) => !isEmployeeRole && handleDragStart(e, service.id)}
+                  onDragOver={!isEmployeeRole ? handleDragOver : undefined}
+                  onDrop={(e) => !isEmployeeRole && handleDrop(e, service.id)}
+                  className={`flex items-start justify-between p-3 border rounded-lg transition-all ${isEmployeeRole ? 'cursor-not-allowed ' : 'cursor-move'} ${draggedServiceId === service.id
+                      ? 'opacity-90 bg-blue-100'
                       : 'hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <div className="flex-1">
                     <p className="font-medium text-gray-800">
@@ -532,7 +779,8 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleEditService(service)}
-                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      disabled={isEmployeeRole}
+                      className={`text-blue-600 hover:text-blue-700 hover:bg-blue-50 ${isEmployeeRole ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <Edit2 size={16} />
                     </Button>
@@ -540,7 +788,8 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
                       size="sm"
                       variant="ghost"
                       onClick={() => setDeleteConfirmId(service.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      disabled={isEmployeeRole}
+                      className={`text-red-600 hover:text-red-700 hover:bg-red-50 ${isEmployeeRole ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <Trash2 size={16} />
                     </Button>
@@ -570,8 +819,106 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         </CardContent>
       </Card>
 
+      {/* Assigned Tasks Card */}
+      <Card className="mb-6 p-3 md:p-6 border-2 border-blue-200 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg sm:text-xl font-semibold text-blue-700">Assigned Tasks ({tasks.length})</h2>
+          </div>
+          {!isEmployeeRole && service?.status !== 'cancelled' && service?.status !== 'completed' && (
+            <Button
+              onClick={() => {
+                if (services.length === 0) {
+                  alert('⚠️ Please add at least 1 service before creating a task');
+                  return;
+                }
+                setShowAddTaskModal(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-sm w-full sm:w-auto"
+              size="sm"
+            >
+              + Add Task
+            </Button>
+          )}
+        </div>
+
+        {tasks.length === 0 ? (
+          <p className="text-sm text-gray-500">No tasks assigned yet</p>
+        ) : (
+          <div className="space-y-3">
+            {tasks.map((task) => (
+              <div key={task.id} className="p-3 sm:p-4 border rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm sm:text-base text-gray-900 break-words">{task.title}</p>
+                    <p className="text-xs text-gray-600 mt-1">{task.jobCardNo}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                      task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                    }`}>
+                    {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs mb-2">
+                  <div>
+                    <span className="text-gray-600">Assigned To:</span>
+                    <p className="font-medium text-gray-900">{task.assignedToNames?.join(', ') || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Observed By:</span>
+                    <p className="font-medium text-gray-900">{task.observedByName ? `${task.observedByName} (${task.observedByRole})` : '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Status:</span>
+                    <p className={`font-medium ${task.status === 'notStarted' ? 'text-red-800 bg-red-200 mx-2 px-2 py-1 rounded inline-block' :
+                        task.status === 'completed' ? 'text-yellow-800 bg-yellow-200 mx-2 px-2 py-1 rounded inline-block' :
+                          task.status === 'inProgress' ? 'text-blue-800 bg-blue-200 mx-2 px-2 py-1 rounded inline-block' :
+                            'text-green-800 bg-green-300 mx-2 px-2 py-1 rounded inline-block'
+                      }`}>
+                      {task.status === 'notStarted' ? 'Not Started' :
+                        task.status === 'inProgress' ? 'In Progress' :
+                          task.status === 'completed' ? 'Completed' :
+                            'Verified'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Deadline:</span>
+                    <p className="font-medium text-gray-900">
+                      {(() => {
+                        const date = new Date(task.deadline.seconds ? task.deadline.seconds * 1000 : task.deadline);
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        return `${day}/${month}/${year}`;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+
+                {task.description && (
+                  <p className="text-xs text-gray-600 mb-2 break-words">Description: {task.description}</p>
+                )}
+
+                {!isEmployeeRole && (
+                  <div className="flex gap-2">
+                    <Link href={`/admin/tasks/${task.id}`} target="_blank">
+                      <Button variant="ghost" size="sm" className="text-xs bg-black/5 hover:bg-black/10 text-black">
+                        View Task
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Pre-Inspections Section */}
-      <div>
+      <div className="mb-6">
         <PreInspectionList
           companyId={id}
           serviceId={serviceId}
@@ -581,6 +928,220 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
           onRefresh={() => window.location.reload()}
         />
       </div>
+
+
+
+      {/* Add Task Modal */}
+      {showAddTaskModal && (
+        <Dialog open={showAddTaskModal} onOpenChange={setShowAddTaskModal}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add Task for {service?.jobCardNo}</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Task Title</label>
+                <Input
+                  type="text"
+                  placeholder="Enter task title"
+                  value={newTaskData.title}
+                  onChange={(e) => setNewTaskData(prev => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))}
+                  className="border-2 border-gray-300 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Employees */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
+                  {employees.length === 0 ? (
+                    <p className="text-sm text-gray-500 col-span-2">No employees found</p>
+                  ) : (
+                    employees.map(emp => (
+                      <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newTaskData.assignedTo.includes(emp.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewTaskData(prev => ({
+                                ...prev,
+                                assignedTo: [...prev.assignedTo, emp.id],
+                              }));
+                            } else {
+                              setNewTaskData(prev => ({
+                                ...prev,
+                                assignedTo: prev.assignedTo.filter(id => id !== emp.id),
+                              }));
+                            }
+                          }}
+                          className="w-4 h-4 rounded"
+                        />
+                        <span className="text-sm text-gray-700">{emp.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Observer User */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Observed By</label>
+                <select
+                  value={newTaskData.observedByUserId}
+                  onChange={(e) => {
+                    const selectedUser = observerUsers.find(u => u.id === e.target.value);
+                    setNewTaskData(prev => ({
+                      ...prev,
+                      observedByUserId: e.target.value,
+                      observedByRole: (selectedUser?.role as 'admin' | 'manager' | 'sales' | 'accounts') || '',
+                      observedByName: selectedUser?.name || '',
+                    }));
+                  }}
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="">Select Observer...</option>
+                  {observerUsers.length === 0 ? (
+                    <option disabled>No users found with admin roles</option>
+                  ) : (
+                    observerUsers.map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user?.name || 'Unknown User'} - {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                      </option>
+                    ))
+                  )}
+                </select>
+                {newTaskData.observedByName && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Selected: {newTaskData?.observedByName || 'Unknown'}
+                  </p>
+                )}
+              </div>
+
+              {/* Priority & Category */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
+                  <select
+                    value={newTaskData.priority}
+                    onChange={(e) => setNewTaskData(prev => ({
+                      ...prev,
+                      priority: e.target.value as any,
+                    }))}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                  <select
+                    value={newTaskData.category}
+                    onChange={(e) => setNewTaskData(prev => ({
+                      ...prev,
+                      category: e.target.value as any,
+                    }))}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="maintenance">Maintenance</option>
+                    <option value="service">Service</option>
+                    <option value="inspection">Inspection</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                <textarea
+                  value={newTaskData.description}
+                  onChange={(e) => setNewTaskData(prev => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))}
+                  placeholder="Enter task details and instructions..."
+                  rows={3}
+                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none"
+                />
+              </div>
+
+              {/* Deadline */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline</label>
+                <Input
+                  type="date"
+                  value={newTaskData.deadline}
+                  onChange={(e) => setNewTaskData(prev => ({
+                    ...prev,
+                    deadline: e.target.value,
+                  }))}
+                  className="border-2 border-gray-300 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAddTaskModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAddTask}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  Create Task
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Status Completion Warning Dialog */}
+      <AlertDialog open={showCompletionWarning} onOpenChange={(open) => !open && (setShowCompletionWarning(false), setPendingStatusChange(null))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-orange-600">⚠️ No Services Added</AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              You're trying to mark this vehicle as <span className="font-semibold">Completed</span> without adding any services.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 my-4">
+            <p className="text-sm text-orange-900 mb-3">
+              <span className="font-semibold">⚠️ Warning:</span> It's recommended to add at least one service before marking as completed. Services define the work performed and the cost associated with this vehicle.
+            </p>
+            <ul className="text-sm text-orange-800 space-y-2 ml-4">
+              <li>• <span className="font-semibold">Service Cost Calculation:</span> Total service cost will be $0 if no services are added</li>
+              <li>• <span className="font-semibold">Record Keeping:</span> Services help document the work performed</li>
+              <li>• <span className="font-semibold">Billing:</span> Services are required for accurate billing</li>
+            </ul>
+          </div>
+          <div className="flex gap-3">
+            <AlertDialogCancel className="flex-1">
+              Cancel & Add Services
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleForceCompletion}
+              className="flex-1 bg-orange-600 hover:bg-orange-700"
+            >
+              Mark as Completed Anyway
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>

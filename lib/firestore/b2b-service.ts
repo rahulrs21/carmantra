@@ -272,6 +272,7 @@ export const servicesService = {
         id: docRef.id,
         title: data.title,
         type: data.type,
+        jobCardNo: data.jobCardNo,
         serviceDate: Timestamp.fromDate(data.serviceDate),
         notes: data.notes || '',
         status: 'pending',
@@ -448,6 +449,9 @@ export const vehiclesService = {
         model: data.model,
         year: data.year,
         color: data.color,
+        vin: data.vin,
+        vehicleType: data.vehicleType,
+        fuelType: data.fuelType,
         serviceCost: data.serviceCost,
         notes: data.notes,
         status: 'pending',
@@ -828,6 +832,11 @@ export const quotationsService = {
         const service = services.find((s) => s.id === serviceId);
         if (!service) continue;
 
+        // Get the service date for matching with vehicles
+        const serviceDate = service.serviceDate instanceof Date 
+          ? service.serviceDate 
+          : (service.serviceDate as any).toDate?.() || new Date();
+
         // Fetch vehicles for this service
         const vehiclesSnap = await getDocs(
           collection(db, 'companies', companyId, 'services', serviceId, 'vehicles')
@@ -843,6 +852,8 @@ export const quotationsService = {
             year: vehicle.year,
             serviceAmount: vehicle.serviceCost,
             services: vehicle.services, // Include services array for cost calculation in UI
+            jobCardNo: service.jobCardNo, // Assign jobCardNo from the service to each vehicle
+            serviceDate: serviceDate, // Include service date for matching
           });
         });
 
@@ -887,6 +898,7 @@ export const quotationsService = {
         email: company.email,
         serviceTitle: services.filter((s) => serviceIds.includes(s.id)).map((s) => s.title).join(', '),
         serviceIds,
+        jobCardNo: services.find((s) => serviceIds.includes(s.id))?.jobCardNo || null,
         vehicles: allVehicles,
         referrals: allReferrals,
         subtotal,

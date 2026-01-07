@@ -106,14 +106,15 @@ function ServiceRow({
           onCheckedChange={() => onSelectService(service.id)}
         />
       </TableCell>
+      <TableCell className="font-mono font-semibold text-blue-600">{service.jobCardNo || 'N/A'}</TableCell>
       <TableCell className="font-medium">{service.title}</TableCell>
       <TableCell className="text-sm">{service.type}</TableCell>
       <TableCell className="text-sm">
-        {new Date(
+        {formatDateDDMMYYYY(
           service.serviceDate instanceof Date
             ? service.serviceDate
             : (service.serviceDate as any).toDate()
-        ).toLocaleDateString()}
+        )}
       </TableCell>
       <TableCell>
         <div className="flex flex-col gap-1">
@@ -130,14 +131,20 @@ function ServiceRow({
       </TableCell>
       <TableCell>
         <div className="flex gap-1">
-          <Badge
-            variant={
-              STATUS_BADGE_CONFIG[service.status as keyof typeof STATUS_BADGE_CONFIG]
-                ?.variant || 'outline'
-            }
-          >
-            {service.status}
-          </Badge>
+          {service.status === 'completed' ? (
+            <Badge className="bg-green-300 text-green-800 font-semibold">
+              {service.status}
+            </Badge>
+          ) : (
+            <Badge
+              variant={
+                STATUS_BADGE_CONFIG[service.status as keyof typeof STATUS_BADGE_CONFIG]
+                  ?.variant || 'outline'
+              }
+            >
+              {service.status}
+            </Badge>
+          )}
         </div>
       </TableCell>
       <TableCell>
@@ -167,12 +174,12 @@ function ServiceRow({
       <TableCell className="text-right font-semibold">
         AED {totals.referralTotal.toLocaleString('en-AE')}
       </TableCell>
-      <TableCell className="text-right">
+      <TableCell className="text-right font-bold">
         AED {totals.totalAmount.toLocaleString('en-AE')}
       </TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-2">
-          <Link href={`/admin/b2b-booking/companies/${companyId}/services/${service.id}`}>
+          <Link href={`/admin/b2b-booking/companies/${companyId}/services/${service.id}`} target='_blank'>
             <Button size="sm" variant="outline" className="gap-1">
               View
               <ArrowRight size={14} />
@@ -182,7 +189,8 @@ function ServiceRow({
             size="sm"
             variant="outline"
             onClick={() => onDeleteService?.(service.id)}
-            className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+            disabled={service.status === 'completed'}
+            className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-gray-400"
           >
             <Trash2 size={16} />
             Delete
@@ -212,7 +220,7 @@ export function ServiceList({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const handleSubtotalCalculated = useCallback((serviceId: string, subtotal: number) => {
     setCalculatedTotals((prev) => ({
@@ -363,6 +371,7 @@ export function ServiceList({
                       onCheckedChange={() => handleSelectAll()}
                     />
                   </TableHead>
+                  <TableHead>Job Card</TableHead>
                   <TableHead>Service Title</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>
@@ -464,7 +473,11 @@ export function ServiceList({
         <BulkQuotationModal
           companyId={companyId}
           selectedServiceIds={Array.from(selectedServices)}
-          services={filteredServices}
+          services={filteredServices.map(service => ({
+            ...service,
+            // Include jobCardNo from the service for each selected service
+            jobCardNo: service.jobCardNo,
+          }))}
           company={company}
           serviceTotals={calculatedTotals}
           isOpen={showBulkQuotationModal}
@@ -494,11 +507,11 @@ export function ServiceList({
                     {filteredServices.find(s => s.id === deleteConfirmId)?.title}
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
-                    Date: {new Date(
+                    Date: {formatDateDDMMYYYY(
                       filteredServices.find(s => s.id === deleteConfirmId)?.serviceDate instanceof Date
                         ? filteredServices.find(s => s.id === deleteConfirmId)?.serviceDate
                         : (filteredServices.find(s => s.id === deleteConfirmId)?.serviceDate as any)?.toDate()
-                    ).toLocaleDateString()}
+                    )}
                   </p>
                 </div>
               )}

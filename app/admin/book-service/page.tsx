@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
@@ -32,6 +32,21 @@ export default function BookServiceList() {
     const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
     const [mulkiyaPreviews, setMulkiyaPreviews] = useState<string[]>([]);
     const mulkiyaInputRef = useRef<HTMLInputElement>(null);
+    
+    // Task assignment state
+    const [employees, setEmployees] = useState<{id: string, name: string, email: string}[]>([]);
+    const [observerUsers, setObserverUsers] = useState<{id: string, name: string, role: string}[]>([]);
+    const [showTaskAssignment, setShowTaskAssignment] = useState(false);
+    const [taskAssignment, setTaskAssignment] = useState({
+        assignedTo: [] as string[],
+        observedByUserId: '' as string,
+        observedByRole: '' as 'admin' | 'manager' | 'sales' | 'accounts' | '',
+        observedByName: '' as string,
+        priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
+        category: 'service' as 'maintenance' | 'service' | 'inspection' | 'other',
+        description: '' as string,
+        deadline: '',
+    });
 
     // Form state
     const [formData, setFormData] = useState({
@@ -63,6 +78,50 @@ export default function BookServiceList() {
     });
 
     // Pre-inspection is captured after booking is created (car arrival)
+
+    useEffect(() => {
+        const fetchEmployees = async () => {
+            try {
+                const snapshot = await getDocs(collection(db, 'employees'));
+                const empList = snapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        name: doc.data().name || '',
+                        email: doc.data().email || '',
+                    }))
+                    .filter(emp => emp.email)
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                setEmployees(empList);
+            } catch (error) {
+                safeConsoleError('Error fetching employees', error);
+            }
+        };
+        fetchEmployees();
+    }, []);
+
+    // Fetch observer users from users collection
+    useEffect(() => {
+        const fetchObserverUsers = async () => {
+            try {
+                const snapshot = await getDocs(collection(db, 'users'));
+                const usersList = snapshot.docs
+                    .map(doc => {
+                        const data = doc.data();
+                        return {
+                            id: doc.id,
+                            name: data.displayName || data.name || 'User',
+                            role: data.role || '',
+                        };
+                    })
+                    .filter(user => ['admin', 'manager', 'sales', 'accounts'].includes(user.role))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                setObserverUsers(usersList);
+            } catch (error) {
+                safeConsoleError('Error fetching observer users', error);
+            }
+        };
+        fetchObserverUsers();
+    }, []);
 
     useEffect(() => {
         const q = query(collection(db, 'bookedServices'));
@@ -317,11 +376,13 @@ export default function BookServiceList() {
                 const customerPhone = formData.mobileNo;
                 
                 if (customerEmail) {
+                    console.log('📧 Sending booking confirmation email to:', customerEmail);
+                    
                     const scheduledDateTime = new Date(selectedDate!);
                     const [hours, minutes] = selectedTime.split(':');
                     scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
 
-                    await fetch('/api/send-email', {
+                    const emailResponse = await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -339,10 +400,64 @@ export default function BookServiceList() {
                             },
                         }),
                     });
+
+                    const emailResult = await emailResponse.json();
+                    
+                    if (!emailResponse.ok || !emailResult.success) {
+                        console.warn('⚠️ Email sending warning:', emailResult.error || 'Unknown error');
+                    } else {
+                        console.log('✅ Booking email sent successfully:', {
+                            to: customerEmail,
+                            resendId: emailResult.id,
+                        });
+                    }
+                } else {
+                    console.warn('⚠️ No customer email provided for booking confirmation');
                 }
             } catch (emailErr: any) {
-                safeConsoleError('Booking confirmation email error', emailErr);
+                console.error('❌ Booking confirmation email error:', emailErr);
                 // Don't fail the booking if email fails
+            }
+
+            // Create task if assigned
+            if (taskAssignment.assignedTo.length > 0) {
+                try {
+                    const assignedNames = taskAssignment.assignedTo
+                        .map(id => employees.find(emp => emp.id === id)?.name || '')
+                        .filter(Boolean);
+
+                    const taskData = {
+                        title: `Service: ${formData.jobCardNo}`,
+                        description: taskAssignment.description || `Vehicle: ${primaryVehicle.vehicleBrand} ${primaryVehicle.modelName}\nPlate: ${primaryVehicle.numberPlate}\nService: ${bookingCategory}`,
+                        assignedTo: taskAssignment.assignedTo,
+                        assignedToNames: assignedNames,
+                        createdBy: actorId,
+                        priority: taskAssignment.priority,
+                        category: taskAssignment.category,
+                        status: 'notStarted',
+                        deadline: taskAssignment.deadline,
+                        createdAt: Timestamp.now(),
+                        updatedAt: Timestamp.now(),
+                        observedByUserId: taskAssignment.observedByUserId,
+                        observedByRole: taskAssignment.observedByRole,
+                        observedByName: taskAssignment.observedByName,
+                        serviceBookingId: docRef.id,
+                        jobCardNo: formData.jobCardNo,
+                        bookingDetails: {
+                            customerName: `${formData.firstName} ${formData.lastName}`,
+                            vehicleBrand: primaryVehicle.vehicleBrand,
+                            vehicleModel: primaryVehicle.modelName,
+                            numberPlate: primaryVehicle.numberPlate,
+                            serviceCategory: bookingCategory,
+                        },
+                        comments: 0,
+                    };
+
+                    await addDoc(collection(db, 'tasks'), taskData);
+                } catch (taskErr: any) {
+                    safeConsoleError('Task creation error', taskErr);
+                    // Don't fail the booking if task creation fails
+                }
             }
 
             // Redirect to booking detail page
@@ -378,6 +493,16 @@ export default function BookServiceList() {
             setMulkiyaFiles([]);
             setMulkiyaPreviews([]);
             if (mulkiyaInputRef.current) mulkiyaInputRef.current.value = '';
+            setTaskAssignment({
+                assignedTo: [],
+                observedByUserId: '',
+                observedByRole: '',
+                observedByName: '',
+                priority: 'medium',
+                category: 'service',
+                description: '',
+                deadline: '',
+            });
             // Pre-inspection will be captured after vehicle arrival
             alert('Booking created successfully!');
         } catch (err: any) {
@@ -1239,6 +1364,158 @@ export default function BookServiceList() {
                                                 </div>
                                             )}
                                         </div>
+                                    </div>
+
+                                    {/* Task Assignment Section */}
+                                    <div className="pt-4 border-t border-gray-200">
+                                        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                                            <h3 className="text-lg font-semibold text-orange-700">Assign Task to Employee</h3>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowTaskAssignment(!showTaskAssignment)}
+                                                className="text-sm bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1 rounded transition-colors whitespace-nowrap"
+                                            >
+                                                {showTaskAssignment ? '✕ Hide' : '+ Add Task'}
+                                            </button>
+                                        </div>
+
+                                        {showTaskAssignment && (
+                                            <div className="space-y-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                                                {/* Employees */}
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
+                                                        {employees.length === 0 ? (
+                                                            <p className="text-sm text-gray-500 col-span-2">No employees found</p>
+                                                        ) : (
+                                                            employees.map(emp => (
+                                                                <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={taskAssignment.assignedTo.includes(emp.id)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) {
+                                                                                setTaskAssignment(prev => ({
+                                                                                    ...prev,
+                                                                                    assignedTo: [...prev.assignedTo, emp.id],
+                                                                                }));
+                                                                            } else {
+                                                                                setTaskAssignment(prev => ({
+                                                                                    ...prev,
+                                                                                    assignedTo: prev.assignedTo.filter(id => id !== emp.id),
+                                                                                }));
+                                                                            }
+                                                                        }}
+                                                                        className="w-4 h-4 rounded"
+                                                                    />
+                                                                    <span className="text-sm text-gray-700">{emp.name}</span>
+                                                                </label>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Observer User */}
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Observed By</label>
+                                                    <select
+                                                        value={taskAssignment.observedByUserId}
+                                                        onChange={(e) => {
+                                                            const selectedUser = observerUsers.find(u => u.id === e.target.value);
+                                                            setTaskAssignment(prev => ({
+                                                                ...prev,
+                                                                observedByUserId: e.target.value,
+                                                                observedByRole: (selectedUser?.role as 'admin' | 'manager' | 'sales' | 'accounts') || '',
+                                                                observedByName: selectedUser?.name || '',
+                                                            }));
+                                                        }}
+                                                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                                                    >
+                                                        <option value="">Select Observer...</option>
+                                                        {observerUsers.length === 0 ? (
+                                                            <option disabled>No users found with admin roles</option>
+                                                        ) : (
+                                                            observerUsers.map(user => (
+                                                                <option key={user.id} value={user.id}>
+                                                                    {user.name} - {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                                                                </option>
+                                                            ))
+                                                        )}
+                                                    </select>
+                                                    {taskAssignment.observedByName && (
+                                                        <p className="text-xs text-gray-600 mt-1">
+                                                            Selected: {taskAssignment.observedByName} ({taskAssignment.observedByRole})
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Priority & Category */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
+                                                        <select
+                                                            value={taskAssignment.priority}
+                                                            onChange={(e) => setTaskAssignment(prev => ({
+                                                                ...prev,
+                                                                priority: e.target.value as any,
+                                                            }))}
+                                                            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                                                        >
+                                                            <option value="low">Low</option>
+                                                            <option value="medium">Medium</option>
+                                                            <option value="high">High</option>
+                                                            <option value="urgent">Urgent</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                                                        <select
+                                                            value={taskAssignment.category}
+                                                            onChange={(e) => setTaskAssignment(prev => ({
+                                                                ...prev,
+                                                                category: e.target.value as any,
+                                                            }))}
+                                                            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                                                        >
+                                                            <option value="maintenance">Maintenance</option>
+                                                            <option value="service">Service</option>
+                                                            <option value="inspection">Inspection</option>
+                                                            <option value="other">Other</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                {/* Description */}
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                                                    <textarea
+                                                        value={taskAssignment.description}
+                                                        onChange={(e) => setTaskAssignment(prev => ({
+                                                            ...prev,
+                                                            description: e.target.value,
+                                                        }))}
+                                                        placeholder="Enter task details and instructions..."
+                                                        rows={3}
+                                                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 resize-none"
+                                                    />
+                                                </div>
+
+                                                {/* Deadline */}
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Deadline</label>
+                                                    <Input
+                                                        type="date"
+                                                        value={taskAssignment.deadline}
+                                                        onChange={(e) => setTaskAssignment(prev => ({
+                                                            ...prev,
+                                                            deadline: e.target.value,
+                                                        }))}
+                                                        className="border-2 border-gray-300 focus:border-orange-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Pre-Inspection Checklist */}

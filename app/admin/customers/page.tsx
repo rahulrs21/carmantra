@@ -157,7 +157,7 @@ export default function CustomersPage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 w-full sm:w-auto min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 w-full sm:ml-auto sm:justify-end min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {([
               { key: 'all', label: 'All' },
               { key: 'today', label: 'Today' },

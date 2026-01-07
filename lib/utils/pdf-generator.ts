@@ -22,6 +22,8 @@ export interface QuotationPDFData {
     serviceAmount: number;
     service?: string;
     services?: Array<{ description: string; amount: number }>;
+    jobCardNo?: string | null;
+    serviceDate?: Date | string | null;
   }>;
   referralTotal: number;
   subtotal: number;
@@ -55,6 +57,8 @@ export interface InvoicePDFData {
     serviceAmount: number;
     service?: string;
     services?: Array<{ description: string; amount: number }>;
+    jobCardNo?: string | null;
+    serviceDate?: Date | string | null;
   }>;
   referralTotal: number;
   subtotal: number;
@@ -69,15 +73,27 @@ export interface InvoicePDFData {
   notes?: string;
 }
 
-const getDateString = (date: string | Date): string => {
-  if (typeof date === 'string') {
-    return new Date(date).toLocaleDateString('en-GB', {
+const getDateString = (date: string | Date | null | undefined): string => {
+  if (!date) {
+    return new Date().toLocaleDateString('en-GB', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     });
   }
-  return date.toLocaleDateString('en-GB', {
+  
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else if (typeof date === 'object' && date !== null && 'toDate' in date) {
+    dateObj = (date as any).toDate();
+  } else {
+    dateObj = new Date();
+  }
+  
+  return dateObj.toLocaleDateString('en-GB', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -89,9 +105,9 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
     .map(
       (v) => `
     <tr>
+      <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600; color: #4a90e2;">${v.jobCardNo || '-'}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.brand} ${v.model}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.year}</td>
+      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate} | ${v.year}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.services?.map((svc: any) => svc.description).join(', ') || v.service || data.serviceTitle}</td>
       <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">AED ${v.serviceAmount.toFixed(2)}</td>
     </tr>
@@ -472,22 +488,19 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
                 <label style={{fontWeight: 'bold', fontSize: '18px'}}>Company Information</label>
                 <p><strong>${data.company.name}</strong></p>
               </div>
-              ${data.company.email ? `<div class="info-box-comp">
-                <label>Email</label>
-                <p>${data.company.email}</p>
-              </div>` : ''}
-              ${data.company.phone ? `<div class="info-box-comp">
-                <label>Phone</label>
-                <p>${data.company.phone}</p>
-              </div>` : ''}
-              ${data.company.trn ? `<div class="info-box-comp">
-                <label>TRN</label>
+              
+               ${data.company.trn ? `<div class="info-box-comp">
+                <label>TRN No:</label>
                 <p>${data.company.trn}</p>
               </div>` : ''}
-              ${data.company.address ? `<div >
-                <label>Address</label>
+              ${data.company.email || data.company.phone ? `<div class="info-box-comp">
+                <p>${data.company.email} | ${data.company.phone} </p>
+              </div>` : ''}
+              ${data.company.address ? `<div > 
                 <p>${[data.company.address, data.company.city, data.company.state, data.company.zipCode].filter(Boolean).join(', ')}</p>
               </div>` : ''}
+
+
             </div>
             <div class="quotation-header">
               <h1>QUOTATION</h1>
@@ -504,11 +517,11 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
             <table>
               <thead>
                 <tr>
+                  <th>JobCard #</th>
                   <th>Vehicle</th>
-                  <th>Plate No.</th>
-                  <th>Year</th>
+                  <th>Plate # | Year</th>
                   <th>Service</th>
-                  <th style="text-align: right; width: 120px;">Amount (AED)</th>
+                  <th style="text-align: right; width: 100px;">Amount (AED)</th>
                 </tr>
               </thead>
               <tbody>
@@ -571,9 +584,9 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
     .map(
       (v) => `
     <tr>
+      <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600; color: #4a90e2;">${v.jobCardNo || '-'}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.brand} ${v.model}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.year}</td>
+      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate} | ${v.year}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.services?.map((svc: any) => svc.description).join(', ') || v.service || data.serviceTitle}</td>
       <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">AED ${v.serviceAmount.toFixed(2)}</td>
     </tr>
@@ -949,22 +962,18 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
                 <p><strong>${data.company.name}</strong></p>
               </div>
               
-              ${data.company.email ? `<div class="info-box-comp">
-                <label>Email</label>
-                <p>${data.company.email}</p>
-              </div>` : ''}
-              ${data.company.phone ? `<div class="info-box-comp">
-                <label>Phone</label>
-                <p>${data.company.phone}</p>
-              </div>` : ''}
-              ${data.company.trn ? `<div  class="info-box-comp">
-                <label>TRN</label>
+              ${data.company.trn ? `<div class="info-box-comp">
+                <label>TRN No:</label>
                 <p>${data.company.trn}</p>
               </div>` : ''}
-              ${data.company.address ? `<div>
-                <label>Address</label>
+              ${data.company.email || data.company.phone ? `<div class="info-box-comp">
+                <p>${data.company.email} | ${data.company.phone} </p>
+              </div>` : ''}
+              ${data.company.address ? `<div > 
                 <p>${[data.company.address, data.company.city, data.company.state, data.company.zipCode].filter(Boolean).join(', ')}</p>
               </div>` : ''}
+
+
             </div>
 
              <div class="quotation-header">
@@ -981,11 +990,11 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
             <table>
               <thead>
                 <tr>
+                  <th>JobCard #</th>
                   <th>Vehicle</th>
-                  <th>Plate No.</th>
-                  <th>Year</th>
+                  <th>Plate # | Year</th>
                   <th>Service</th>
-                  <th style="text-align: right; width: 120px;">Amount (AED)</th>
+                  <th style="text-align: right; width: 100px;">Amount (AED)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1073,9 +1082,9 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
     .map(
       (v) => `
     <tr>
+      <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600; color: #4a90e2;">${v.jobCardNo || '-'}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.brand} ${v.model}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.year}</td>
+      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate} | ${v.year}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.services?.map((svc: any) => svc.description).join(', ') || v.service || data.serviceTitle}</td>
       <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">AED ${v.serviceAmount.toFixed(2)}</td>
     </tr>
@@ -1447,22 +1456,17 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
                 <p><strong>${data.company.name}</strong></p>
               </div>
               
-              ${data.company.email ? `<div class="info-box-comp">
-                <label>Email</label>
-                <p>${data.company.email}</p>
-              </div>` : ''}
-              ${data.company.phone ? `<div class="info-box-comp">
-                <label>Phone</label>
-                <p>${data.company.phone}</p>
-              </div>` : ''}
-              ${data.company.trn ? `<div  class="info-box-comp">
-                <label>TRN</label>
+              ${data.company.trn ? `<div class="info-box-comp">
+                <label>TRN No:</label>
                 <p>${data.company.trn}</p>
               </div>` : ''}
-              ${data.company.address ? `<div>
-                <label>Address</label>
+              ${data.company.email || data.company.phone ? `<div class="info-box-comp">
+                <p>${data.company.email} | ${data.company.phone} </p>
+              </div>` : ''}
+              ${data.company.address ? `<div > 
                 <p>${[data.company.address, data.company.city, data.company.state, data.company.zipCode].filter(Boolean).join(', ')}</p>
               </div>` : ''}
+
             </div>
 
              <div class="invoice-header">
@@ -1479,11 +1483,11 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
             <table>
               <thead>
                 <tr>
+                  <th>JobCard #</th>
                   <th>Vehicle</th>
-                  <th>Plate No.</th>
-                  <th>Year</th>
+                  <th>Plate # | Year</th>
                   <th>Service</th>
-                  <th style="text-align: right; width: 120px;">Amount (AED)</th>
+                  <th style="text-align: right; width: 110px;">Amount(AED)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1574,9 +1578,9 @@ export const generateInvoicePDF = async (data: InvoicePDFData) => {
     .map(
       (v) => `
     <tr>
+      <td style="padding: 10px; border: 1px solid #ddd; font-weight: 600; color: #4a90e2;">${v.jobCardNo || '-'}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.brand} ${v.model}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate}</td>
-      <td style="padding: 10px; border: 1px solid #ddd;">${v.year}</td>
+      <td style="padding: 10px; border: 1px solid #ddd;">${v.plate} | ${v.year}</td>
       <td style="padding: 10px; border: 1px solid #ddd;">${v.services?.map((svc: any) => svc.description).join(', ') || v.service || data.serviceTitle}</td>
       <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">AED ${v.serviceAmount.toFixed(2)}</td>
     </tr>
@@ -1937,22 +1941,17 @@ export const generateInvoicePDF = async (data: InvoicePDFData) => {
                 <p><strong>${data.company.name}</strong></p>
               </div>
               
-              ${data.company.email ? `<div class="info-box-comp">
-                <label>Email</label>
-                <p>${data.company.email}</p>
-              </div>` : ''}
-              ${data.company.phone ? `<div class="info-box-comp">
-                <label>Phone</label>
-                <p>${data.company.phone}</p>
-              </div>` : ''}
-              ${data.company.trn ? `<div  class="info-box-comp">
-                <label>TRN</label>
+              ${data.company.trn ? `<div class="info-box-comp">
+                <label>TRN No:</label>
                 <p>${data.company.trn}</p>
               </div>` : ''}
-              ${data.company.address ? `<div>
-                <label>Address</label>
+              ${data.company.email || data.company.phone ? `<div class="info-box-comp">
+                <p>${data.company.email} | ${data.company.phone} </p>
+              </div>` : ''}
+              ${data.company.address ? `<div > 
                 <p>${[data.company.address, data.company.city, data.company.state, data.company.zipCode].filter(Boolean).join(', ')}</p>
               </div>` : ''}
+              
             </div>
 
              <div class="invoice-header">
@@ -1969,11 +1968,11 @@ export const generateInvoicePDF = async (data: InvoicePDFData) => {
             <table>
               <thead>
                 <tr>
+                  <th>JobCard #</th>
                   <th>Vehicle</th>
-                  <th>Plate No.</th>
-                  <th>Year</th>
+                  <th>Plate # | Year</th>
                   <th>Service</th>
-                  <th style="text-align: right; width: 120px;">Amount (AED)</th>
+                  <th style="text-align: right; width: 110px;">Amount(AED)</th>
                 </tr>
               </thead>
               <tbody>

@@ -17,6 +17,7 @@ export default function QuotationDetailPage() {
 
   const [quotation, setQuotation] = useState<any>(null);
   const [bookingVehicles, setBookingVehicles] = useState<any[] | null>(null);
+  const [jobCardNo, setJobCardNo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -45,6 +46,10 @@ export default function QuotationDetailPage() {
                 if (!Array.isArray(data.vehicles) || data.vehicles.length === 0) {
                   data.vehicles = bookingData.vehicles;
                 }
+              }
+              // Fetch jobCardNo from booking service
+              if (bookingData.jobCardNo) {
+                setJobCardNo(bookingData.jobCardNo);
               }
             }
           } catch (err) {
@@ -103,8 +108,8 @@ export default function QuotationDetailPage() {
   const sourceLabel = sourceLabelMap[derivedSource] || 'Direct booking';
 
 
-  async function generatePDF() {
-    if (!quotation) return;
+  async function generatePDF(): Promise<string> {
+    if (!quotation) return '';
 
     const pdf = new jsPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -117,26 +122,30 @@ export default function QuotationDetailPage() {
     try {
       const response = await fetch('/images/Carmantra_Invoice.png');
       const blob = await response.blob();
-      const reader = new FileReader();
+      const imgData = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve(reader.result as string);
+        };
+        reader.readAsDataURL(blob);
+      });
       
-      reader.onload = () => {
-        const imgData = reader.result;
-        // Add black background rectangle with rounded corners behind logo
-        pdf.setFillColor(0, 0, 0);
-        pdf.roundedRect(leftMargin - 2, yPos - 2, 44, 16, 2, 2, 'F');
-        
-        pdf.addImage(imgData as string, 'PNG', leftMargin, yPos, 40, 12);
-        
-        // Continue with rest of PDF after image is loaded
-        completePDF(pdf, pageWidth, leftMargin, rightMargin, contentWidth, yPos + 18);
-      };
+      // Add black background rectangle with rounded corners behind logo
+      pdf.setFillColor(0, 0, 0);
+      pdf.roundedRect(leftMargin - 2, yPos - 2, 44, 16, 2, 2, 'F');
       
-      reader.readAsDataURL(blob);
+      pdf.addImage(imgData, 'PNG', leftMargin, yPos, 40, 12);
+      
+      // Continue with rest of PDF after image is loaded
+      completePDF(pdf, pageWidth, leftMargin, rightMargin, contentWidth, yPos + 18);
     } catch (err) {
       safeConsoleError('Error loading logo image', err);
       // Fallback to text if image fails to load
       completePDF(pdf, pageWidth, leftMargin, rightMargin, contentWidth, yPos);
     }
+
+    // Return PDF as base64 for email attachment
+    return pdf.output('dataurlstring').split(',')[1];
   }
 
   function completePDF(pdf: any, pageWidth: number, leftMargin: number, rightMargin: number, contentWidth: number, startYPos: number) {
@@ -168,6 +177,8 @@ export default function QuotationDetailPage() {
     pdf.setFont('helvetica', 'normal');
     const quotationNumber = quotation.quotationNumber || 'N/A';
     const createdDate = formatDate(quotation.createdAt);
+    const pdfJobCardNo = jobCardNo || quotation.jobCardNo || 'N/A';
+    pdf.text(`Job Card #: ${pdfJobCardNo}`, pageWidth - rightMargin, yPos - 15, { align: 'right' });
     pdf.text(`Quotation #: ${quotationNumber}`, pageWidth - rightMargin, yPos - 10, { align: 'right' });
     pdf.text(`Date: ${createdDate}`, pageWidth - rightMargin, yPos - 5, { align: 'right' });
     pdf.text(`Valid for: ${quotation.validityDays || 30} days`, pageWidth - rightMargin, yPos, { align: 'right' });
@@ -396,33 +407,37 @@ export default function QuotationDetailPage() {
       return;
     }
 
-    setEmailStatus('Sending...');
+    setEmailStatus('Generating PDF...');
 
     try {
+      // Generate PDF as base64 - now properly awaiting it
+      const base64PDF = await generatePDF();
+      
+      if (!base64PDF) {
+        setEmailStatus('Failed to generate PDF');
+        setTimeout(() => setEmailStatus(null), 3000);
+        return;
+      }
+      
+      setEmailStatus('Sending email with attachment...');
+
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: quotation.customerEmail,
-          subject: `Quotation from Carmantra - ${quotation.quotationNumber || quotationId}`,
-          text: `Dear ${quotation.customerName || 'Customer'},\n\nPlease find your quotation attached.\n\nQuotation Number: ${quotation.quotationNumber || quotationId}\nTotal: AED ${(quotation.total || 0).toFixed(2)}\nValid for: ${quotation.validityDays || 30} days\n\nThank you for considering Carmantra.\n\nBest regards,\nCarmantra Team`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #3b82f6;">Quotation from Carmantra</h2>
-              <p>Dear ${quotation.customerName || 'Customer'},</p>
-              <p>Please find your quotation details below:</p>
-              <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Quotation Number:</strong> ${quotation.quotationNumber || quotationId}</p>
-                <p style="margin: 5px 0;"><strong>Total Amount:</strong> AED ${(quotation.total || 0).toFixed(2)}</p>
-                <p style="margin: 5px 0;"><strong>Valid for:</strong> ${quotation.validityDays || 30} days</p>
-              </div>
-              <p>Thank you for considering Carmantra for your automotive needs.</p>
-              <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-                Best regards,<br/>
-                <strong>Carmantra Team</strong>
-              </p>
-            </div>
-          `,
+          emailType: 'quotation-created',
+          email: quotation.customerEmail,
+          name: quotation.customerName,
+          jobCardNo: jobCardNo || quotation.jobCardNo || 'N/A',
+          quotationNumber: quotation.quotationNumber,
+          total: quotation.total,
+          validityDays: quotation.validityDays,
+          companyName: quotation.companyName,
+          contactName: quotation.contactName,
+          attachment: {
+            name: `Quotation_${quotation.quotationNumber || quotationId}.pdf`,
+            data: base64PDF,
+          },
         }),
       });
 
@@ -435,14 +450,17 @@ export default function QuotationDetailPage() {
           quotationNumber: quotation.quotationNumber,
           customerEmail: quotation.customerEmail,
           customerName: quotation.customerName,
-          subject: `Quotation from Carmantra - ${quotation.quotationNumber || quotationId}`,
+          emailType: 'quotation-created',
+          attachmentName: `Quotation_${quotation.quotationNumber || quotationId}.pdf`,
           sentAt: Timestamp.now(),
         });
 
         setTimeout(() => setEmailStatus(null), 3000);
       } else {
-        setEmailStatus('Failed to send email');
-        setTimeout(() => setEmailStatus(null), 3000);
+        const errorData = await response.json();
+        setEmailStatus(`Failed to send email: ${errorData.error || 'Unknown error'}`);
+        console.error('Email API error:', errorData);
+        setTimeout(() => setEmailStatus(null), 5000);
       }
     } catch (err) {
       safeConsoleError('Send email error', err);
@@ -523,6 +541,18 @@ export default function QuotationDetailPage() {
             </button>
           </PermissionGate>
 
+          <PermissionGate module="quotations" action="create">
+            <button
+              onClick={sendEmail}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm sm:text-base bg-green-600 text-white rounded hover:bg-green-700 whitespace-nowrap"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+               Send Email
+            </button>
+          </PermissionGate>
+
           <PermissionGate module="quotations" action="delete">
             <button
               onClick={handleDelete}
@@ -564,9 +594,10 @@ export default function QuotationDetailPage() {
               <p className="text-blue-100">Premium Auto Care Services</p>
             </div>
             <div className="text-left sm:text-right">
-              <div className="text-sm text-blue-100">Quotation #</div>
-              <div className="text-lg sm:text-xl font-bold">{quotation.quotationNumber || 'N/A'}</div>
-              <div className="text-sm text-blue-100 mt-2">Date: {formatDate(quotation.createdAt)}</div>
+              <div className="text-sm text-blue-100">Job Card #</div>
+              <div className="text-lg sm:text-xl font-bold">{jobCardNo || quotation.jobCardNo || 'N/A'}</div>
+              <div className="text-sm text-blue-100 mt-2">Quotation: {quotation.quotationNumber || 'N/A'}</div>
+              <div className="text-sm text-blue-100">Date: {formatDate(quotation.createdAt)}</div>
               <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mt-2 ${statusColors[quotation.status as keyof typeof statusColors] || statusColors.pending}`}>
                 {(quotation.status || 'pending').toUpperCase()}
               </span>

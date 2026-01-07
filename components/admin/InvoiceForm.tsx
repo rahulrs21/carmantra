@@ -9,10 +9,12 @@ interface Item { description: string; quantity: number; rate: number; amount: nu
 
 export default function InvoiceForm({
   invoice,
+  jobCardNo,
   onCreated,
   onCancel
 }: {
   invoice?: any;
+  jobCardNo?: string;
   onCreated?: (id: string) => void;
   onCancel?: () => void;
 }) {
@@ -156,6 +158,7 @@ export default function InvoiceForm({
         notes: notes,
         paymentTerms,
         paymentTermsOther: paymentTerms === 'other' ? paymentTermsOther : '',
+        jobCardNo: jobCardNo || invoice?.jobCardNo,
         updatedAt: Timestamp.now(),
       };
 

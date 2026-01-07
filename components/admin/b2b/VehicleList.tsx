@@ -36,6 +36,7 @@ interface VehicleListProps {
   isLoading: boolean;
   onRefresh: () => void;
   onServiceTotalCalculated?: (serviceId: string, total: number) => void;
+  disabled?: boolean;
 }
 
 export function VehicleList({
@@ -45,6 +46,7 @@ export function VehicleList({
   isLoading,
   onRefresh,
   onServiceTotalCalculated,
+  disabled = false,
 }: VehicleListProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const deleteVehicleMutation = useDeleteVehicle();
@@ -93,7 +95,7 @@ export function VehicleList({
           <CardTitle>Vehicles</CardTitle>
           <CardDescription>Vehicles included in this service</CardDescription>
         </div>
-        <VehicleForm companyId={companyId} serviceId={serviceId} onSuccess={onRefresh} />
+        <VehicleForm companyId={companyId} serviceId={serviceId} onSuccess={onRefresh} disabled={disabled} />
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -102,9 +104,11 @@ export function VehicleList({
               <TableRow>
                 <TableHead>Plate Number</TableHead>
                 <TableHead>Brand / Model</TableHead>
-                <TableHead>Vehicle Type</TableHead>
-                <TableHead>Year</TableHead>
-                <TableHead>Total Service Cost</TableHead>
+                <TableHead className="text-xs">Vehicle Type</TableHead>
+                <TableHead className="text-xs">VIN</TableHead>
+                <TableHead className="text-xs">Fuel Type</TableHead>
+                <TableHead className="text-xs">Year</TableHead>
+                <TableHead>Total Cost</TableHead>
                 <TableHead>Status</TableHead> 
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -123,7 +127,13 @@ export function VehicleList({
                   </TableCell>
                 </TableRow>
               ) : (
-                vehicles.map((vehicle) => {
+                [...vehicles]
+                  .sort((a, b) => {
+                    const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : (a.createdAt as any).toDate?.().getTime() || 0;
+                    const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : (b.createdAt as any).toDate?.().getTime() || 0;
+                    return dateB - dateA; // Descending order (newest first)
+                  })
+                  .map((vehicle) => {
                   const totalServiceAmount = vehicle.services?.reduce((sum, s) => sum + s.amount, 0) || 0;
                   const displayCost = vehicle.status === 'completed' ? totalServiceAmount : 0;
                   
@@ -138,59 +148,85 @@ export function VehicleList({
 
                   return (
                     <TableRow key={vehicle.id} className="hover:bg-gray-50">
-                      <TableCell className="font-mono font-semibold">{vehicle.plateNumber}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-mono font-semibold text-xs sm:text-sm">{vehicle.plateNumber}</TableCell>
+                      <TableCell className="text-xs sm:text-sm">
                         {vehicle.brand} {vehicle.model}
                       </TableCell>
                       <TableCell className="text-sm">
                         {vehicle.vehicleType ? (
-                          <Badge variant="outline" className="capitalize">
+                          <Badge variant="outline" className="capitalize text-xs">
                             {vehicle.vehicleType}
                           </Badge>
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
                       </TableCell>
-                      <TableCell>{vehicle.year || '-'}</TableCell>
-                      <TableCell className="font-semibold">
+                      <TableCell className="text-xs font-mono">
+                        {vehicle.vin ? (
+                          <span className="text-gray-700 break-words">{vehicle.vin}</span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {vehicle.fuelType ? (
+                          <Badge variant="outline" className="text-xs capitalize whitespace-nowrap">
+                            {vehicle.fuelType}
+                          </Badge>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">{vehicle.year || '-'}</TableCell>
+                      <TableCell className="font-semibold text-xs sm:text-sm">
                         AED {displayCost.toLocaleString('en-AE')}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={statusConfig.variant} className={statusConfig.className}>
+                        <Badge variant={statusConfig.variant} className={`${statusConfig.className} text-xs`}>
                           {vehicle.status.charAt(0).toUpperCase() + vehicle.status.slice(1).replace('-', ' ')}
                         </Badge>
                       </TableCell>
                       
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1 sm:gap-2">
                           <VehicleForm
                             companyId={companyId}
                             serviceId={serviceId}
                             vehicle={vehicle}
                             onSuccess={onRefresh}
+                            disabled={disabled}
                             trigger={
-                              <Button size="sm" variant="outline" className="gap-1">
+                              <Button size="sm" variant="outline" className="gap-1" disabled={disabled}>
                                 <Pencil size={14} />
-                                Edit
+                                <span className="hidden sm:inline">Edit</span>
                               </Button>
                             }
                           />
-                          <Link
-                            href={`/admin/b2b-booking/companies/${companyId}/services/${serviceId}/vehicles/${vehicle.id}`}
-                          >
-                            <Button size="sm" variant="outline" className="gap-1">
-                              Details
-                              <ArrowRight size={14} />
-                            </Button>
-                          </Link>
+                          <div className="relative flex flex-col gap-1">
+                            <Link
+                              href={`/admin/b2b-booking/companies/${companyId}/services/${serviceId}/vehicles/${vehicle.id}`}
+                              target='_blank'
+                            >
+                              <Button size="sm" variant="outline" className="gap-1 w-full">
+                                <ArrowRight size={14} />
+                                <span className="inline">Details</span>
+                              </Button>
+                            </Link>
+                            {displayCost === 0 && (
+                              <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1 text-xs text-amber-900 font-medium text-center">
+                                Add service and cost here
+                              </div>
+                            )}
+                          </div>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => setDeleteConfirmId(vehicle.id)}
-                            className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            disabled={disabled}
+                            className={`gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <Trash2 size={14} />
-                            Delete
+                            <span className="hidden sm:inline">Delete</span>
                           </Button>
                         </div>
                       </TableCell>

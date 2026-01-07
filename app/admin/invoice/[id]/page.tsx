@@ -17,13 +17,31 @@ export default function InvoiceDetails() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [jobCardNo, setJobCardNo] = useState<string | null>(null);
 
   async function fetchInvoice() {
     if (!id) return;
     try {
       const snap = await getDoc(doc(db, 'invoices', id));
       if (!snap.exists()) return setInvoice(null);
-      setInvoice({ ...(snap.data() as any), id: snap.id });
+      const data = { ...(snap.data() as any), id: snap.id };
+      
+      // Try to fetch jobCardNo from bookedServices if serviceBookingId exists
+      if (data.serviceBookingId) {
+        try {
+          const bookingSnap = await getDoc(doc(db, 'bookedServices', data.serviceBookingId));
+          if (bookingSnap.exists()) {
+            const bookingData = bookingSnap.data();
+            if (bookingData.jobCardNo) {
+              setJobCardNo(bookingData.jobCardNo);
+            }
+          }
+        } catch (err: any) {
+          safeConsoleError('Load booking jobCardNo error', err);
+        }
+      }
+      
+      setInvoice(data);
     } catch (err: any) {
       safeConsoleError('Invoice fetch error', err);
     } finally {
@@ -35,25 +53,49 @@ export default function InvoiceDetails() {
     fetchInvoice();
   }, [id]);
 
-  function generatePDF(): string {
+  async function generatePDF(): Promise<string> {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
 
     // Header Section with Background
-    doc.setFillColor(63, 81, 181); // Indigo color
+    // doc.setFillColor(63, 81, 181); // Indigo color
+    doc.setFillColor(59, 130, 246); // Blue-500 color
     doc.rect(0, 0, pageWidth, 45, 'F');
+
+    // Header - Logo Image
+    try {
+      const response = await fetch('/images/Carmantra_Invoice.png');
+      const blob = await response.blob();
+      const imgData = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve(reader.result as string);
+        };
+        reader.readAsDataURL(blob);
+      });
+      
+      // Add black background rectangle with rounded corners behind logo
+      const leftMargin = 14;
+      const yPos = 14;
+      doc.setFillColor(0, 0, 0);
+      doc.roundedRect(leftMargin - 2, yPos - 2, 44, 16, 2, 2, 'F');
+      
+      doc.addImage(imgData, 'PNG', leftMargin, yPos, 40, 12);
+    } catch (err) {
+      safeConsoleError('Error loading logo image', err);
+      // Continue without logo if image fails to load
+    }
 
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(28);
     doc.setFont('helvetica', 'bold');
-    doc.text('INVOICE', 14, 25);
+    const rightMargin = 15;
+    doc.text('INVOICE', pageWidth - rightMargin, 25, { align: 'right' });
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Invoice #: ${invoice?.invoiceNumber || invoice?.id || ''}`, 14, 35);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - 14, 35, { align: 'right' });
-
-    // Reset text color
+    doc.text(`Job Card #: ${invoice?.jobCardNo || 'N/A'}`, 14, 41);
     doc.setTextColor(0, 0, 0);
 
     // Bill From, Bill To, and Vehicle in boxes
@@ -416,6 +458,12 @@ export default function InvoiceDetails() {
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(255, 255, 255);
           doc.text('INVOICE', pageWidth - leftMargin, yPos - 5, { align: 'right' });
+
+          // Add Job Card #
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(255, 255, 255);
+          doc.text(`Job Card #: ${invoice?.jobCardNo || 'N/A'}`, pageWidth - leftMargin, yPos + 4, { align: 'right' });
           
           // Add Invoice # and Date
           doc.setFontSize(10);
@@ -799,18 +847,45 @@ export default function InvoiceDetails() {
     if (!invoice?.customerEmail) return setStatus('Invoice has no customer email');
     setStatus('Generating PDF…');
     try {
-      const base64 = generatePDF();
+      const base64 = await generatePDF();
       setStatus('Sending email…');
+      
+      // Determine customer name for B2B or B2C
+      const customerName = invoice.isB2B 
+        ? invoice.companyName || invoice.contactName || invoice.customerName 
+        : invoice.customerName;
+
       const resp = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Invoice', email: invoice.customerEmail, phone: '', service: 'Invoice', message: `Please find attached invoice ${invoice.id}`, attachment: { name: `invoice-${invoice.id}.pdf`, type: 'application/pdf', data: base64 } }),
+        body: JSON.stringify({
+          emailType: 'job-completion',
+          email: invoice.customerEmail,
+          name: customerName,
+          jobCardNo: jobCardNo || invoice.jobCardNo || 'N/A',
+          invoiceNumber: invoice.invoiceNumber || invoice.id,
+          total: invoice.total || 0,
+          paymentStatus: invoice.paymentStatus || 'unpaid',
+          companyName: invoice.companyName,
+          contactName: invoice.contactName,
+          attachment: {
+            name: `Invoice_${invoice.invoiceNumber || invoice.id}.pdf`,
+            data: base64,
+          },
+        }),
       });
       const json = await resp.json();
-      if (json?.success) setStatus('Invoice sent'); else setStatus('Failed to send invoice');
+      if (json?.success) {
+        setStatus('Invoice sent successfully!');
+        setTimeout(() => setStatus(null), 3000);
+      } else {
+        setStatus(`Failed to send invoice: ${json.error || 'Unknown error'}`);
+        setTimeout(() => setStatus(null), 5000);
+      }
     } catch (err) {
       safeConsoleError('Send invoice error', err);
       setStatus('Failed to send invoice');
+      setTimeout(() => setStatus(null), 3000);
     }
   }
 
@@ -824,7 +899,7 @@ export default function InvoiceDetails() {
           
           <h1 className="text-3xl font-bold">Invoice #{invoice.invoiceNumber || invoice.id}</h1>
           <div className="text-sm text-gray-500 mt-1">
-            {invoice.customerName} • {invoice.customerMobile}
+            Job Card #: {invoice.jobCardNo || 'N/A'} • {invoice.customerName} • {invoice.customerMobile}
           </div>
         </div>
 
@@ -885,8 +960,8 @@ export default function InvoiceDetails() {
  
             <div className="text-left sm:text-right">
               <h2 className='font-bold text-3xl mb-2'>INVOICE</h2>
-              <p className="text-blue-100">Date:</p>
-              <p className="font-semibold">{new Date().toLocaleDateString()}</p>
+              <p>Job Card #: {invoice.jobCardNo || 'N/A'} </p>
+              <p className="text-blue-100">Date: {new Date().toLocaleDateString()}</p> 
             </div>
           </div>
         </div>
@@ -1159,6 +1234,7 @@ export default function InvoiceDetails() {
             <div className="p-6">
               <InvoiceForm
                 invoice={invoice}
+                jobCardNo={invoice.jobCardNo}
                 onCreated={() => {
                   setShowEditModal(false);
                   fetchInvoice();

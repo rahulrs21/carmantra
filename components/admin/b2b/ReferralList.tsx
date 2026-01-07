@@ -23,6 +23,7 @@ interface ReferralListProps {
   vehicleIds?: string[];
   isLoading: boolean;
   onRefresh: () => void;
+  disabled?: boolean;
 }
 
 export function ReferralList({
@@ -32,6 +33,7 @@ export function ReferralList({
   vehicleIds = [],
   isLoading,
   onRefresh,
+  disabled = false,
 }: ReferralListProps) {
   const deleteReferral = useDeleteReferral();
   const { toast } = useToast();
@@ -79,6 +81,7 @@ export function ReferralList({
           serviceId={serviceId}
           vehicleIds={vehicleIds}
           onSuccess={onRefresh}
+          disabled={disabled}
         />
       </CardHeader>
       <CardContent className="space-y-4">
