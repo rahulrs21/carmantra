@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { db, auth } from '@/lib/firebase';
 import { collection, query, where, getDocs, updateDoc, doc, Timestamp, deleteDoc, setDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -66,6 +66,20 @@ export default function AcceptInvitePage() {
           setError('This invitation has already been accepted. Please login with your credentials.');
           setTimeout(() => router.push('/admin/login'), 3000);
           return;
+        }
+
+        // Clean up any duplicate pending documents with the same email
+        const duplicateQuery = query(usersRef, where('email', '==', userData.email), where('status', '==', 'pending'));
+        const duplicateDocs = await getDocs(duplicateQuery);
+        for (const dupDoc of duplicateDocs.docs) {
+          if (dupDoc.id !== userDoc.id) {
+            try {
+              await deleteDoc(doc(db, 'users', dupDoc.id));
+              console.log('✅ Cleaned up duplicate pending document during verification:', dupDoc.id);
+            } catch (err) {
+              console.warn('⚠️ Could not delete duplicate pending doc:', err);
+            }
+          }
         }
 
         setInviteData({
@@ -137,7 +151,27 @@ export default function AcceptInvitePage() {
       });
 
       // Delete the old invite document (the one created during user creation)
-      await deleteDoc(doc(db, 'users', inviteData.id));
+      try {
+        await deleteDoc(doc(db, 'users', inviteData.id));
+        console.log('✅ Old invite document deleted:', inviteData.id);
+      } catch (deleteErr) {
+        console.warn('⚠️ Warning: Could not delete old invite document, but user was created successfully:', deleteErr);
+      }
+
+      // Also clean up any other pending documents with the same email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', inviteData.email), where('status', '==', 'pending'));
+      const oldDocs = await getDocs(q);
+      for (const oldDoc of oldDocs.docs) {
+        if (oldDoc.id !== userId) {
+          try {
+            await deleteDoc(doc(db, 'users', oldDoc.id));
+            console.log('✅ Cleaned up duplicate pending document:', oldDoc.id);
+          } catch (err) {
+            console.warn('⚠️ Could not delete duplicate pending doc:', err);
+          }
+        }
+      }
 
       console.log('✅ User invitation accepted:', inviteData.email);
       toast.success('Account activated! Redirecting to login...');
@@ -151,7 +185,27 @@ export default function AcceptInvitePage() {
       let errorMessage = 'Failed to create account.';
 
       if (authError.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already registered. Please login instead.';
+        errorMessage = 'This email already has an account in the system. Please login with your password, or contact admin to reset your account.';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        
+        // Try to update the pending document to active status
+        try {
+          await setDoc(doc(db, 'users', inviteData.id), {
+            email: inviteData.email,
+            displayName: inviteData.displayName,
+            role: inviteData.role,
+            status: 'active',
+            isOnline: true,
+            permissions: inviteData.permissions || [],
+            createdAt: inviteData.createdAt || Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          });
+          console.log('✅ Updated pending document to active status');
+        } catch (updateErr) {
+          console.warn('⚠️ Could not update document status:', updateErr);
+        }
+        return;
       } else if (authError.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak. Please use a stronger password.';
       } else if (authError.code === 'auth/invalid-email') {

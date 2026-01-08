@@ -749,8 +749,8 @@ export default function ExpenseManagementPage() {
           )}
         </div>
 
-        {/* COMMENTED OUT - Employee Salary Expenses - NOT included in totals
-        {paidSalaries.length > 0 && (
+       {/* COMMENTED OUT - Employee Salary Expenses - NOT included in totals */}
+        {/* {paidSalaries.length > 0 && (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-4 sm:p-6 border-b flex flex-col sm:flex-row sm:items-center sm:justify-start gap-4  ">
               <div>
@@ -828,8 +828,7 @@ export default function ExpenseManagementPage() {
               </table>
             </div>
           </div>
-        )}
-        */}
+        )}  */}
 
         {/* Edit Salary Modal */}
         {isEditSalaryModalOpen && editingSalary && (

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, query, onSnapshot, orderBy, addDoc, updateDoc, doc, deleteDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, addDoc, updateDoc, doc, deleteDoc, setDoc, Timestamp, where, getDocs } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { UserAccount, UserRole, DEFAULT_PERMISSIONS, Permission } from '@/lib/types';
 import { getRoleLabel, getRoleBadgeColor } from '@/lib/permissions';
@@ -153,6 +153,24 @@ export default function UsersPage() {
         toast.success('User updated successfully');
       } else {
         // Create new user
+        // First, check if email already exists
+        const existingUsersQuery = query(collection(db, 'users'), where('email', '==', formData.email.toLowerCase()));
+        const existingUsers = await getDocs(existingUsersQuery);
+        
+        if (existingUsers.docs.length > 0) {
+          const existingUser = existingUsers.docs[0];
+          const userData = existingUser.data();
+          if (userData.status === 'active') {
+            toast.error('A user with this email already exists and is active.');
+            setSubmitting(false);
+            return;
+          } else if (userData.status === 'pending') {
+            toast.error('An invite for this email has already been sent. Please delete it first before creating a new one.');
+            setSubmitting(false);
+            return;
+          }
+        }
+        
         if (formData.sendInvite) {
           // Generate invite token and save to Firestore
           const inviteToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -188,14 +206,22 @@ export default function UsersPage() {
               }),
             });
 
-            const emailData = await emailResponse.json();
+            let emailData;
+            try {
+              emailData = await emailResponse.json();
+            } catch (jsonError) {
+              console.error('❌ Failed to parse email response as JSON:', jsonError);
+              console.error('Response status:', emailResponse.status);
+              toast.error('User created but failed to send invite email (invalid response). Please send manually.');
+              return;
+            }
 
             if (!emailResponse.ok || !emailData.success) {
               console.error('❌ Failed to send invite email:', emailData.error);
               toast.error('User created but failed to send invite email. Please send manually.');
             } else {
               console.log('✅ Invite email sent successfully:', emailData.id);
-              toast.success(`Invite email sent to ${formData.email}`);
+              toast.success(`✅ Invite email sent successfully to ${formData.email}`);
             }
           } catch (emailError) {
             console.error('❌ Error sending invite email:', emailError);
@@ -279,6 +305,8 @@ export default function UsersPage() {
     }
 
     try {
+      let authDeleted = false;
+      
       // First, delete from Firebase Auth via API
       const deleteAuthResponse = await fetch('/api/admin/delete-user', {
         method: 'DELETE',
@@ -291,15 +319,45 @@ export default function UsersPage() {
         }),
       });
 
-      if (!deleteAuthResponse.ok) {
-        const errorData = await deleteAuthResponse.json();
-        console.warn('Auth deletion warning:', errorData.message);
-        // Continue with Firestore deletion even if Auth deletion fails
+      if (deleteAuthResponse.ok) {
+        authDeleted = true;
+        try {
+          const result = await deleteAuthResponse.json();
+          console.log('✅ Auth deletion successful:', result.message);
+        } catch (jsonError) {
+          console.warn('⚠️ Could not parse auth deletion response:', jsonError);
+        }
+      } else {
+        try {
+          const errorData = await deleteAuthResponse.json();
+          console.warn('⚠️ Auth deletion warning:', errorData.message);
+        } catch (jsonError) {
+          console.warn('⚠️ Auth deletion failed and response was not JSON:', deleteAuthResponse.status);
+        }
       }
 
       // Then delete from Firestore
       await deleteDoc(doc(db, 'users', userToDelete.id!));
-      toast.success(`${userToDelete.displayName || 'Customer'} has been deleted`);
+      
+      // Also clean up any duplicate documents with the same email
+      const duplicateUsersQuery = query(collection(db, 'users'), where('email', '==', userToDelete.email));
+      const duplicateDocs = await getDocs(duplicateUsersQuery);
+      for (const dupDoc of duplicateDocs.docs) {
+        if (dupDoc.id !== userToDelete.id) {
+          try {
+            await deleteDoc(doc(db, 'users', dupDoc.id));
+            console.log('✅ Deleted duplicate user document:', dupDoc.id);
+          } catch (err) {
+            console.warn('⚠️ Could not delete duplicate:', err);
+          }
+        }
+      }
+      
+      const deleteMessage = authDeleted 
+        ? `${userToDelete.displayName || 'User'} has been completely deleted (Auth & Firestore)`
+        : `${userToDelete.displayName || 'User'} deleted from database (Auth deletion was skipped)`;
+      
+      toast.success(deleteMessage);
       
       // Show delete status message
       setDeleteStatus(false);
@@ -314,7 +372,7 @@ export default function UsersPage() {
 
     } catch (error: any) {
       console.error('Error deleting user:', error);
-      toast.error('Failed to delete user');
+      toast.error('Failed to delete user: ' + (error.message || 'Unknown error'));
     }  
   };
 
@@ -349,7 +407,28 @@ export default function UsersPage() {
   // Protected admin email - cannot be edited or deleted
   const PROTECTED_ADMIN_EMAIL = 'rahulrs2448@gmail.com';
 
-  if (!isAdmin) {
+  // Check if user is online based on lastActivityAt timestamp
+  // User is online if they were active within the last 5 minutes
+  const isUserOnline = (user: UserAccount): boolean => {
+    if (!user.lastActivityAt) return false;
+    
+    try {
+      const lastActivityTime = user.lastActivityAt.toDate?.() || new Date(user.lastActivityAt as any);
+      const currentTime = new Date();
+      const diffMinutes = (currentTime.getTime() - lastActivityTime.getTime()) / (1000 * 60);
+      
+      // User is online if active within last 5 minutes
+      return diffMinutes <= 5;
+    } catch (err) {
+      console.warn('Error checking online status:', err);
+      return false;
+    }
+  };
+
+  // Check permissions for viewing and managing users
+  const canViewUsers = currentRole === 'admin' || currentRole === 'manager' || currentRole === 'accounts';
+
+  if (!canViewUsers) {
     return (
       <div className="p-6">
         <Alert variant="destructive">
@@ -374,7 +453,7 @@ export default function UsersPage() {
           <p className="text-sm text-gray-500 mt-1">Manage user accounts and permissions</p>
         </div>
         <PermissionGate module="users" action="create">
-          <Button onClick={() => handleOpenDialog()} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button onClick={() => handleOpenDialog()} className="bg-indigo-600 hover:bg-indigo-700" disabled={!isAdmin}>
             <UserPlus className="w-4 h-4 mr-2" />
             Add User
           </Button>
@@ -470,7 +549,7 @@ export default function UsersPage() {
                             </div>
                           )}
                           {/* Online Status Indicator - Only show when online */}
-                          {user.isOnline && (
+                          {isUserOnline(user) && (
                             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse" />
                           )}
                         </div>
@@ -512,8 +591,8 @@ export default function UsersPage() {
                           size="sm"
                           onClick={() => toggleStatus(user)}
                           className="text-xs"
-                          disabled={user.email === PROTECTED_ADMIN_EMAIL}
-                          title={user.email === PROTECTED_ADMIN_EMAIL ? 'This admin account is protected' : ''}
+                          disabled={!isAdmin || user.email === PROTECTED_ADMIN_EMAIL}
+                          title={!isAdmin ? 'Only administrators can change user status' : user.email === PROTECTED_ADMIN_EMAIL ? 'This admin account is protected' : ''}
                         >
                           {user.status === 'active' ? 'Deactivate' : 'Activate'}
                         </Button>
@@ -522,9 +601,9 @@ export default function UsersPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleOpenDialog(user)}
-                            disabled={user.email === PROTECTED_ADMIN_EMAIL}
+                            disabled={!isAdmin || user.email === PROTECTED_ADMIN_EMAIL}
                             className="disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={user.email === PROTECTED_ADMIN_EMAIL ? 'This admin account is protected and cannot be edited' : 'Edit user'}
+                            title={!isAdmin ? 'Only administrators can edit users' : user.email === PROTECTED_ADMIN_EMAIL ? 'This admin account is protected and cannot be edited' : 'Edit user'}
                           >
                             <Edit2 className="w-4 h-4" />
                           </Button>
@@ -534,10 +613,12 @@ export default function UsersPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDelete(user.id!)}
-                            disabled={user.email === PROTECTED_ADMIN_EMAIL || (user.role === 'admin' && adminCount <= 1)}
+                            disabled={!isAdmin || user.email === PROTECTED_ADMIN_EMAIL || (user.role === 'admin' && adminCount <= 1)}
                             className="text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             title={
-                              user.email === PROTECTED_ADMIN_EMAIL 
+                              !isAdmin
+                                ? 'Only administrators can delete users'
+                                : user.email === PROTECTED_ADMIN_EMAIL 
                                 ? 'This admin account is protected and cannot be deleted' 
                                 : user.role === 'admin' && adminCount <= 1 
                                 ? 'Cannot delete the last administrator' 

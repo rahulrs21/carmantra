@@ -155,17 +155,68 @@ export default function AccountsPage() {
       // Total expenses = filtered expenses only (NOT including salaries)
       const totalExpenses = filteredExpenses;
 
-      // Fetch outstanding payments
+      // Fetch outstanding payments from B2C invoices
       const outstandingQuery = query(
         collection(db, 'invoices'),
         where('paymentStatus', 'in', ['unpaid', 'partial'])
       );
       const outstandingSnap = await getDocs(outstandingQuery);
-      const outstandingPayments = outstandingSnap.docs.reduce((sum, doc) => {
-        const total = doc.data().total || 0;
-        const paid = doc.data().paymentStatus === 'partial' ? (doc.data().partialPaidAmount || 0) : 0;
-        return sum + (total - paid);
-      }, 0);
+      const b2cOutstanding = outstandingSnap.docs
+        .filter((doc) => {
+          const createdAt = doc.data().createdAt;
+          if (!createdAt) return false;
+          const docDate = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+          return docDate >= start && docDate <= end;
+        })
+        .reduce((sum, doc) => {
+          // Match payments page logic: partial invoices show partialPaidAmount, unpaid show total
+          if (doc.data().paymentStatus === 'partial') {
+            return sum + (doc.data().partialPaidAmount || 0);
+          } else {
+            return sum + (doc.data().total || 0);
+          }
+        }, 0);
+
+      // Fetch outstanding payments from B2B invoices
+      let b2bOutstanding = 0;
+      try {
+        const companiesRef = collection(db, 'companies');
+        const companiesSnapshot = await getDocs(companiesRef);
+
+        for (const companyDoc of companiesSnapshot.docs) {
+          const servicesRef = collection(db, 'companies', companyDoc.id, 'services');
+          const servicesSnapshot = await getDocs(servicesRef);
+
+          for (const serviceDoc of servicesSnapshot.docs) {
+            try {
+              const invoicesList = await invoicesService.fetchInvoices(companyDoc.id, serviceDoc.id);
+              
+              if (invoicesList && invoicesList.length > 0) {
+                const outstandingInvoices = invoicesList.filter((inv: any) => inv.status === 'sent' || inv.status === 'overdue');
+                outstandingInvoices.forEach((invoice: any) => {
+                  const invoiceDate = invoice.invoiceDate;
+                  const docDate = invoiceDate instanceof Date 
+                    ? invoiceDate 
+                    : (invoiceDate?.seconds 
+                      ? new Date(invoiceDate.seconds * 1000)
+                      : (invoiceDate?.toDate ? invoiceDate.toDate() : new Date()));
+                  
+                  if (docDate >= start && docDate <= end) {
+                    b2bOutstanding += invoice.totalAmount || invoice.total || 0;
+                  }
+                });
+              }
+            } catch (error) {
+              console.error(`Error fetching B2B outstanding invoices:`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching B2B outstanding data:', error);
+      }
+
+      // Total outstanding = B2C + B2B
+      const outstandingPayments = b2cOutstanding + b2bOutstanding;
 
       // Fetch total payment amount (all payments with amountPaid)
       const allPaymentsQuery = query(collection(db, 'invoices'));

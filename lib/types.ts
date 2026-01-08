@@ -201,6 +201,7 @@ export interface UserAccount {
   createdAt?: any;
   createdBy?: string;
   lastLogin?: any;
+  lastActivityAt?: any; // Timestamp of last activity for online status
   inviteToken?: string;
   inviteExpires?: any;
 }

@@ -63,7 +63,7 @@ const formatDateDDMMYYYY = (date: any) => {
 const getDateRange = (filterType: string, customStartDate?: Date, customEndDate?: Date): { start: Date; end: Date } => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   let start = new Date(today);
   let end = new Date(today);
   end.setHours(23, 59, 59, 999);
@@ -75,6 +75,9 @@ const getDateRange = (filterType: string, customStartDate?: Date, customEndDate?
       start.setDate(start.getDate() - 1);
       end = new Date(start);
       end.setHours(23, 59, 59, 999);
+      break;
+    case '7days':
+      start.setDate(start.getDate() - 6); // 6 days back + today = 7 days
       break;
     case '30days':
       start.setDate(start.getDate() - 30);
@@ -119,7 +122,7 @@ export function QuotationList({
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const [emailSuccessOpen, setEmailSuccessOpen] = useState(false);
   const [emailSuccessData, setEmailSuccessData] = useState<{ email: string; quotationNumber: string } | null>(null);
-  const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | '30days' | 'custom'>('today');
+  const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | '7days' | '30days' | 'custom'>('7days');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [creatingInvoiceId, setCreatingInvoiceId] = useState<string | null>(null);
@@ -158,7 +161,7 @@ export function QuotationList({
       updated.delete(quotation.id);
       return updated;
     });
-    
+
     setSelectedQuotation(quotation);
     setDeleteDialogOpen(true);
   };
@@ -215,7 +218,7 @@ export function QuotationList({
       for (const quotationId of Array.from(selectedQuotations)) {
         const quotation = quotations.find((q) => q.id === quotationId);
         if (!quotation) continue;
-        
+
         const actualServiceId = serviceId || quotation.serviceId;
         await deleteQuotation.mutateAsync({
           companyId,
@@ -263,12 +266,12 @@ export function QuotationList({
         quotation,
         userId: user?.uid || '',
       });
-      
+
       // Store the newly created invoice ID in sessionStorage
       if (result?.id) {
         sessionStorage.setItem('newInvoiceId', result.id);
       }
-      
+
       // Show success modal
       setInvoiceSuccessOpen(true);
     } catch (error) {
@@ -539,7 +542,7 @@ export function QuotationList({
 
   // Sort and paginate quotations
   const dateRange = getDateRange(dateFilterType, customStartDate ? new Date(customStartDate) : undefined, customEndDate ? new Date(customEndDate) : undefined);
-  
+
   const filteredQuotations = quotations.filter((quotation) => {
     const quotationDate = quotation.quotationDate instanceof Date ? quotation.quotationDate : (quotation.quotationDate as any).toDate?.() || new Date();
     return quotationDate >= dateRange.start && quotationDate <= dateRange.end;
@@ -580,6 +583,7 @@ export function QuotationList({
                 <SelectContent>
                   <SelectItem value="today">Today</SelectItem>
                   <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="7days">Last 7 Days</SelectItem>
                   <SelectItem value="30days">Last 30 Days</SelectItem>
                   <SelectItem value="custom">Custom Range</SelectItem>
                 </SelectContent>
@@ -685,6 +689,7 @@ export function QuotationList({
                         <Checkbox
                           checked={selectedQuotations.has(quotation.id)}
                           onCheckedChange={() => handleSelectQuotation(quotation.id)}
+                          disabled={quotation.status === 'accepted'}
                         />
                       </TableCell>
                       <TableCell className="font-medium">
@@ -795,7 +800,7 @@ export function QuotationList({
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="gap-1"
+                              className="gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                               onClick={() => {
                                 // Remove "new" badge on interaction
                                 setNewQuotationIds((prev) => {
@@ -805,16 +810,18 @@ export function QuotationList({
                                 });
                                 setEditingQuotation(quotation);
                               }}
+                              disabled={quotation.status === 'accepted'}
+                              title={quotation.status === 'accepted' ? 'Cannot edit accepted quotations' : ''}
                             >
                               <Edit size={16} />
                             </Button>
                             <span
-                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
            whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
            opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                          >
-                            Edit Quotation
-                          </span>
+                            >
+                              Edit Quotation
+                            </span>
                           </div>
 
                           <div className='relative inline-block group'>
@@ -828,12 +835,12 @@ export function QuotationList({
                               <Download size={16} />
                             </Button>
                             <span
-                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
            whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
            opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                          >
-                            Download Quotation
-                          </span>
+                            >
+                              Download Quotation
+                            </span>
                           </div>
 
                           <div className='relative inline-block group'>
@@ -848,12 +855,12 @@ export function QuotationList({
                               <Mail size={16} />
                             </Button>
                             <span
-                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
            whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
            opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                          >
-                            {sendingEmailId === quotation.id ? 'Sending...' : 'Send Email'}
-                          </span>
+                            >
+                              {sendingEmailId === quotation.id ? 'Sending...' : 'Send Email'}
+                            </span>
                           </div>
 
                           {quotation.status === 'accepted' && (
@@ -870,20 +877,21 @@ export function QuotationList({
                                 <FileText size={16} />
                               </Button>
                               <span
-                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
            whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
            opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                          >
-                            Generate Invoice
-                          </span>
+                              >
+                                Generate Invoice
+                              </span>
                             </div>
                           )}
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => handleDelete(quotation)}
-                            disabled={deleteQuotation.isPending}
+                            disabled={deleteQuotation.isPending || quotation.status === 'accepted'}
+                            title={quotation.status === 'accepted' ? 'Cannot delete accepted quotations' : ''}
                           >
                             <Trash2 size={16} />
                           </Button>
@@ -895,7 +903,7 @@ export function QuotationList({
               </TableBody>
             </Table>
           </div>
-          
+
           {/* Pagination Controls */}
           <div className="flex items-center justify-between mt-6 pt-4 border-t">
             <div className="flex items-center gap-2">

@@ -76,6 +76,9 @@ const getDateRange = (filterType: string, customStartDate?: Date, customEndDate?
       end = new Date(start);
       end.setHours(23, 59, 59, 999);
       break;
+    case '7days':
+      start.setDate(start.getDate() - 6); // 6 days back + today = 7 days
+      break;
     case '30days':
       start.setDate(start.getDate() - 30);
       break;
@@ -117,7 +120,7 @@ export function InvoiceList({
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const [emailSuccessOpen, setEmailSuccessOpen] = useState(false);
   const [emailSuccessData, setEmailSuccessData] = useState<{ email: string; invoiceNumber: string } | null>(null);
-  const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | '30days' | 'custom'>('today');
+  const [dateFilterType, setDateFilterType] = useState<'today' | 'yesterday' | '7days' | '30days' | 'custom'>('7days');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
 

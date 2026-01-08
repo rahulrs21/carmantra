@@ -24,6 +24,25 @@ interface Lead {
   createdAt?: { seconds: number } | { toDate: () => Date };
 }
 
+interface CustomerFormSubmission {
+  id: string;
+  category: string;
+  vehicleType: string;
+  vehicleBrand: string;
+  modelName: string;
+  numberPlate: string;
+  fuelType: string;
+  vinNumber: string;
+  country: string;
+  state: string;
+  city: string;
+  address: string;
+  mulkiyaUrls?: string[];
+  submittedAt?: Timestamp | { seconds: number } | { toDate: () => Date };
+  submittedEmail?: string;
+  [key: string]: any;
+}
+
 export default function LeadDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -62,6 +81,12 @@ export default function LeadDetailsPage() {
   const [notes, setNotes] = useState<any[]>([]);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [sendingFormLink, setSendingFormLink] = useState(false);
+  const [formLinkModal, setFormLinkModal] = useState(false);
+  const [formLink, setFormLink] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [customerFormSubmissions, setCustomerFormSubmissions] = useState<CustomerFormSubmission[]>([]);
+  const [viewingSubmissionId, setViewingSubmissionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -79,6 +104,8 @@ export default function LeadDetailsPage() {
           fetchRelatedBookings(id);
           // Fetch notes
           setNotes(leadData.notes || []);
+          // Fetch customer form submissions
+          fetchCustomerFormSubmissions(id);
         }
       } catch (err: any) {
         safeConsoleError('Lead fetch error', err);
@@ -119,6 +146,38 @@ export default function LeadDetailsPage() {
       safeConsoleError('Error fetching bookings', err);
     } finally {
       setBookingsLoading(false);
+    }
+  }
+
+  async function fetchCustomerFormSubmissions(leadId: string) {
+    try {
+      const submissionsRef = collection(db, 'crm-leads', leadId, 'customerFormSubmissions');
+      const q = query(submissionsRef);
+      const snapshot = await getDocs(q);
+      const submissions = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as CustomerFormSubmission));
+      
+      // Helper function to safely convert timestamp to Date
+      const getTime = (timestamp: any): number => {
+        if (!timestamp) return 0;
+        if (typeof timestamp.toDate === 'function') {
+          return timestamp.toDate().getTime();
+        }
+        if (typeof timestamp.seconds === 'number') {
+          return new Date(timestamp.seconds * 1000).getTime();
+        }
+        return 0;
+      };
+      
+      setCustomerFormSubmissions(submissions.sort((a, b) => {
+        const aTime = getTime(a.submittedAt);
+        const bTime = getTime(b.submittedAt);
+        return bTime - aTime;
+      }));
+    } catch (err: any) {
+      safeConsoleError('Error fetching customer form submissions:', err);
     }
   }
 
@@ -304,6 +363,63 @@ export default function LeadDetailsPage() {
     }
 
     return days;
+  };
+
+  async function handleSendFormLink() {
+    if (!lead?.email || !id) {
+      alert('❌ Customer email not found');
+      return;
+    }
+
+    setSendingFormLink(true);
+    try {
+      const response = await fetch('/api/send-form-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: id,
+          email: lead.email,
+          name: lead.name,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error('API Error:', data);
+        alert(`❌ ${data.error || 'Failed to send form'}`);
+        return;
+      }
+
+      // Extract the token and build the form link
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const token = data.token;
+      const link = `${appUrl}/customer/book-service/${token}`;
+      
+      setFormLink(link);
+      setFormLinkModal(true);
+      setCopySuccess(false);
+    } catch (error: any) {
+      safeConsoleError('Error sending form link:', error);
+      alert(`❌ Error: ${error.message || 'Error sending form link'}`);
+    } finally {
+      setSendingFormLink(false);
+    }
+  }
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(formLink).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    });
+  };
+
+  const handleWhatsAppShare = () => {
+    const message = `Hi ${lead?.name || 'there'},\n\nPlease fill out your booking form using this link:\n\n${formLink}\n\nThis link expires in 24 hours.\n\nThank you!`;
+    const encodedMessage = encodeURIComponent(message);
+    const phone = lead?.phone?.replace(/\D/g, '') || '';
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
   };
 
   async function handleBookService(e: React.FormEvent) {
@@ -1002,6 +1118,8 @@ export default function LeadDetailsPage() {
                 </div>
               )}
             </Card>
+
+            
           </div>
 
           {/* Actions Sidebar */}
@@ -1010,12 +1128,32 @@ export default function LeadDetailsPage() {
               <h3 className="font-semibold mb-4">Actions</h3>
               <div className="space-y-3">
                 <PermissionGate module="services" action="create">
-                  {!showBookService && (
+                  {!showBookService  && !relatedBookings.length && (
+                    <>
+                      {customerFormSubmissions.length == 0 && (
+
+                        <Button 
+                          className="w-full bg-blue-600 hover:bg-blue-700"
+                          onClick={handleSendFormLink}
+                          disabled={sendingFormLink}
+                        >
+                          {sendingFormLink ? '📧 Sending...' : '📧 Send Booking Form'}
+                        </Button>
+                      )}
+                      <Button 
+                        className="w-full bg-orange-600 hover:bg-orange-700"
+                        onClick={() => setShowBookService(true)}
+                      >
+                        📅 Book Service Directly
+                      </Button>
+                    </>
+                  )}
+                  {!showBookService && relatedBookings.length > 0 && (
                     <Button 
                       className="w-full bg-orange-600 hover:bg-orange-700"
                       onClick={() => setShowBookService(true)}
                     >
-                      📅 Book Service
+                      📅 Add Another Service
                     </Button>
                   )}
                 </PermissionGate>
@@ -1029,15 +1167,183 @@ export default function LeadDetailsPage() {
               </div>
             </Card>
 
+            {/* Customer Form Submissions */}
+            <Card className="p-6 w-full">
+              <h2 className="text-xl font-semibold mb-4">Customer Form Submissions</h2>
+              {customerFormSubmissions.length > 0 ? (
+                <div className="space-y-4">
+                  {customerFormSubmissions.map((submission) => (
+                    <div key={submission.id} className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                      <div className="flex justify-between items-start gap-3 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-600 mb-2">
+                            ✅ Submitted on {formatDateTime(submission.submittedAt)}
+                          </p>
+                          <div className="space-y-2 text-sm">
+                            <div><span className="font-medium text-gray-700">Service:</span> <span className="text-gray-600">{submission.category || 'N/A'}</span></div>
+                            <div><span className="font-medium text-gray-700">Vehicle:</span> <span className="text-gray-600">{submission.vehicleBrand} {submission.modelName} ({submission.vehicleType})</span></div>
+                            <div><span className="font-medium text-gray-700">Number Plate:</span> <span className="text-gray-600">{submission.numberPlate}</span></div>
+                            <div><span className="font-medium text-gray-700">Location:</span> <span className="text-gray-600">{submission.city}, {submission.state}, {submission.country}</span></div>
+                            <div><span className="font-medium text-gray-700">Address:</span> <span className="text-gray-600">{submission.address}</span></div>
+                          </div>
+                          
+                          {submission.mulkiyaUrls && submission.mulkiyaUrls.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-xs font-medium text-gray-700 mb-2">📸 Mulkiya Images ({submission.mulkiyaUrls.length}):</p>
+                              <button
+                                onClick={() => setViewingSubmissionId(submission.id)}
+                                className="inline-block px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors font-medium"
+                              >
+                                View All Images
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded border">
+                  <p className="font-medium mb-1">No Form Submissions Yet</p>
+                  <p className="text-xs">Customer form submissions will appear here when the customer completes the booking form.</p>
+                </div>
+              )}
+            </Card>
+
             <Card className="p-6 bg-blue-50">
               <h3 className="font-semibold text-sm mb-2 text-blue-900">Quick Info</h3>
               <p className="text-xs text-blue-800">
-                Convert this lead to a booking directly from here. All data will sync to Book Service and Customer modules.
+                Send a form link to the customer to fill in their booking details, or convert this lead to a booking directly.
               </p>
             </Card>
           </div>
         </div>
       ) : null}
+
+      {/* Images Popup Modal */}
+      {viewingSubmissionId && (() => {
+        const submission = customerFormSubmissions.find(s => s.id === viewingSubmissionId);
+        return submission?.mulkiyaUrls && submission.mulkiyaUrls.length > 0 ? (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-4xl shadow-xl max-h-[90vh] overflow-auto">
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-blue-700">📸 Mulkiya Images</h3>
+                    <p className="text-sm text-gray-600 mt-1">Viewing {submission.mulkiyaUrls.length} image(s)</p>
+                  </div>
+                  <button
+                    onClick={() => setViewingSubmissionId(null)}
+                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* Images Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {submission.mulkiyaUrls.map((url, idx) => (
+                    <div key={idx} className="flex flex-col items-center">
+                      <img
+                        src={url}
+                        alt={`Mulkiya Image ${idx + 1}`}
+                        className="max-w-full max-h-96 rounded-lg border-2 border-gray-200"
+                      />
+                      <p className="text-xs text-gray-600 mt-2">Image {idx + 1}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setViewingSubmissionId(null)}
+                  className="w-full mt-6 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </Card>
+          </div>
+        ) : null;
+      })()}
+
+      {/* Form Link Modal */}
+      {formLinkModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-xl">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-green-700">✅ Form Link Sent!</h3>
+                  <p className="text-sm text-gray-600 mt-1">Email sent to {lead?.email}</p>
+                </div>
+                <button
+                  onClick={() => setFormLinkModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Message */}
+              <p className="text-sm text-gray-700 mb-4">
+                Customer will receive an email with a link to fill in their booking details. You can also share the link via other channels.
+              </p>
+
+              {/* Form Link Display */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                <p className="text-xs text-gray-600 mb-2 font-medium">BOOKING FORM LINK</p>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-white p-2 rounded border flex-1 overflow-x-auto text-gray-800 font-mono break-all">
+                    {formLink}
+                  </code>
+                  <button
+                    onClick={handleCopyLink}
+                    className={`px-3 py-2 rounded text-xs font-medium flex-shrink-0 transition-colors ${
+                      copySuccess
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                    }`}
+                  >
+                    {copySuccess ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">⏱️ Link expires in 24 hours</p>
+              </div>
+
+              {/* Share Options */}
+              <div className="space-y-2 mb-4">
+                <p className="text-xs font-medium text-gray-600">SHARE VIA</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handleWhatsAppShare}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    💬 WhatsApp
+                  </button>
+                  <button
+                    onClick={handleCopyLink}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    📋 Copy Link
+                  </button>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={() => setFormLinkModal(false)}
+                className="w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

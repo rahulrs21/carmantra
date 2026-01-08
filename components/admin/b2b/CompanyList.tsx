@@ -18,6 +18,7 @@ import { CompanyForm } from './CompanyForm';
 import Link from 'next/link';
 import { ArrowRight, Search, Trash2 } from 'lucide-react';
 import { useDeleteCompany } from '@/hooks/useB2B';
+import { useUser } from '@/lib/userContext';
 
 interface CompanyListProps {
   companies: B2BCompany[];
@@ -38,6 +39,10 @@ export function CompanyList({
 }: CompanyListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const deleteCompany = useDeleteCompany();
+  const { role: currentRole } = useUser();
+  // const isAdmin = currentRole === 'admin' || currentRole === 'manager';
+  const isAdmin = currentRole === 'admin';
+
 
   const filteredCompanies = companies.filter(
     (company) =>
@@ -145,7 +150,8 @@ export function CompanyList({
                           variant="ghost"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           onClick={() => handleDelete(company.id)}
-                          disabled={deleteCompany.isPending}
+                          disabled={deleteCompany.isPending || !isAdmin}
+                          title={!isAdmin ? 'Only administrators can delete companies' : ''}
                         >
                           <Trash2 size={16} />
                         </Button>

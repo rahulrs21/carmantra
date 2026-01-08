@@ -17,7 +17,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from '@/components/ui/carousel';
 import { ChartContainer, ChartTooltipContent, ChartLegendContent } from '@/components/ui/chart';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -164,6 +164,8 @@ export default function AdminDashboard() {
   const [selectedRange, setSelectedRange] = useState<any>(undefined);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [chartMetric, setChartMetric] = useState<'leads' | 'services' | 'customers' | 'invoices'>('leads');
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   function toDate(ts?: Lead['createdAt']) {
     try {
@@ -333,12 +335,29 @@ export default function AdminDashboard() {
   const filteredLeads = useMemo(() => {
     if (!activeRange) return [];
     const byService = filterService ? leads.filter((l) => (l.service || 'Unknown') === filterService) : leads;
+    const allFiltered = byService.filter((l) => {
+      const d = toDate(l.createdAt);
+      if (!d) return false;
+      return d >= activeRange.start && d <= activeRange.end;
+    });
+    
+    // Apply pagination
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return allFiltered.slice(startIndex, endIndex);
+  }, [leads, filterService, activeRange, currentPage, itemsPerPage]);
+
+  const totalFilteredLeads = useMemo(() => {
+    if (!activeRange) return 0;
+    const byService = filterService ? leads.filter((l) => (l.service || 'Unknown') === filterService) : leads;
     return byService.filter((l) => {
       const d = toDate(l.createdAt);
       if (!d) return false;
       return d >= activeRange.start && d <= activeRange.end;
-    }).slice(0, 50);
+    }).length;
   }, [leads, filterService, activeRange]);
+
+  const totalPages = Math.ceil(totalFilteredLeads / itemsPerPage);
 
   function downloadCSV(filename: string, rows: string[][]) {
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -648,6 +667,15 @@ export default function AdminDashboard() {
 
   const metricCards = [];
 
+  // Filter module cards based on user role
+  const visibleModuleCards = moduleCards.filter(card => {
+    // Only show revenue card for admin and accounts roles
+    if (card.key === 'revenue') {
+      return role === 'admin' || role === 'accounts';
+    }
+    return true;
+  });
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -742,23 +770,43 @@ export default function AdminDashboard() {
       </section>
 
       {/* Module Overview Section */}
-      <section className="sm:hidden">
-        <Carousel opts={{ align: 'start', dragFree: true }}>
-          <CarouselContent>
-            {moduleCards.map(({ key, render }) => (
-              <CarouselItem key={key} className="basis-[88%] h-full">
-                {render()}
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
-      </section>
+      {visibleModuleCards.length > 4 ? (
+        <section className="w-full relative">
+          <Carousel opts={{ align: 'start', dragFree: true }}>
+            <CarouselContent>
+              {visibleModuleCards.map(({ key, render }) => (
+                <CarouselItem key={key} className="basis-full sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
+                  {render()}
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <CarouselPrevious className="absolute -left-4 top-1/2 -translate-y-1/2 z-10 hover:bg-orange-600 hover:text-white" />
+            <CarouselNext className="absolute -right-4 top-1/2 -translate-y-1/2 z-10 hover:bg-orange-600 hover:text-white" />
+          </Carousel>
+        </section>
+      ) : (
+        <>
+          <section className="sm:hidden">
+            <Carousel opts={{ align: 'start', dragFree: true }}>
+              <CarouselContent>
+                {visibleModuleCards.map(({ key, render }) => (
+                  <CarouselItem key={key} className="basis-[88%]">
+                    {render()}
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <CarouselPrevious className="absolute -left-4 top-1/2 -translate-y-1/2 z-10 hover:bg-orange-600 hover:text-white" />
+              <CarouselNext className="absolute -right-4 top-1/2 -translate-y-1/2 z-10 hover:bg-orange-600 hover:text-white" />
+            </Carousel>
+          </section>
 
-      <section className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {moduleCards.map(({ key, render }) => (
-          <div key={key}>{render()}</div>
-        ))}
-      </section>
+          <section className="hidden sm:grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {visibleModuleCards.map(({ key, render }) => (
+              <div key={key}>{render()}</div>
+            ))}
+          </section>
+        </>
+      )}
 
       <section>
 
@@ -926,7 +974,7 @@ export default function AdminDashboard() {
       <section id="dashboard-leads">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-4">
           <h2 className="text-xl sm:text-2xl font-semibold">Latest Leads</h2>
-          <div className="text-xs sm:text-sm text-gray-500">Showing recent 50 leads</div>
+          <div className="text-xs sm:text-sm text-gray-500">Showing {filteredLeads.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalFilteredLeads)} of {totalFilteredLeads}</div>
         </div>
 
         <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl shadow dark:shadow-gray-700 overflow-hidden">
@@ -934,11 +982,51 @@ export default function AdminDashboard() {
             <div className="p-3 border-b dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">Filtered by service: <span className="font-medium">{filterService}</span></div>
               <div className="flex items-center gap-2 flex-wrap">
-                <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap" onClick={() => setFilterService(null)}>Clear filter</button>
+                <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap" onClick={() => { setFilterService(null); setCurrentPage(1); }}>Clear filter</button>
                 <button className="text-xs sm:text-sm text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap" onClick={exportLeadsCSV}>Export filtered leads</button>
               </div>
             </div>
           )}
+
+          {/* Pagination Controls - Top */}
+          <div className="px-3 sm:px-4 py-3 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Show:</span>
+              <select 
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2 py-1 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">per page</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-xs sm:text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 dark:hover:bg-gray-500"
+              >
+                Previous
+              </button>
+              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                Page <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages || 1}</span>
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-2 py-1 text-xs sm:text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 dark:hover:bg-gray-500"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
           {loading ? (
             <div className="p-6 space-y-4">
               <div className="h-6 bg-gray-100 dark:bg-gray-700 rounded w-1/3 animate-pulse" />
@@ -948,7 +1036,7 @@ export default function AdminDashboard() {
           ) : (
             <div className="flex flex-col gap-4">
               {/* Mobile cards */}
-              <div className="md:hidden space-y-3 px-3 pb-3">
+              <div className="md:hidden space-y-3 px-3 pb-3 pt-3">
                 {filteredLeads.length === 0 && (
                   <div className="rounded-lg border bg-white dark:bg-gray-900 p-4 text-sm text-gray-500 dark:text-gray-300">No leads</div>
                 )}
@@ -1019,6 +1107,47 @@ export default function AdminDashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination Controls - Bottom */}
+          {totalFilteredLeads > 0 && (
+            <div className="px-3 sm:px-4 py-3 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Show:</span>
+                <select 
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">per page</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 text-xs sm:text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 dark:hover:bg-gray-500"
+                >
+                  Previous
+                </button>
+                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                  Page <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages || 1}</span>
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="px-2 py-1 text-xs sm:text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 dark:hover:bg-gray-500"
+                >
+                  Next
+                </button>
               </div>
             </div>
           )}
