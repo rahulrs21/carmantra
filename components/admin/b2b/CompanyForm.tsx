@@ -104,7 +104,7 @@ export function CompanyForm({ company, onSuccess }: CompanyFormProps) {
           userId: user?.uid || 'unknown',
           userName: user?.displayName || 'Unknown User',
           userEmail: user?.email || 'unknown@email.com',
-          userRole: user?.role || 'unknown',
+          userRole: userContext?.role || 'unknown',
           metadata: {
             companyId: company.id,
             companyName: data.name,
@@ -137,7 +137,7 @@ export function CompanyForm({ company, onSuccess }: CompanyFormProps) {
           userId: user?.uid || 'unknown',
           userName: user?.displayName || 'Unknown User',
           userEmail: user?.email || 'unknown@email.com',
-          userRole: user?.role || 'unknown',
+          userRole: userContext?.role || 'unknown',
           metadata: {
             companyName: data.name,
             contactPerson: data.contactPerson,
