@@ -2,25 +2,21 @@
 
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
-import { Sparkles, Droplets, Sun, Shield, CheckCircle, Star, Clock, ArrowRight } from 'lucide-react';
+import { Sparkles, Droplets, Sun, Shield, CheckCircle, Star, Clock, ArrowRight, AlertCircle } from 'lucide-react';
 import ModalForm from '@/components/ModalForm';
 import { useState } from 'react';
+import { useServiceData } from '@/lib/hooks/useServiceData';
 
 export default function CeramicCoatingPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState('');
-
-  const openModal = (service: string) => {
-    setSelectedService(service + " - Ceramic Coating");
-    setIsModalOpen(true);
-  };
+  const { category, products, loading, error } = useServiceData('ceramic-coating');
 
   const closeModal = () => setIsModalOpen(false);
-
-
 
   const benefits = [
     'Ultra-hydrophobic surface repels water and dirt',
@@ -29,33 +25,6 @@ export default function CeramicCoatingPage() {
     'Easier maintenance and cleaning',
     'Chemical resistance to environmental contaminants',
     'Long-lasting protection (2-5 years)'
-  ];
-
-  const packages = [
-    {
-      title: 'Bronze Package',
-      description: '1-layer ceramic coating with 2-year warranty',
-      features: ['1 layer of ceramic coating', 'Paint decontamination', 'Basic paint correction'],
-      price: 'From AED 599',
-      duration: '1 day',
-      warranty: '2 years'
-    },
-    {
-      title: 'Silver Package',
-      description: '2-layer ceramic coating with enhanced protection',
-      features: ['2 layers of ceramic coating', 'Complete paint correction', 'Wheel coating included'],
-      price: 'From AED 999',
-      duration: '2 days',
-      warranty: '3 years'
-    },
-    {
-      title: 'Gold Package',
-      description: 'Premium 3-layer system with maximum protection',
-      features: ['3 layers of ceramic coating', 'Full paint correction', 'Wheels, glass & trim coating'],
-      price: 'From AED 1,499',
-      duration: '3 days',
-      warranty: '5 years'
-    }
   ];
 
   return (
@@ -131,46 +100,60 @@ export default function CeramicCoatingPage() {
           {/* Packages Section */}
           <AnimatedSection>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white text-center mb-12">Ceramic Coating Packages</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {packages.map((pkg, index) => (
-                <AnimatedSection key={pkg.title} delay={index * 100}>
-                  <div className={`bg-white rounded-lg shadow-lg p-6 border-2 hover:shadow-xl transition-shadow duration-300 ${index === 1 ? 'border-blue-500 scale-105' : 'border-gray-200'}`}>
-                    {index === 1 && (
-                      <div className="bg-blue-500 text-white text-xs font-bold uppercase px-3 py-1 rounded-full mb-4 inline-block">
-                        Most Popular
-                      </div>
-                    )}
-                    <h3 className="text-xl font-bold text-gray-900 mb-3">{pkg.title}</h3>
-                    <p className="text-gray-600  mb-4">{pkg.description}</p>
-                    <ul className="space-y-2 mb-6 text-gray-800">
-                      {pkg.features.map((feature, i) => (
-                        <li key={i} className="flex items-center text-sm">
-                          <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="space-y-2 mb-6">
-                      <div className="flex justify-between items-center">
-                        <span className="text-2xl font-bold text-blue-600">{pkg.price}</span>
-                        <div className="flex items-center text-gray-500  text-sm">
-                          <Clock className="h-4 w-4 mr-1" />
-                          {pkg.duration}
+            
+            {loading && (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+              </div>
+            )}
+
+            {error && (
+              <Card className="p-6 mb-8 bg-red-50 border-red-200">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <p className="text-red-800">{error}</p>
+                </div>
+              </Card>
+            )}
+
+            {!loading && products.length === 0 && !error && (
+              <Card className="p-6 text-center bg-yellow-50 border-yellow-200">
+                <p className="text-yellow-800">No services available at the moment</p>
+              </Card>
+            )}
+
+            {!loading && products.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {products.map((product, index) => (
+                  <AnimatedSection key={product.id} delay={index * 100}>
+                    <div className="bg-white rounded-lg shadow-lg p-6 border-2 hover:shadow-xl transition-shadow duration-300 border-gray-200">
+                      <h3 className="text-xl font-bold text-gray-900 mb-3">{product.name}</h3>
+                      <p className="text-gray-600  mb-4">{product.description}</p>
+                      <div className="space-y-2 mb-6">
+                        <div className="flex justify-between items-center">
+                          <span className="text-2xl font-bold text-blue-600">From AED {product.price?.toLocaleString()}</span>
+                          <div className="flex items-center text-gray-500  text-sm">
+                            <Clock className="h-4 w-4 mr-1" />
+                            {product.duration}
+                          </div>
+                        </div>
+                        <div className="flex items-center text-green-600 text-sm">
+                          <Shield className="h-4 w-4 mr-1" />
+                          {product.warranty}
                         </div>
                       </div>
-                      <div className="flex items-center text-green-600 text-sm">
-                        <Shield className="h-4 w-4 mr-1" />
-                        {pkg.warranty} warranty
-                      </div>
+                      <Button className="w-full" onClick={() => {
+                        setSelectedService(product.name + " - Ceramic Coating");
+                        setIsModalOpen(true);
+                      }}>
+                        Get Quote
+                        <ArrowRight size={16} className="ml-2" />
+                      </Button>
                     </div>
-                    <Button className="w-full" onClick={() => openModal(pkg.title)}>
-                      Choose Package
-                      <ArrowRight size={16} className="ml-2" />
-                    </Button>
-                  </div>
-                </AnimatedSection>
-              ))}
-            </div>
+                  </AnimatedSection>
+                ))}
+              </div>
+            )}
           </AnimatedSection>
         </div>
       </section>

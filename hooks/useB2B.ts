@@ -532,6 +532,7 @@ export function useCreateQuotation() {
       company: B2BCompany;
       services: B2BService[];
       serviceTotals?: Record<string, number>;
+      referralTotals?: Record<string, number>;
       userId: string;
     }) =>
       quotationsService.createQuotation(
@@ -540,7 +541,8 @@ export function useCreateQuotation() {
         payload.company,
         payload.services,
         payload.userId,
-        payload.serviceTotals
+        payload.serviceTotals,
+        payload.referralTotals
       ),
     onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['b2b:quotations', variables.companyId] });

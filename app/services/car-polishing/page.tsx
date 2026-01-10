@@ -2,54 +2,21 @@
 
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
-import { Car, Sparkles, CheckCircle, Star, Clock, ArrowRight, Zap } from 'lucide-react';
+import { Car, Sparkles, CheckCircle, Star, Clock, ArrowRight, Zap, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import ModalForm from '@/components/ModalForm';
+import { useServiceData } from '@/lib/hooks/useServiceData';
 
 export default function CarPolishingPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState('');
-
-  const openModal = (service: string) => {
-    setSelectedService(service + " - Car Polishing");
-    setIsModalOpen(true);
-  };
+  const { category, products, loading, error } = useServiceData('car-polishing');
 
   const closeModal = () => setIsModalOpen(false);
-
-  const services = [
-    {
-      title: 'Paint Correction',
-      description: 'Remove swirl marks, scratches, and paint defects',
-      features: ['Multi-stage polishing', 'Scratch removal', 'Swirl mark elimination'],
-      price: 'From AED 299',
-      duration: '4-6 hours'
-    },
-    {
-      title: 'Show Car Polish',
-      description: 'Competition-grade finish for car shows and special events',
-      features: ['Mirror finish', 'Paint depth enhancement', 'Competition ready'],
-      price: 'From AED 499',
-      duration: '8-10 hours'
-    },
-    {
-      title: 'Maintenance Polish',
-      description: 'Regular polishing to maintain paint condition',
-      features: ['Light polishing', 'Gloss enhancement', 'Minor imperfection removal'],
-      price: 'From AED 149',
-      duration: '2-3 hours'
-    },
-    {
-      title: 'Headlight Restoration',
-      description: 'Restore cloudy and yellowed headlights',
-      features: ['UV damage removal', 'Clarity restoration', 'Protective coating'],
-      price: 'From AED 89',
-      duration: '1-2 hours'
-    }
-  ];
 
   const process = [
     {
@@ -107,39 +74,57 @@ export default function CarPolishingPage() {
             <p className="text-lg text-gray-600 dark:text-white/80">Professional paint correction solutions for every need</p>
           </AnimatedSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {services.map((service, index) => (
-              <AnimatedSection key={service.title} delay={index * 100}>
-                <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">{service.title}</h3>
-                  <p className="text-gray-600 mb-4">{service.description}</p>
-                  <ul className="space-y-2 mb-6 text-gray-800">
-                    {service.features.map((feature, i) => (
-                      <li key={i} className="flex items-center text-sm">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center text-amber-600">
-                      <Star className="h-4 w-4 mr-1" />
-                      <span className="font-semibold">{service.price}</span>
+          {loading && (
+            <div className="flex justify-center items-center py-12">
+              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            </div>
+          )}
+
+          {error && (
+            <Card className="p-6 mb-8 bg-red-50 border-red-200">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                <p className="text-red-800">{error}</p>
+              </div>
+            </Card>
+          )}
+
+          {!loading && products.length === 0 && !error && (
+            <Card className="p-6 text-center bg-yellow-50 border-yellow-200">
+              <p className="text-yellow-800">No services available at the moment</p>
+            </Card>
+          )}
+
+          {!loading && products.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {products.map((product, index) => (
+                <AnimatedSection key={product.id} delay={index * 100}>
+                  <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">{product.name}</h3>
+                    <p className="text-gray-600 mb-4">{product.description}</p>
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center text-amber-600">
+                        <Star className="h-4 w-4 mr-1" />
+                        <span className="font-semibold">From AED {product.price?.toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center text-gray-500">
+                        <Clock className="h-4 w-4 mr-1" />
+                        <span className="text-sm">{product.duration}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center text-gray-500">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span className="text-sm">{service.duration}</span>
-                    </div>
+                    <Button className="w-full bg-amber-600 hover:bg-amber-700"
+                      onClick={() => {
+                        setSelectedService(product.name + " - Car Polishing");
+                        setIsModalOpen(true);
+                      }}>
+                      Book Service
+                      <ArrowRight size={16} className="ml-2" />
+                    </Button>
                   </div>
-                  <Button className="w-full bg-amber-600 hover:bg-amber-700"
-                    onClick={() => openModal(service.title)}>
-                    Book Service
-                    <ArrowRight size={16} className="ml-2" />
-                  </Button>
-                </div>
-              </AnimatedSection>
-            ))}
-          </div>
+                </AnimatedSection>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

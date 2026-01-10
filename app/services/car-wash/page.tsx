@@ -2,58 +2,21 @@
 
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
-import { Droplets, Sparkles, CheckCircle, Star, Clock, ArrowRight, Zap, Car } from 'lucide-react';
+import { Droplets, Sparkles, CheckCircle, Star, Clock, ArrowRight, Zap, Car, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import ModalForm from '@/components/ModalForm';
+import { useServiceData } from '@/lib/hooks/useServiceData';
 
 export default function CarWashPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState('');
-
-  const openModal = (service: string) => {
-    setSelectedService(service + " - Car Wash");
-    setIsModalOpen(true);
-  };
+  const { category, products, loading, error } = useServiceData('car-wash');
 
   const closeModal = () => setIsModalOpen(false);
-
-  const packages = [
-    {
-      title: 'Express Wash',
-      description: 'Quick and efficient exterior wash',
-      features: ['Exterior wash', 'Wheel cleaning', 'Basic dry'],
-      price: 'AED 15',
-      duration: '15 min',
-      popular: false
-    },
-    {
-      title: 'Full Service Wash',
-      description: 'Complete interior and exterior cleaning',
-      features: ['Exterior wash & wax', 'Interior vacuum', 'Window cleaning', 'Tire shine'],
-      price: 'AED 35',
-      duration: '45 min',
-      popular: true
-    },
-    {
-      title: 'Premium Detail',
-      description: 'Comprehensive detailing service',
-      features: ['Full service wash', 'Interior detailing', 'Paint protection', 'Ceramic coating application'],
-      price: 'AED 85',
-      duration: '2 hours',
-      popular: false
-    },
-    {
-      title: 'Ultimate Detail',
-      description: 'Complete transformation package',
-      features: ['Everything in Premium', 'Engine bay cleaning', 'Headlight restoration', 'Leather conditioning'],
-      price: 'AED 150',
-      duration: '4 hours',
-      popular: false
-    }
-  ];
 
   const services = [
     {
@@ -135,42 +98,55 @@ export default function CarWashPage() {
             <p className="text-lg text-gray-600">Choose the perfect package for your needs and budget</p>
           </AnimatedSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {packages.map((pkg, index) => (
-              <AnimatedSection key={pkg.title} delay={index * 100}>
-                <div className={`bg-white rounded-lg shadow-lg p-6 border-2 hover:shadow-xl transition-shadow duration-300 ${pkg.popular ? 'border-blue-500 scale-105' : 'border-gray-200'}`}>
-                  {pkg.popular && (
-                    <div className="bg-blue-500 text-white text-xs font-bold uppercase px-3 py-1 rounded-full mb-4 inline-block">
-                      Most Popular
+          {loading && (
+            <div className="flex justify-center items-center py-12">
+              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            </div>
+          )}
+
+          {error && (
+            <Card className="p-6 mb-8 bg-red-50 border-red-200">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                <p className="text-red-800">{error}</p>
+              </div>
+            </Card>
+          )}
+
+          {!loading && products.length === 0 && !error && (
+            <Card className="p-6 text-center bg-yellow-50 border-yellow-200">
+              <p className="text-yellow-800">No services available at the moment</p>
+            </Card>
+          )}
+
+          {!loading && products.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {products.map((product, index) => (
+                <AnimatedSection key={product.id} delay={index * 100}>
+                  <div className="bg-white rounded-lg shadow-lg p-6 border-2 hover:shadow-xl transition-shadow duration-300 border-gray-200">
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">{product.name}</h3>
+                    <p className="text-gray-600 mb-4">{product.description}</p>
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-3xl font-bold text-blue-600">From AED {product.price?.toLocaleString()}</span>
+                      <div className="flex items-center text-gray-500 text-sm">
+                        <Clock className="h-4 w-4 mr-1" />
+                        {product.duration}
+                      </div>
                     </div>
-                  )}
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">{pkg.title}</h3>
-                  <p className="text-gray-600 mb-4">{pkg.description}</p>
-                  <ul className="space-y-2 dark:text-gray-800 mb-6">
-                    {pkg.features.map((feature, i) => (
-                      <li key={i} className="flex items-center text-sm">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-3xl font-bold text-blue-600">{pkg.price}</span>
-                    <div className="flex items-center text-gray-500 text-sm">
-                      <Clock className="h-4 w-4 mr-1" />
-                      {pkg.duration}
-                    </div>
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700"
+                      onClick={() => {
+                        setSelectedService(product.name + " - Car Wash");
+                        setIsModalOpen(true);
+                      }}
+                    >
+                      Choose Package
+                      <ArrowRight size={16} className="ml-2" />
+                    </Button>
                   </div>
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700"
-                    onClick={() => openModal(pkg.title)}
-                  >
-                    Choose Package
-                    <ArrowRight size={16} className="ml-2" />
-                  </Button>
-                </div>
-              </AnimatedSection>
-            ))}
-          </div>
+                </AnimatedSection>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

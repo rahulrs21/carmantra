@@ -32,8 +32,9 @@ import {
 import { useAddReferral, useUpdateReferral } from '@/hooks/useB2B';
 import { ReferralFormData } from '@/lib/types/b2b.types';
 import { Plus, Edit } from 'lucide-react';
-import { UserContext } from '@/lib/userContext';
+import { UserContext, useUser } from '@/lib/userContext';
 import { useToast } from '@/hooks/use-toast';
+import { activityService } from '@/lib/firestore/activity-service';
 
 const referralSchema = z.object({
   personName: z.string().min(1, 'Person name is required'),
@@ -51,6 +52,7 @@ type ReferralSchemaType = z.infer<typeof referralSchema>;
 interface ReferralFormProps {
   companyId: string;
   serviceId: string;
+  jobCardNo?: string; // Job Card number for tracking
   vehicleIds?: string[];
   referral?: any; // For edit mode
   onSuccess?: () => void;
@@ -61,6 +63,7 @@ interface ReferralFormProps {
 export function ReferralForm({
   companyId,
   serviceId,
+  jobCardNo,
   vehicleIds = [],
   referral,
   onSuccess,
@@ -69,6 +72,7 @@ export function ReferralForm({
 }: ReferralFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
+  const { role } = useUser();
   const addReferral = useAddReferral();
   const updateReferral = useUpdateReferral();
   const { toast } = useToast();
@@ -122,7 +126,28 @@ export function ReferralForm({
           referralId: referral.id,
           data: {
             ...formData,
+            jobCardNo, // Include job card number for tracking
             status: data.status,
+          },
+        });
+        
+        // Log activity
+        await activityService.logActivity({
+          companyId,
+          activityType: 'referral_updated',
+          description: `Referral updated - ${data.personName} (Commission: AED ${data.commission})`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role || 'unknown',
+          metadata: {
+            serviceId,
+            referralId: referral.id,
+            personName: data.personName,
+            contact: data.contact,
+            commission: data.commission,
+            status: data.status,
+            jobCardNo,
           },
         });
         
@@ -156,9 +181,29 @@ export function ReferralForm({
           serviceId,
           data: {
             ...formData,
+            jobCardNo, // Include job card number for tracking
             status: data.status,
           },
           userId: user.uid,
+        });
+
+        // Log activity
+        await activityService.logActivity({
+          companyId,
+          activityType: 'referral_added',
+          description: `Referral added - ${data.personName} (Commission: AED ${data.commission})`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role || 'unknown',
+          metadata: {
+            serviceId,
+            personName: data.personName,
+            contact: data.contact,
+            commission: data.commission,
+            status: data.status,
+            jobCardNo,
+          },
         });
 
         console.log('[ReferralForm] Referral added successfully');
@@ -199,12 +244,24 @@ export function ReferralForm({
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'Edit Referral' : 'Add Referral'}</DialogTitle>
+          <div className="flex flex-col gap-2">
+            <DialogTitle>{isEditMode ? 'Edit Referral' : 'Add Referral'}</DialogTitle>
+            {jobCardNo && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="font-semibold">Job Card:</span>
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded font-mono">
+                  {jobCardNo}
+                </span>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
+              
+
               <FormField
                 control={form.control}
                 name="personName"

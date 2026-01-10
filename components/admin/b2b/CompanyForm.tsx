@@ -28,6 +28,7 @@ import { useContext } from 'react';
 import { UserContext } from '@/lib/userContext';
 import { Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { activityService } from '@/lib/firestore/activity-service';
 
 const companySchema = z.object({
   name: z.string().min(1, 'Company name is required'),
@@ -94,15 +95,62 @@ export function CompanyForm({ company, onSuccess }: CompanyFormProps) {
           companyId: company.id,
           data,
         });
+        
+        // Log activity for company update
+        await activityService.logActivity({
+          companyId: company.id,
+          activityType: 'company_updated',
+          description: `Company "${data.name}" updated by ${user?.displayName}`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: user?.role || 'unknown',
+          metadata: {
+            companyId: company.id,
+            companyName: data.name,
+            contactPerson: data.contactPerson,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            city: data.city,
+            state: data.state,
+            zipCode: data.zipCode,
+            trn: data.trn,
+          },
+        });
+        
         toast({
           title: 'Success',
           description: 'Company updated successfully.',
         });
       } else {
-        await createCompany.mutateAsync({
+        const result = await createCompany.mutateAsync({
           data,
           userId: user.uid,
         });
+        
+        // Log activity for company creation
+        await activityService.logActivity({
+          companyId: result?.id || 'unknown',
+          activityType: 'company_created',
+          description: `New company "${data.name}" created by ${user?.displayName}`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: user?.role || 'unknown',
+          metadata: {
+            companyName: data.name,
+            contactPerson: data.contactPerson,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            city: data.city,
+            state: data.state,
+            zipCode: data.zipCode,
+            trn: data.trn,
+          },
+        });
+        
         toast({
           title: 'Success',
           description: 'Company created successfully.',

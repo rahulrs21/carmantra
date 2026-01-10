@@ -16,6 +16,9 @@ import { Input } from '@/components/ui/input';
 import QuotationForm from '@/components/admin/QuotationForm';
 import { useUser } from '@/lib/userContext';
 import { saveContactPerson, listCustomers } from '@/lib/firestore/customers';
+import { ReferralList } from '@/components/shared/ReferralList';
+import { ReferralForm } from '@/components/shared/ReferralForm';
+import { useReferrals } from '@/hooks/useReferrals';
 
 export default function BookServiceDetails() {
     const [paymentStatus, setPaymentStatus] = React.useState('full');
@@ -36,6 +39,11 @@ export default function BookServiceDetails() {
   const [editing, setEditing] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
+  
+  // Referrals
+  const { referrals, isLoading: referralsLoading, deleteReferral } = useReferrals(id);
+  const [showReferralList, setShowReferralList] = useState(false);
+  const [showReferralForm, setShowReferralForm] = useState(false);
   const [billingItems, setBillingItems] = useState([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
   const [laborCharges, setLaborCharges] = useState(0);
   const [discount, setDiscount] = useState(0);
@@ -3368,6 +3376,99 @@ export default function BookServiceDetails() {
               </div>
             )}
           </Card>
+          )}
+
+          {/* Referral Section */}
+          {!isEmployee && (
+            <Card className="p-3 md:p-6 border-2 border-purple-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg sm:text-xl font-semibold text-purple-700">Referrals ({referrals.length})</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {referrals.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowReferralList(!showReferralList)}
+                      className="text-xs"
+                    >
+                      {showReferralList ? 'Hide Referrals' : 'View Referrals'}
+                    </Button>
+                  )}
+                  <ReferralForm
+                    serviceId={id || ''}
+                    jobCardNo={service?.jobCardNo}
+                    onSuccess={() => {
+                      setShowReferralForm(false);
+                      setShowReferralList(true);
+                    }}
+                    trigger={
+                      <Button
+                        size="sm"
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                        disabled={service?.status === 'completed' || service?.status === 'cancelled'}
+                      >
+                        + Add Referral
+                      </Button>
+                    }
+                    disabled={isEmployee || service?.status === 'completed' || service?.status === 'cancelled'}
+                  />
+                </div>
+              </div>
+
+              {showReferralList && referrals.length > 0 && (
+                <ReferralList
+                  serviceId={id || ''}
+                  referrals={referrals}
+                  isLoading={referralsLoading}
+                  onRefresh={() => {
+                    // Referrals will auto-refresh via the hook
+                  }}
+                  onDelete={deleteReferral}
+                  disabled={isEmployee || service?.status === 'completed' || service?.status === 'cancelled'}
+                />
+              )}
+
+              {!showReferralList && referrals.length === 0 && (
+                <div className="p-4 border border-yellow-300 bg-yellow-50 text-yellow-800 text-sm rounded">
+                  No referrals added yet. Add one to track referral commissions.
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Referral for quick access - Summary */}
+          {!isEmployee && referrals.length > 0 && !showReferralList && (
+            <Card className="p-3 md:p-6 bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200">
+              <h3 className="font-semibold text-gray-900 mb-3">Quick Referral Summary</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Referrals:</span>
+                  <span className="font-semibold">{referrals.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Commission:</span>
+                  <span className="font-semibold text-purple-600">
+                    AED {referrals.reduce((sum, r) => sum + (r.commission || 0), 0).toLocaleString('en-AE')}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Pending:</span>
+                  <span className="font-semibold">
+                    {referrals.filter(r => r.status === 'pending').length}
+                  </span>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowReferralList(true)}
+                className="w-full mt-4 text-xs"
+              >
+                View All Referrals
+              </Button>
+            </Card>
           )}
 
           {!isEmployee && (

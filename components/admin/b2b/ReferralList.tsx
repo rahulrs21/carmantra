@@ -15,10 +15,13 @@ import { ReferralForm } from './ReferralForm';
 import { Trash2, Pencil } from 'lucide-react';
 import { useDeleteReferral } from '@/hooks/useB2B';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/lib/userContext';
+import { activityService } from '@/lib/firestore/activity-service';
 
 interface ReferralListProps {
   companyId: string;
   serviceId: string;
+  jobCardNo?: string; // Job Card number for tracking
   referrals: B2BReferral[];
   vehicleIds?: string[];
   isLoading: boolean;
@@ -29,6 +32,7 @@ interface ReferralListProps {
 export function ReferralList({
   companyId,
   serviceId,
+  jobCardNo,
   referrals,
   vehicleIds = [],
   isLoading,
@@ -37,6 +41,7 @@ export function ReferralList({
 }: ReferralListProps) {
   const deleteReferral = useDeleteReferral();
   const { toast } = useToast();
+  const { role, user } = useUser();
   
   const handleDelete = (referral: B2BReferral) => {
     // Show confirmation alert
@@ -48,7 +53,27 @@ export function ReferralList({
           referralId: referral.id,
         },
         {
-          onSuccess: () => {
+          onSuccess: async () => {
+            // Log activity
+            await activityService.logActivity({
+              companyId,
+              activityType: 'referral_deleted',
+              description: `Referral deleted - ${referral.personName} (Commission: AED ${referral.commission})`,
+              userId: user?.uid || 'unknown',
+              userName: user?.displayName || 'Unknown User',
+              userEmail: user?.email || 'unknown@email.com',
+              userRole: role || 'unknown',
+              metadata: {
+                serviceId,
+                referralId: referral.id,
+                personName: referral.personName,
+                contact: referral.contact,
+                commission: referral.commission,
+                status: referral.status,
+                jobCardNo,
+              },
+            });
+
             toast({
               title: 'Success',
               description: 'Referral deleted successfully',
@@ -79,6 +104,7 @@ export function ReferralList({
         <ReferralForm
           companyId={companyId}
           serviceId={serviceId}
+          jobCardNo={jobCardNo}
           vehicleIds={vehicleIds}
           onSuccess={onRefresh}
           disabled={disabled}
@@ -89,6 +115,7 @@ export function ReferralList({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Job Card No</TableHead>
                 <TableHead>Person Name</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Commission</TableHead>
@@ -100,19 +127,22 @@ export function ReferralList({
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     Loading referrals...
                   </TableCell>
                 </TableRow>
               ) : referrals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     No referrals added yet.
                   </TableCell>
                 </TableRow>
               ) : (
                 referrals.map((referral) => (
                   <TableRow key={referral.id} className="hover:bg-gray-50">
+                    <TableCell className="font-semibold text-blue-600">
+                      {referral.jobCardNo || jobCardNo || '-'}
+                    </TableCell>
                     <TableCell className="font-medium">{referral.personName}</TableCell>
                     <TableCell className="text-sm">{referral.contact}</TableCell>
                     <TableCell className="font-semibold">
@@ -141,6 +171,7 @@ export function ReferralList({
                         <ReferralForm
                           companyId={companyId}
                           serviceId={serviceId}
+                          jobCardNo={jobCardNo}
                           vehicleIds={vehicleIds}
                           referral={referral}
                           onSuccess={onRefresh}

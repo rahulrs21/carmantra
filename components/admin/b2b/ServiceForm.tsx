@@ -32,12 +32,13 @@ import {
 import { useCreateService } from '@/hooks/useB2B';
 import { ServiceFormData } from '@/lib/types/b2b.types';
 import { useContext } from 'react';
-import { UserContext } from '@/lib/userContext';
+import { UserContext, useUser } from '@/lib/userContext';
 import { Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { activityService } from '@/lib/firestore/activity-service';
 
 const serviceSchema = z.object({
   title: z.string().min(1, 'Service title is required'),
@@ -79,6 +80,7 @@ const SERVICE_TYPES = [
 export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
+  const { role } = useUser();
   const createService = useCreateService();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -157,6 +159,25 @@ export function ServiceForm({ companyId, onSuccess }: ServiceFormProps) {
 
       // Get the service ID from the result
       const serviceId = result?.id || (typeof result === 'string' ? result : null);
+      
+      // Log activity for service creation
+      await activityService.logActivity({
+        companyId: companyId,
+        activityType: 'service_created',
+        description: `New service "${data.title}" (${data.type}) created with Job Card ${data.jobCardNo}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          title: data.title,
+          type: data.type,
+          jobCardNo: data.jobCardNo,
+          serviceDate: data.serviceDate.toISOString(),
+          notes: data.notes,
+        },
+      });
       
       // Close dialog immediately
       setOpen(false);

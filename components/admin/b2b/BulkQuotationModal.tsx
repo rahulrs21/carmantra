@@ -23,6 +23,7 @@ interface BulkQuotationModalProps {
   onClose: () => void;
   onSuccess: () => void;
   serviceTotals?: Record<string, number>;
+  referralTotals?: Record<string, number>;
 }
 
 export function BulkQuotationModal({
@@ -34,6 +35,7 @@ export function BulkQuotationModal({
   onClose,
   onSuccess,
   serviceTotals = {},
+  referralTotals = {},
 }: BulkQuotationModalProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
@@ -68,6 +70,7 @@ export function BulkQuotationModal({
         company,
         services: selectedServices,
         serviceTotals,
+        referralTotals,
         userId: user.uid,
       });
 
@@ -81,8 +84,11 @@ export function BulkQuotationModal({
         description: 'Quotation created successfully',
       });
 
-      onSuccess();
-      onClose();
+      // Add a small delay to ensure Firestore has written the data before refreshing
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 500);
     } catch (error) {
       console.error('Error creating quotation:', error);
       toast({
@@ -127,9 +133,9 @@ export function BulkQuotationModal({
             </div>
           </div>
 
-          <div className="border-t pt-4">
+          <div className="border-t pt-4 space-y-3">
             <div className="text-sm">
-              <p className="text-gray-600">Total Amount:</p>
+              <p className="text-gray-600">Service Subtotal:</p>
               <p className="text-2xl font-bold">
                 AED{' '}
                 {selectedServices
@@ -137,6 +143,11 @@ export function BulkQuotationModal({
                   .toLocaleString('en-AE')}
               </p>
             </div>
+            {Object.keys(referralTotals).length > 0 && Object.values(referralTotals).reduce((sum, val) => sum + val, 0) > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                <p className="text-xs text-blue-600">ℹ️ Referral commissions can be added after quotation review</p>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

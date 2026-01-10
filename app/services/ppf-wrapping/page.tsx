@@ -4,14 +4,17 @@
 import Image from 'next/image';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { AnimatedSection } from '@/components/AnimatedSection';
-import { Shield, Star, CheckCircle, Clock, Palette, ArrowRight } from 'lucide-react';
+import { Shield, Star, CheckCircle, Clock, Palette, ArrowRight, AlertCircle } from 'lucide-react';
 import ModalForm from '@/components/ModalForm';
 import { ContactForm } from '@/components/ContactForm';
+import { useServiceData } from '@/lib/hooks/useServiceData';
 
 export default function PPFWrappingPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState('');
+  const { category, products, loading, error } = useServiceData('ppf-wrapping');
 
   const benefits = [
     'Protects against stone chips and scratches',
@@ -21,56 +24,6 @@ export default function PPFWrappingPage() {
     'Easy to clean and maintain',
     'Removable without paint damage'
   ];
-
-  const services = [
-    {
-      title: 'Elite Wrap – Matte',
-      description: 'Complete paint protection film coverage for maximum protection',
-      price: 'From AED 7,000',
-      warranty: '10 Years Warranty',
-      duration: '2-3 days'
-    },
-    {
-      title: 'Elite Wrap – Glossy',
-      description: 'Strategic protection for high-impact areas',
-      price: 'From AED 6,000',
-      warranty: '10 Years Warranty',
-      duration: '2-3 days'
-    },
-    {
-      title: 'Basic Wrap – Matte',
-      description: 'Transform your vehicle\'s appearance with premium vinyl',
-      price: 'From AED 4,000',
-      warranty: '5 Years Warranty',
-      duration: '2-3 days'
-    },
-    {
-      title: 'Basic Wrap – Glossy',
-      description: 'Professional branding and advertising solutions',
-      price: 'From AED 3,000',
-      warranty: '5 Years Warranty',
-      duration: '2-3 days'
-    },
-    {
-      title: 'Standard Color PPF – Matte',
-      description: 'Transform your vehicle\'s appearance with premium vinyl',
-      price: 'From AED 7,000',
-      warranty: '5 Years Warranty',
-      duration: '2-3 days'
-    },
-    {
-      title: 'Standard Color PPF – Glossy',
-      description: 'Professional branding and advertising solutions',
-      price: 'From AED 6,000',
-      warranty: '5 Years Warranty',
-      duration: '2-3 days'
-    }
-  ];
-
-  const openModal = (service: string) => {
-    setSelectedService(service + " - PPF & Wrapping");
-    setIsModalOpen(true);
-  };
 
   const closeModal = () => setIsModalOpen(false);
 
@@ -137,33 +90,60 @@ export default function PPFWrappingPage() {
           {/* Services Grid */}
           <AnimatedSection>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white text-center mb-12">Our PPF & Wrapping Services</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {services.map((service, index) => (
-                <AnimatedSection key={service.title} delay={index * 100}>
-                  <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
-                    <h3 className="text-xl font-bold text-gray-900 mb-3">{service.title}</h3>
-                    <p className="text-gray-600  mb-4">{service.description}</p>
-                    <div className="space-y-2 mb-6">
-                      <div className="flex justify-between items-center">
-                        <span className="text-2xl font-bold text-blue-600">{service.price}</span>
-                        <div className="flex items-center text-gray-500  text-sm">
-                          <Clock className="h-4 w-4 mr-1" />
-                          {service.duration}
+            
+            {loading && (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+              </div>
+            )}
+
+            {error && (
+              <Card className="p-6 mb-8 bg-red-50 border-red-200">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <p className="text-red-800">{error}</p>
+                </div>
+              </Card>
+            )}
+
+            {!loading && products.length === 0 && !error && (
+              <Card className="p-6 text-center bg-yellow-50 border-yellow-200">
+                <p className="text-yellow-800">No services available at the moment</p>
+              </Card>
+            )}
+
+            {!loading && products.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {products.map((product, index) => (
+                  <AnimatedSection key={product.id} delay={index * 100}>
+                    <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
+                      <h3 className="text-xl font-bold text-gray-900 mb-3">{product.name}</h3>
+                      <p className="text-gray-600  mb-4">{product.description}</p>
+                      <div className="space-y-2 mb-6">
+                        <div className="flex justify-between items-center">
+                          <span className="text-2xl font-bold text-blue-600">From AED {product.price?.toLocaleString()}</span>
+                          <div className="flex items-center text-gray-500  text-sm">
+                            <Clock className="h-4 w-4 mr-1" />
+                            {product.duration}
+                          </div>
+                        </div>
+                        <div className="flex items-center text-green-600 text-sm">
+                          <Shield className="h-4 w-4 mr-1" />
+                          {product.warranty}
                         </div>
                       </div>
-                      <div className="flex items-center text-green-600 text-sm">
-                        <Shield className="h-4 w-4 mr-1" />
-                        {service.warranty} warranty
-                      </div>
+                      <Button className="w-full" onClick={() => {
+                        setSelectedService(product.name + " - PPF & Wrapping");
+                        setIsModalOpen(true);
+                      }}>
+                        Get Quote
+                        <ArrowRight size={16} className="ml-2" />
+                      </Button>
                     </div>
-                    <Button className="w-full" onClick={() => openModal(service.title)}>
-                      Get Quote
-                      <ArrowRight size={16} className="ml-2" />
-                    </Button>
-                  </div>
-                </AnimatedSection>
-              ))}
-            </div>
+                  </AnimatedSection>
+                ))}
+              </div>
+            )}
           </AnimatedSection>
         </div>
       </section>

@@ -25,6 +25,8 @@ import Link from 'next/link';
 import { ArrowRight, FileText, CheckCircle2, Trash2 } from 'lucide-react';
 import { useUpdateServiceStatus, useVehicles, useReferrals, useCalculateTotals } from '@/hooks/useB2B';
 import { BulkQuotationModal } from '@/components/admin/b2b';
+import { useUser } from '@/lib/userContext';
+import { activityService } from '@/lib/firestore/activity-service';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,6 +71,7 @@ function ServiceRow({
   onGenerateQuotation,
   onGenerateInvoice,
   onSubtotalCalculated,
+  onReferralCalculated,
   onDeleteService,
 }: {
   service: B2BService;
@@ -78,6 +81,7 @@ function ServiceRow({
   onGenerateQuotation?: (serviceId: string) => void;
   onGenerateInvoice?: (serviceId: string) => void;
   onSubtotalCalculated?: (serviceId: string, subtotal: number) => void;
+  onReferralCalculated?: (serviceId: string, referralTotal: number) => void;
   onDeleteService?: (serviceId: string) => void;
 }) {
   const { vehicles = [] } = useVehicles(companyId, service.id);
@@ -97,6 +101,11 @@ function ServiceRow({
   React.useEffect(() => {
     onSubtotalCalculated?.(service.id, serviceSubtotal);
   }, [serviceSubtotal, service.id, onSubtotalCalculated]);
+
+  // Notify parent when referral total is calculated
+  React.useEffect(() => {
+    onReferralCalculated?.(service.id, totals.referralTotal);
+  }, [totals.referralTotal, service.id, onReferralCalculated]);
 
   return (
     <TableRow className="hover:bg-gray-50">
@@ -211,12 +220,14 @@ export function ServiceList({
   onGenerateInvoice,
   serviceTotals = {},
 }: ServiceListProps) {
+  const { user, role } = useUser();
   const updateServiceStatus = useUpdateServiceStatus();
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [showBulkQuotationModal, setShowBulkQuotationModal] = useState(false);
   const [calculatedTotals, setCalculatedTotals] = useState<Record<string, number>>({});
+  const [calculatedReferrals, setCalculatedReferrals] = useState<Record<string, number>>({});
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -229,6 +240,13 @@ export function ServiceList({
     }));
   }, []);
 
+  const handleReferralCalculated = useCallback((serviceId: string, referralTotal: number) => {
+    setCalculatedReferrals((prev) => ({
+      ...prev,
+      [serviceId]: referralTotal,
+    }));
+  }, []);
+
   // Reset to page 1 when items per page changes
   useEffect(() => {
     setCurrentPage(1);
@@ -236,9 +254,30 @@ export function ServiceList({
 
   const handleDeleteService = async (serviceId: string) => {
     try {
+      // Find the service being deleted
+      const serviceToDelete = services.find(s => s.id === serviceId);
+      
       // Delete the service document from Firestore
       const serviceRef = doc(db, 'companies', companyId, 'services', serviceId);
       await deleteDoc(serviceRef);
+      
+      // Log activity for service deletion
+      await activityService.logActivity({
+        companyId: companyId,
+        activityType: 'service_deleted',
+        description: `Service "${serviceToDelete?.title}" (Job Card: ${serviceToDelete?.jobCardNo}) deleted`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          serviceTitle: serviceToDelete?.title || 'N/A',
+          jobCardNo: serviceToDelete?.jobCardNo || 'N/A',
+          serviceType: serviceToDelete?.type || 'N/A',
+        },
+      });
+      
       onRefresh();
       setDeleteConfirmId(null);
     } catch (error) {
@@ -277,11 +316,33 @@ export function ServiceList({
 
   const handleStatusChange = async (serviceId: string, newStatus: string) => {
     try {
+      // Find the service being updated
+      const serviceToUpdate = services.find(s => s.id === serviceId);
+      
       await updateServiceStatus.mutateAsync({
         companyId,
         serviceId,
         status: newStatus,
       });
+
+      // Log activity for service status change
+      await activityService.logActivity({
+        companyId: companyId,
+        activityType: 'service_status_changed',
+        description: `Service status changed to "${newStatus}" - ${serviceToUpdate?.title} (Job Card: ${serviceToUpdate?.jobCardNo})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          serviceTitle: serviceToUpdate?.title || 'N/A',
+          jobCardNo: serviceToUpdate?.jobCardNo || 'N/A',
+          previousStatus: serviceToUpdate?.status || 'N/A',
+          newStatus: newStatus,
+        },
+      });
+
       onRefresh();
     } catch (error) {
       console.error('Error updating service status:', error);
@@ -417,6 +478,7 @@ export function ServiceList({
                       onGenerateQuotation={onGenerateQuotation}
                       onGenerateInvoice={onGenerateInvoice}
                       onSubtotalCalculated={handleSubtotalCalculated}
+                      onReferralCalculated={handleReferralCalculated}
                       onDeleteService={(serviceId) => setDeleteConfirmId(serviceId)}
                     />
                   ))
@@ -480,6 +542,7 @@ export function ServiceList({
           }))}
           company={company}
           serviceTotals={calculatedTotals}
+          referralTotals={calculatedReferrals}
           isOpen={showBulkQuotationModal}
           onClose={() => setShowBulkQuotationModal(false)}
           onSuccess={() => {

@@ -19,6 +19,8 @@ import { useState, useEffect } from 'react';
 import * as React from 'react';
 import { useDeleteVehicle } from '@/hooks/useB2B';
 import { useToast } from '@/hooks/use-toast';
+import { activityService } from '@/lib/firestore/activity-service';
+import { useUser } from '@/lib/userContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +53,7 @@ export function VehicleList({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const deleteVehicleMutation = useDeleteVehicle();
   const { toast } = useToast();
+  const { user, role } = useUser();
 
   // Calculate total service cost for this service
   const totalServiceCost = vehicles.reduce((sum, vehicle) => {
@@ -67,12 +70,33 @@ export function VehicleList({
   }, [totalServiceCost, serviceId, onServiceTotalCalculated]);
 
   const handleDeleteVehicle = async (vehicleId: string) => {
+    const deletedVehicle = vehicles.find(v => v.id === vehicleId);
     try {
       await deleteVehicleMutation.mutateAsync({
         companyId,
         serviceId,
         vehicleId,
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId,
+        activityType: 'vehicle_deleted',
+        description: `Vehicle Deleted - ${deletedVehicle?.brand} ${deletedVehicle?.model} (${deletedVehicle?.plateNumber})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          vehicleId: vehicleId,
+          vehiclePlate: deletedVehicle?.plateNumber,
+          brand: deletedVehicle?.brand,
+          model: deletedVehicle?.model,
+          year: deletedVehicle?.year,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Vehicle deleted successfully',

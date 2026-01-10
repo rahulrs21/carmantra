@@ -10,8 +10,11 @@ import {
   useUpdateServiceStatus,
 } from '@/hooks/useB2B';
 import { batchUpdateServiceTotals } from '@/lib/firestore/b2b-service';
+import { activityService } from '@/lib/firestore/activity-service';
 import { VehicleList } from '@/components/admin/b2b/VehicleList';
 import { ReferralList } from '@/components/admin/b2b/ReferralList';
+import { ActivityHistoryModal } from '@/components/ActivityHistoryModal';
+import { ActivityHistoryButton } from '@/components/ActivityHistoryButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -43,8 +46,9 @@ const EXPENSE_CATEGORIES = ['Car Parts & Accessories', 'Ceramic Coating Material
 
 export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
   const { id, serviceId } = use(params);
-  const { role } = useUser();
+  const { role, user } = useUser();
   const isEmployeeRole = role === 'employee';
+  const [showActivityHistory, setShowActivityHistory] = useState(false);
   const { data: service, isLoading: serviceLoading, refetch: refetchService } = useServiceById(
     id,
     serviceId
@@ -69,6 +73,17 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
   });
 
   const totals = useCalculateTotals(vehicles, referrals);
+
+  // Refresh page when invoice is created from QuotationList
+  useEffect(() => {
+    const newInvoiceId = sessionStorage.getItem('newInvoiceId');
+    if (newInvoiceId) {
+      // Refetch service data to reflect changes
+      refetchService();
+      // Clear the sessionStorage key
+      sessionStorage.removeItem('newInvoiceId');
+    }
+  }, [refetchService]);
 
   // Restrict access for employees
   if (isEmployeeRole) {
@@ -143,9 +158,39 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
           ...expenseData,
           updatedAt: Timestamp.now(),
         });
+        await activityService.logActivity({
+          companyId: id,
+          activityType: 'service_updated',
+          description: `Expense "${expenseFormData.category}" updated - AED ${expenseFormData.amount}`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role || 'unknown',
+          metadata: {
+            serviceId: serviceId,
+            expenseId: editingExpenseId,
+            category: expenseFormData.category,
+            amount: expenseFormData.amount, 
+          },
+        });
         alert('✓ Expense updated successfully');
       } else {
-        await addDoc(collection(db, 'expenses'), expenseData);
+        const docRef = await addDoc(collection(db, 'expenses'), expenseData);
+        await activityService.logActivity({
+          companyId: id,
+          activityType: 'service_updated',
+          description: `Expense "${expenseFormData.category}" added - AED ${expenseFormData.amount}`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role || 'unknown',
+          metadata: {
+            serviceId: serviceId,
+            expenseId: docRef.id,
+            category: expenseFormData.category,
+            amount: expenseFormData.amount,
+          },
+        });
         alert('✓ Expense added successfully');
       }
       // Reset form
@@ -169,8 +214,24 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
     if (!confirm('Are you sure you want to delete this expense?')) return;
 
     try {
+      const expense = expenses.find(e => e.id === expenseId);
       await updateDoc(doc(db, 'expenses', expenseId), {
         deletedAt: Timestamp.now(),
+      });
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Expense "${expense?.category}" deleted - AED ${expense?.amount}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          expenseId: expenseId,
+          category: expense?.category,
+          amount: expense?.amount,
+        },
       });
       alert('✓ Expense deleted successfully');
     } catch (err) {
@@ -214,6 +275,21 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
         companyId: id,
         serviceId: serviceId,
         status,
+      });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Service status changed to "${status}"`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          newStatus: status,
+        },
       });
 
       console.log('[ServiceDetail] Status updated, calculating totals');
@@ -363,7 +439,7 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
       
 
       {/* Vehicles Section */}
-      <div className="mb-6">
+      <section className="mb-6" id='vehiclesList'>
         <VehicleList
           companyId={id}
           serviceId={serviceId}
@@ -372,22 +448,23 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
           onRefresh={() => refetchService()}
           disabled={isEmployeeRole}
         />
-      </div>
+      </section>
 
       
 
       {/* Referrals Section */}
-      <div className="mb-6">
+      <section className="mb-6" id='referralsList'>
         <ReferralList
           companyId={id}
           serviceId={serviceId}
+          jobCardNo={service.jobCardNo}
           referrals={referrals}
           vehicleIds={vehicles.map((v: any) => v.id)}
           isLoading={referralsLoading}
           onRefresh={() => refetchService()}
           disabled={isEmployeeRole}
         />
-      </div>
+      </section>
 
 
       {/* Expenses Card */}
@@ -668,6 +745,15 @@ export default function ServiceDetailPage({ params }: ServiceDetailPageProps) {
       </Card>
 
 
+      {/* Activity History Button */}
+      <ActivityHistoryButton onClick={() => setShowActivityHistory(true)} />
+
+      {/* Activity History Modal */}
+      <ActivityHistoryModal
+        companyId={id}
+        isOpen={showActivityHistory}
+        onClose={() => setShowActivityHistory(false)}
+      />
     </div>
   );
 }

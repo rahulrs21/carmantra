@@ -100,7 +100,14 @@ const getDateString = (date: string | Date | null | undefined): string => {
   });
 };
 
+// Calculate subtotal from vehicle service amounts
+const calculateSubtotalFromVehicles = (vehicles: Array<{ serviceAmount: number }>): number => {
+  return vehicles.reduce((sum, vehicle) => sum + (vehicle.serviceAmount || 0), 0);
+};
+
 export const generateQuotationPDF = async (data: QuotationPDFData) => {
+  // Calculate actual subtotal from vehicles, not from stored value
+  const calculatedSubtotal = calculateSubtotalFromVehicles(data.vehicles);
   const vehicleRows = data.vehicles
     .map(
       (v) => `
@@ -532,7 +539,7 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
             <div class="totals-section">
               <div class="total-row">
                 <span class="total-label">Subtotal:</span>
-                <span class="total-amount">AED ${data.subtotal.toFixed(2)}</span>
+                <span class="total-amount">AED ${calculatedSubtotal.toFixed(2)}</span>
               </div>
               ${data.showReferralCommission ? `<div class="total-row">
                 <span class="total-label">Referral Commission:</span>
@@ -540,7 +547,7 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
               </div>` : ''}
               <div class="total-row grand-total">
                 <span class="total-label">GRAND TOTAL:</span>
-                <span class="total-amount">AED ${(data.showReferralCommission ? data.grandTotal : data.subtotal).toFixed(2)}</span>
+                <span class="total-amount">AED ${(data.showReferralCommission ? (calculatedSubtotal + data.referralTotal) : calculatedSubtotal).toFixed(2)}</span>
               </div>
             </div>
             <img src="/images/sample-stamp.png" style="width: 130px !important; height: 120px !important; display: block; margin: -5px auto 0 auto; margin-left: auto; margin-right: 0; opacity: 0.6;" alt="Approved Stamp" />
@@ -580,6 +587,8 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
 };
 
 export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<string> => {
+  // Calculate actual subtotal from vehicles, not from stored value
+  const calculatedSubtotal = calculateSubtotalFromVehicles(data.vehicles);
   const vehicleRows = data.vehicles
     .map(
       (v) => `
@@ -1005,7 +1014,7 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
             <div class="totals-section">
               <div class="total-row">
                 <span class="total-label">Subtotal:</span>
-                <span class="total-amount">AED ${data.subtotal.toFixed(2)}</span>
+                <span class="total-amount">AED ${calculatedSubtotal.toFixed(2)}</span>
               </div>
               ${data.showReferralCommission ? `<div class="total-row">
                 <span class="total-label">Referral Commission:</span>
@@ -1013,7 +1022,7 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
               </div>` : ''}
               <div class="total-row grand-total">
                 <span class="total-label">GRAND TOTAL:</span>
-                <span class="total-amount">AED ${(data.showReferralCommission ? data.grandTotal : data.subtotal).toFixed(2)}</span>
+                <span class="total-amount">AED ${(data.showReferralCommission ? (calculatedSubtotal + data.referralTotal) : calculatedSubtotal).toFixed(2)}</span>
               </div>
               ${data.paymentTerms ? `<div class="total-row" style="background: #f0f6fb; border: 1px dashed #4a90e2;">
                 <span class="total-label" style="font-weight: 600; color: #4a90e2;">Payment Terms:</span>
@@ -1078,6 +1087,8 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
 
 
 export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<string> => {
+  // Calculate actual subtotal from vehicles, not from stored value
+  const calculatedSubtotal = calculateSubtotalFromVehicles(data.vehicles);
   const vehicleRows = data.vehicles
     .map(
       (v) => `
@@ -1498,7 +1509,7 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
             <div class="totals-section">
               <div class="total-row">
                 <span class="total-label">Subtotal:</span>
-                <span class="total-amount">AED ${data.subtotal.toFixed(2)}</span>
+                <span class="total-amount">AED ${calculatedSubtotal.toFixed(2)}</span>
               </div>
               ${data.showReferralCommission ? `<div class="total-row">
                 <span class="total-label">Referral Commission:</span>
@@ -1506,7 +1517,7 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
               </div>` : ''}
               <div class="total-row grand-total">
                 <span class="total-label">TOTAL DUE:</span>
-                <span class="total-amount">AED ${(data.showReferralCommission ? data.grandTotal : data.subtotal).toFixed(2)}</span>
+                <span class="total-amount">AED ${(data.showReferralCommission ? (calculatedSubtotal + data.referralTotal) : calculatedSubtotal).toFixed(2)}</span>
               </div>
               ${data.amountStatus ? `<div class="total-row" style="background: #f0f6fb; border: 1px dashed #27ae60;">
                 <span class="total-label" style="font-weight: 600; color: #27ae60;">Amount Status:</span>
@@ -1574,6 +1585,8 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
 };
 
 export const generateInvoicePDF = async (data: InvoicePDFData) => {
+  // Calculate actual subtotal from vehicles, not from stored value
+  const calculatedSubtotal = calculateSubtotalFromVehicles(data.vehicles);
   const vehicleRows = data.vehicles
     .map(
       (v) => `
@@ -1983,7 +1996,7 @@ export const generateInvoicePDF = async (data: InvoicePDFData) => {
             <div class="totals-section">
               <div class="total-row">
                 <span class="total-label">Subtotal:</span>
-                <span class="total-amount">AED ${data.subtotal.toFixed(2)}</span>
+                <span class="total-amount">AED ${calculatedSubtotal.toFixed(2)}</span>
               </div>
               ${data.showReferralCommission ? `<div class="total-row">
                 <span class="total-label">Referral Commission:</span>
@@ -1991,7 +2004,7 @@ export const generateInvoicePDF = async (data: InvoicePDFData) => {
               </div>` : ''}
               <div class="total-row grand-total">
                 <span class="total-label">TOTAL AMOUNT:</span>
-                <span class="total-amount">AED ${(data.showReferralCommission ? data.grandTotal : data.subtotal).toFixed(2)}</span>
+                <span class="total-amount">AED ${(data.showReferralCommission ? (calculatedSubtotal + data.referralTotal) : calculatedSubtotal).toFixed(2)}</span>
               </div>
               ${data.amountStatus ? `<div class="total-row" style="background: #f0f6fb; border: 1px dashed #27ae60;">
                 <span class="total-label" style="font-weight: 600; color: #27ae60;">Amount Status:</span>

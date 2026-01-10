@@ -21,6 +21,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
     phone: '',
     email: '',
     service: selectedService,
+    mode: '',
     message: '',
   });
   const [submitted, setSubmitted] = useState(false);
@@ -42,7 +43,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
 
     setLoading(true);
 
-    if (!formData.name || !formData.phone || !formData.service) {
+    if (!formData.name || !formData.phone || !formData.service || !formData.mode) {
       alert("Please fill all required fields!");
       return;
     }
@@ -66,6 +67,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
           phone: formData.phone,
           email: formData.email,
           service: formData.service,
+          mode: formData.mode,
           message: formData.message,
           createdAt: new Date(),
         });
@@ -104,7 +106,7 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
         exit={{ opacity: 0 }}
       >
         <motion.div
-          className="bg-white rounded-lg w-full max-w-md p-6 relative shadow-xl overflow-hidden"
+          className="bg-white rounded-lg w-full max-w-md p-4 md:p-6 relative shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.8, opacity: 0 }}
@@ -117,72 +119,82 @@ export default function ModalForm({ selectedService, onClose }: ModalFormProps) 
               >
                 <X size={24} />
               </button>
-              <h2 className="text-2xl font-bold mb-4 dark:text-black">Request a Quote</h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <h2 className="text-xl md:text-2xl font-bold mb-3 md:mb-4 dark:text-black">Request a Quote</h2>
+              <form onSubmit={handleSubmit} className="space-y-2.5 md:space-y-4">
                 <div>
-                  <label className="block font-semibold  mb-1 dark:text-black">Name *</label>
+                  <label className="block font-semibold mb-0.5 md:mb-1 text-sm md:text-base dark:text-black">Name *</label>
                   <input
                     type="text"
                     ref={nameRef}
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full p-3 border rounded-lg dark:text-black"
+                    className="w-full p-2 md:p-3 border rounded-lg text-sm dark:text-black"
                     placeholder="Enter your name"
-                    autoComplete="name"   // ✅ enables browser autofill
-
+                    autoComplete="name"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1 dark:text-black">Phone *</label>
+                  <label className="block font-semibold mb-0.5 md:mb-1 text-sm md:text-base dark:text-black">Phone *</label>
                   <input
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full p-3 border rounded-lg dark:text-black"
+                    className="w-full p-2 md:p-3 border rounded-lg text-sm dark:text-black"
                     placeholder="Enter your phone number"
-                    autoComplete="tel"   // ✅ enables browser autofill
-
+                    autoComplete="tel"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1 dark:text-black">Email </label>
+                  <label className="block font-semibold mb-0.5 md:mb-1 text-sm md:text-base dark:text-black">Email</label>
                   <input
-                    type="email"  // changed to email type for validation   
+                    type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full p-3 border rounded-lg dark:text-black"
+                    className="w-full p-2 md:p-3 border rounded-lg text-sm dark:text-black"
                     placeholder="Enter your email"
-                    autoComplete="email"   // ✅ enables browser autofill 
+                    autoComplete="email"
                     required
-
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold mb-1 dark:text-black">Selected Service *</label>
+                  <label className="block font-semibold mb-0.5 md:mb-1 text-sm md:text-base dark:text-black">Selected Service *</label>
                   <input
                     type="text"
                     value={formData.service}
                     readOnly
-                    className="w-full p-3 border rounded-lg bg-gray-100 dark:text-black"
-
-                    autoComplete="off"   // 🚫 turn off autofill since it's read-only
+                    className="w-full p-2 md:p-3 border rounded-lg bg-gray-100 text-sm dark:text-black"
+                    autoComplete="off"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1 dark:text-black">Message (Optional)</label>
+                  <label className="block font-semibold mb-0.5 md:mb-1 text-sm md:text-base dark:text-black">Select Mode *</label>
+                  <select
+                    value={formData.mode}
+                    onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                    className="w-full p-2 md:p-3 border rounded-lg text-sm dark:text-black"
+                    required
+                  >
+                    <option value="">Choose a service mode...</option>
+                    <option value="drive-to-garage">Drive to Garage (Free)</option>
+                    <option value="pick-up-service">Pick-up Service (+AED 150.00)</option>
+                    <option value="home-service">Home Service (+AED 100.00)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-0.5 md:mb-1 text-sm md:text-base dark:text-black">Message (Optional)</label>
                   <textarea
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    className="w-full p-3 border rounded-lg dark:text-black"
+                    className="w-full p-2 md:p-3 border rounded-lg text-sm dark:text-black"
                     placeholder="Your message..."
-                    autoComplete="on"   // ✅ allows general suggestions
+                    autoComplete="on"
                   />
                 </div>
-                <Button type="submit" className="w-full dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900">
+                <Button type="submit" className="w-full text-sm md:text-base dark:bg-blue-500 dark:text-white dark:border dark:border-blue-900">
                   {loading ? `Submitting` : 'Submit'}
                   <LoaderIcon className={`ml-2 ${loading ? 'inline-block animate-spin' : 'hidden'}`} />
                 </Button>

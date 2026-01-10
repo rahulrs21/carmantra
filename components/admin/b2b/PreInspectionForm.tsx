@@ -35,7 +35,8 @@ import { Plus, Upload, X } from 'lucide-react';
 import { storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Card } from '@/components/ui/card';
-import { UserContext } from '@/lib/userContext';
+import { UserContext, useUser } from '@/lib/userContext';
+import { activityService } from '@/lib/firestore/activity-service';
 
 const preInspectionSchema = z.object({
   notes: z.string().min(1, 'Notes are required'),
@@ -68,6 +69,7 @@ export function PreInspectionForm({
 }: PreInspectionFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
+  const { role } = useUser();
   const createPreInspection = useCreatePreInspection();
   const [open, setOpen] = useState(false);
   const [images, setImages] = useState<File[]>([]);
@@ -144,6 +146,31 @@ export function PreInspectionForm({
         vehicleId,
         data: formData,
         userId: user.uid,
+      });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId,
+        activityType: 'service_updated',
+        description: `Pre-Inspection created - ${data.inspectionType} inspection with ${checklist.filter(c => c.status !== 'pending').length} items checked`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId,
+          vehicleId,
+          inspectionType: data.inspectionType,
+          notes: data.notes,
+          checklistItemsCount: checklist.length,
+          imagesCount: images.length,
+          videosCount: videos.length,
+          // checklistSummary: {
+          //   ok: checklist.filter(c => c.status === 'ok').length,
+          //   issue: checklist.filter(c => c.status === 'issue').length,
+          //   pending: checklist.filter(c => c.status === 'pending').length,
+          // },
+        },
       });
 
       // Reset form

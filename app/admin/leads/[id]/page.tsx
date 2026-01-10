@@ -20,6 +20,7 @@ interface Lead {
   phone?: string;
   email?: string;
   service?: string;
+  mode?: string;
   message?: string;
   createdAt?: { seconds: number } | { toDate: () => Date };
 }
@@ -645,6 +646,17 @@ export default function LeadDetailsPage() {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Service Interest:</span>
                   <span className="font-medium text-right sm:text-left break-words max-w-full">{lead.service || '—'}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <span className="text-gray-600">Service Mode:</span>
+                  <span className="font-medium text-right sm:text-left break-words max-w-full">
+                    {lead.mode ? (
+                      lead.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
+                      lead.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                      lead.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                      lead.mode
+                    ) : '—'}
+                  </span>
                 </div>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Received:</span>

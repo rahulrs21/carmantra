@@ -308,6 +308,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'salary', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'employee-leaves', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'employee-salary', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'products', canView: true, canCreate: true, canEdit: true, canDelete: true },
   ],
   manager: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -325,8 +326,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'leaves', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'salary', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-leaves', canView: true, canCreate: false, canEdit: false, canDelete: false },
-    { module: 'employee-salary', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  ],
+    { module: 'employee-salary', canView: true, canCreate: false, canEdit: false, canDelete: false },    { module: 'products', canView: true, canCreate: true, canEdit: true, canDelete: false },  ],
   sales: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'leads', canView: true, canCreate: true, canEdit: true, canDelete: false },
@@ -344,6 +344,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'salary', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-leaves', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-salary', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'products', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   support: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -363,6 +364,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'employee-leaves', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-salary', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-tasks', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'products', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   viewer: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -382,6 +384,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'employee-leaves', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-salary', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-tasks', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'products', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   employee: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -401,6 +404,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'employee-leaves', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'employee-salary', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-tasks', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'products', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
   accounts: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -419,5 +423,6 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, Permission[]> = {
     { module: 'salary', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'employee-leaves', canView: false, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employee-salary', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'products', canView: false, canCreate: false, canEdit: false, canDelete: false },
   ],
 };

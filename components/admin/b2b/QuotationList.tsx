@@ -22,6 +22,7 @@ import { Download, Edit, Trash2, FileText, Trash, Mail } from 'lucide-react';
 import { useContext } from 'react';
 import { UserContext } from '@/lib/userContext';
 import { useToast } from '@/hooks/use-toast';
+import { activityService } from '@/lib/firestore/activity-service';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -128,7 +129,7 @@ export function QuotationList({
   const [creatingInvoiceId, setCreatingInvoiceId] = useState<string | null>(null);
   const [invoiceSuccessOpen, setInvoiceSuccessOpen] = useState(false);
 
-  // Get newly created quotation ID from sessionStorage on mount
+  // Get newly created quotation ID from sessionStorage on mount and when quotations change
   useEffect(() => {
     const storedId = sessionStorage.getItem('newQuotationId');
     if (storedId) {
@@ -136,7 +137,7 @@ export function QuotationList({
       // Clear after reading
       sessionStorage.removeItem('newQuotationId');
     }
-  }, []);
+  }, [quotations]);
 
   // Auto-hide badge after 30 seconds
   useEffect(() => {
@@ -176,6 +177,25 @@ export function QuotationList({
         serviceId: actualServiceId,
         quotationId: selectedQuotation.id,
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId,
+        activityType: 'quotation_deleted',
+        description: `Quotation deleted - ${selectedQuotation.quotationNumber}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: userContext?.role || 'unknown',
+        metadata: {
+          serviceId: actualServiceId,
+          quotationId: selectedQuotation.id,
+          quotationNumber: selectedQuotation.quotationNumber,
+          status: selectedQuotation.status,
+          totalAmount: selectedQuotation.totalAmount,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Quotation deleted successfully',
@@ -224,6 +244,24 @@ export function QuotationList({
           companyId,
           serviceId: actualServiceId,
           quotationId: quotation.id,
+        });
+
+        // Log activity for each deleted quotation
+        await activityService.logActivity({
+          companyId,
+          activityType: 'quotation_deleted',
+          description: `Quotation deleted (bulk) - ${quotation.quotationNumber}`,
+          userId: userContext?.user?.uid || 'unknown',
+          userName: userContext?.user?.displayName || 'Unknown User',
+          userEmail: userContext?.user?.email || 'unknown@email.com',
+          userRole: userContext?.role || 'unknown',
+          metadata: {
+            serviceId: actualServiceId,
+            quotationId: quotation.id,
+            quotationNumber: quotation.quotationNumber,
+            status: quotation.status,
+            totalAmount: quotation.totalAmount,
+          },
         });
       }
       toast({
@@ -522,6 +560,25 @@ export function QuotationList({
         throw new Error(result.error || 'Failed to send email');
       }
 
+      // Log activity
+      await activityService.logActivity({
+        companyId,
+        activityType: 'quotation_email_sent',
+        description: `Quotation email sent - ${quotation.quotationNumber}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: userContext?.role || 'unknown',
+        metadata: {
+          serviceId: serviceId || quotation.serviceId,
+          quotationId: quotation.id,
+          quotationNumber: quotation.quotationNumber,
+          recipientEmail: companyEmail,
+          status: quotation.status,
+          totalAmount: quotation.totalAmount,
+        },
+      });
+
       // Show success modal
       setEmailSuccessData({
         email: companyEmail,
@@ -709,52 +766,58 @@ export function QuotationList({
                         {quotation.vehicles?.length || 0} vehicles
                       </TableCell>
                       <TableCell className="text-sm">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-2">
                           {quotation.vehicles && quotation.vehicles.length > 0 ? (
-                            quotation.vehicles.map((v: any) => {
-                              // Calculate vehicle service cost - prioritize services array, then serviceAmount
-                              let vehicleServiceCost = 0;
-                              if (v.services && Array.isArray(v.services) && v.services.length > 0) {
-                                vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
-                              } else {
-                                vehicleServiceCost = v.serviceAmount || 0;
-                              }
-                              return (
-                                <div key={v.plateNumber} className="text-sm">
-                                  <div className="flex items-center gap-2">
-                                    {v.jobCardNo && (
-                                      <span className="font-mono font-semibold text-blue-600 text-xs" title={`Service Date: ${v.serviceDate ? new Date(v.serviceDate instanceof Date ? v.serviceDate : v.serviceDate?.toDate?.()).toLocaleDateString() : 'N/A'}`}>
-                                        {v.jobCardNo} |
-                                      </span>
-                                    )}
-                                    <span className="font-mono text-gray-600">{v.plateNumber}:</span>
-                                    <span className="font-medium ">AED {vehicleServiceCost.toLocaleString('en-AE')}</span>
-                                  </div>
-                                </div>
-                              );
-                            })
+                            <>
+                              <div className="space-y-1">
+                                {quotation.vehicles.map((v: any) => {
+                                  // Calculate vehicle service cost - prioritize serviceAmount field (updated value from form)
+                                  let vehicleServiceCost = 0;
+                                  if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+                                    vehicleServiceCost = v.serviceAmount;
+                                  } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+                                    vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+                                  } else {
+                                    vehicleServiceCost = 0;
+                                  }
+                                  return (
+                                    <div key={v.plateNumber} className="text-sm">
+                                      <div className="flex items-center gap-2">
+                                        {v.jobCardNo && (
+                                          <span className="font-mono font-semibold text-blue-600 text-xs" title={`Service Date: ${v.serviceDate ? new Date(v.serviceDate instanceof Date ? v.serviceDate : v.serviceDate?.toDate?.()).toLocaleDateString() : 'N/A'}`}>
+                                            {v.jobCardNo} |
+                                          </span>
+                                        )}
+                                        <span className="font-mono text-gray-600">{v.plateNumber}:</span>
+                                        <span className="font-medium">AED {vehicleServiceCost.toLocaleString('en-AE')}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-sm font-bold pt-2 border-t border-gray-300 text-gray-900">
+                                Subtotal: AED {(() => {
+                                  const costs = quotation.vehicles?.map((v: any) => {
+                                    let vehicleServiceCost = 0;
+                                    // Prioritize serviceAmount field if it exists (updated value from form)
+                                    if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+                                      vehicleServiceCost = v.serviceAmount;
+                                    } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+                                      vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+                                    } else {
+                                      vehicleServiceCost = 0;
+                                    }
+                                    return vehicleServiceCost;
+                                  }) || [];
+                                  const total = costs.reduce((sum: number, cost: number) => sum + cost, 0);
+                                  return total.toLocaleString('en-AE');
+                                })()}
+                              </div>
+                            </>
                           ) : (
                             <span className="text-sm text-gray-500">-</span>
                           )}
                         </div>
-                        {quotation.vehicles && quotation.vehicles.length > 0 && (
-                          <div className="text-md text-gray-800 mt-1">
-                            <span className="font-medium">Subtotal: </span>
-                            {(() => {
-                              const costs = quotation.vehicles?.map((v: any) => {
-                                let vehicleServiceCost = 0;
-                                if (v.services && Array.isArray(v.services) && v.services.length > 0) {
-                                  vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
-                                } else {
-                                  vehicleServiceCost = v.serviceAmount || v.serviceCost || 0;
-                                }
-                                return vehicleServiceCost;
-                              }) || [];
-                              const total = costs.reduce((sum: number, cost: number) => sum + cost, 0);
-                              return <b className='font-bold'>AED {total.toLocaleString('en-AE')}</b>;
-                            })()}
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell className="text-right font-semibold">
                         <div className="flex flex-col gap-1 items-end">
@@ -768,29 +831,60 @@ export function QuotationList({
                       </TableCell>
                       <TableCell className="text-right font-semibold">
                         {(() => {
+                          // Calculate subtotal from vehicle costs
                           const costs = quotation.vehicles?.map((v: any) => {
                             let vehicleServiceCost = 0;
-                            if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+                            // Prioritize serviceAmount field if it exists (updated value from form)
+                            if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+                              vehicleServiceCost = v.serviceAmount;
+                            } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
                               vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
                             } else {
-                              vehicleServiceCost = v.serviceAmount || v.serviceCost || 0;
+                              vehicleServiceCost = 0;
                             }
                             return vehicleServiceCost;
                           }) || [];
                           const subtotal = costs.reduce((sum: number, cost: number) => sum + cost, 0);
-                          const grandTotal = subtotal + (quotation.referralTotal || 0);
+
+                          // Add referral total only if showReferralCommission is true
+                          const referralAmount = quotation.showReferralCommission ? (quotation.referralTotal || 0) : 0;
+                          const grandTotal = subtotal + referralAmount;
+
                           return `AED ${grandTotal.toLocaleString('en-AE')}`;
                         })()}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            STATUS_BADGE_CONFIG[quotation.status as keyof typeof STATUS_BADGE_CONFIG]
-                              ?.variant || 'outline'
-                          }
-                        >
-                          {quotation.status}
-                        </Badge>
+                        <div className="relative inline-block group">
+
+                          <Badge
+                            variant={
+                              STATUS_BADGE_CONFIG[quotation.status as keyof typeof STATUS_BADGE_CONFIG]
+                                ?.variant || 'outline'
+                            }
+                          >
+                            {quotation.status}
+                            {quotation.status !== 'accepted' && (
+                              <span className="animate-pulse">
+                                {' | '}Accept to Invoice
+                              </span>
+                            )}
+                          </Badge>
+
+                          <span
+                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+         whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white
+         opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50"
+                          >
+                            {quotation.status === 'accepted'
+                              ? 'Quotation accepted - Ready to create invoice'
+                              : quotation.status === 'sent'
+                                ? 'Quotation sent to customer - Awaiting response'
+                                : quotation.status === 'rejected'
+                                  ? 'Quotation rejected by customer'
+                                  : 'Draft quotation - Change status when ready to send'}
+                          </span>
+                        </div>
+
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -810,7 +904,7 @@ export function QuotationList({
                                 });
                                 setEditingQuotation(quotation);
                               }}
-                              disabled={quotation.status === 'accepted'}
+                              // disabled={quotation.status === 'accepted'}
                               title={quotation.status === 'accepted' ? 'Cannot edit accepted quotations' : ''}
                             >
                               <Edit size={16} />
@@ -850,7 +944,7 @@ export function QuotationList({
                               variant="ghost"
                               className="gap-1 text-blue-600"
                               onClick={() => handleSendEmail(quotation)}
-                              disabled={sendingEmailId === quotation.id}
+                              disabled={sendingEmailId === quotation.id || quotation.status === 'draft' || quotation.status === 'rejected'}
                             >
                               <Mail size={16} />
                             </Button>

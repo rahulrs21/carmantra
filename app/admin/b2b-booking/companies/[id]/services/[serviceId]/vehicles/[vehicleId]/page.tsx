@@ -3,11 +3,14 @@
 import { use, useState, useEffect } from 'react';
 import { useVehicleById, usePreInspections, useUpdateVehicle, useServiceById } from '@/hooks/useB2B';
 import { useUser } from '@/lib/userContext';
+import { activityService } from '@/lib/firestore/activity-service';
 import { PreInspectionList } from '@/components/admin/b2b/PreInspectionList';
+import { ActivityHistoryModal } from '@/components/ActivityHistoryModal';
+import { ActivityHistoryButton } from '@/components/ActivityHistoryButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, Trash2, Plus, Edit2 } from 'lucide-react';
+import { ChevronLeft, Trash2, Plus, Edit2, UserPlus } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +25,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import {
   Select,
@@ -34,7 +40,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { collection, query, where, onSnapshot, addDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, Timestamp, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 interface VehicleDetailPageProps {
@@ -54,8 +60,9 @@ const STATUS_BADGE_CONFIG = {
 
 export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
   const { id, serviceId, vehicleId } = use(params);
-  const { role } = useUser();
+  const { role, user } = useUser();
   const isEmployeeRole = role === 'employee';
+  const [showActivityHistory, setShowActivityHistory] = useState(false);
 
   const { data: vehicle, isLoading: vehicleLoading } = useVehicleById(
     id,
@@ -87,6 +94,18 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
   const [employees, setEmployees] = useState<any[]>([]);
   const [observerUsers, setObserverUsers] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState<string>('N/A');
+  const [isEmployeeDialogOpen, setIsEmployeeDialogOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [employeeSubmitting, setEmployeeSubmitting] = useState(false);
+  const [employeeFormData, setEmployeeFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    department: '',
+    position: '',
+    joiningDate: new Date().toISOString().split('T')[0],
+    salary: '',
+  });
   const [newTaskData, setNewTaskData] = useState({
     title: '',
     description: '',
@@ -185,6 +204,152 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
     fetchObserverUsers();
   }, []);
 
+  const handleOpenEmployeeDialog = (employee?: any) => {
+    if (employee) {
+      setEditingEmployee(employee);
+      const joiningDate = employee.joiningDate?.toDate?.() || new Date(employee.joiningDate);
+      setEmployeeFormData({
+        name: employee.name,
+        email: employee.email || '',
+        phone: employee.phone || '',
+        department: employee.department,
+        position: employee.position,
+        joiningDate: joiningDate.toISOString().split('T')[0],
+        salary: employee.salary.toString(),
+      });
+    } else {
+      setEditingEmployee(null);
+      setEmployeeFormData({
+        name: '',
+        email: '',
+        phone: '',
+        department: '',
+        position: '',
+        joiningDate: new Date().toISOString().split('T')[0],
+        salary: '',
+      });
+    }
+    setIsEmployeeDialogOpen(true);
+  };
+
+  const handleCloseEmployeeDialog = () => {
+    setIsEmployeeDialogOpen(false);
+    setEditingEmployee(null);
+  };
+
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!employeeFormData.name || !employeeFormData.department || !employeeFormData.position || !employeeFormData.salary) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in all required fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setEmployeeSubmitting(true);
+
+    try {
+      const employeeData = {
+        name: employeeFormData.name,
+        email: employeeFormData.email || null,
+        phone: employeeFormData.phone || null,
+        department: employeeFormData.department,
+        position: employeeFormData.position,
+        joiningDate: Timestamp.fromDate(new Date(employeeFormData.joiningDate)),
+        salary: parseFloat(employeeFormData.salary),
+        status: 'active' as const,
+        updatedAt: Timestamp.now(),
+      };
+
+      if (editingEmployee) {
+        await updateDoc(doc(db, 'employees', editingEmployee.id!), employeeData);
+        toast({
+          title: 'Success',
+          description: 'Employee updated successfully',
+        });
+
+        // Log activity
+        await activityService.logActivity({
+          companyId: id,
+          activityType: 'service_updated',
+          description: `Employee updated - ${employeeFormData.name} (${employeeFormData.position} in ${employeeFormData.department})`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role || 'unknown',
+          metadata: {
+            employeeId: editingEmployee.id,
+            employeeName: employeeFormData.name,
+            position: employeeFormData.position,
+            department: employeeFormData.department,
+            email: employeeFormData.email,
+            phone: employeeFormData.phone,
+          },
+        });
+      } else {
+        const newEmployeeDoc = await addDoc(collection(db, 'employees'), {
+          ...employeeData,
+          createdAt: Timestamp.now(),
+        });
+        
+        // Immediately add the new employee to the state so it appears in the list
+        const newEmployee = {
+          id: newEmployeeDoc.id,
+          ...employeeData,
+          createdAt: Timestamp.now(),
+        };
+        setEmployees([...employees, newEmployee]);
+        
+        toast({
+          title: 'Success',
+          description: 'Employee added successfully',
+        });
+
+        // Log activity
+        await activityService.logActivity({
+          companyId: id,
+          activityType: 'service_updated',
+          description: `New employee added - ${employeeFormData.name} (${employeeFormData.position} in ${employeeFormData.department})`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role || 'unknown',
+          metadata: {
+            employeeName: employeeFormData.name,
+            position: employeeFormData.position,
+            department: employeeFormData.department,
+            email: employeeFormData.email,
+            phone: employeeFormData.phone,
+            joiningDate: employeeFormData.joiningDate,
+            salary: employeeFormData.salary,
+          },
+        });
+        
+        // Reset form but keep dialog open
+        setEmployeeFormData({
+          name: '',
+          email: '',
+          phone: '',
+          department: '',
+          position: '',
+          joiningDate: new Date().toISOString().split('T')[0],
+          salary: '',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error saving employee:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save employee',
+        variant: 'destructive',
+      });
+    } finally {
+      setEmployeeSubmitting(false);
+    }
+  };
+
   const handleAddTask = async () => {
     if (!newTaskData.title || newTaskData.assignedTo.length === 0 || !newTaskData.observedByUserId) {
       toast({
@@ -226,6 +391,27 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         description: 'Task created successfully',
       });
 
+      // Log activity
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Task created - "${newTaskData.title}" assigned to ${newTaskData.assignedTo.length} employee(s)`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          vehicleId: vehicleId,
+          vehiclePlate: vehicle?.plateNumber,
+          taskTitle: newTaskData.title,
+          assignedToCount: newTaskData.assignedTo.length,
+          priority: newTaskData.priority,
+          category: newTaskData.category,
+          deadline: newTaskData.deadline,
+        },
+      });
+
       setShowAddTaskModal(false);
       setNewTaskData({
         title: '',
@@ -264,6 +450,24 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         vehicleId,
         data: { status: newStatus },
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Vehicle ${vehicle?.plateNumber} status changed to "${newStatus}"`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          vehicleId: vehicleId,
+          vehiclePlate: vehicle?.plateNumber,
+          newStatus: newStatus,
+        },
+      });
+
       toast({
         title: 'Success',
         description: `Vehicle status updated to ${newStatus}`,
@@ -340,6 +544,25 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         vehicleId,
         data: { services: updatedServices },
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Service added to vehicle ${vehicle?.plateNumber} - ${newService.description} (AED ${newService.amount})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          vehicleId: vehicleId,
+          vehiclePlate: vehicle?.plateNumber,
+          serviceDescription: newService.description,
+          serviceAmount: newService.amount,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Service added successfully',
@@ -356,8 +579,9 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
     }
   };
 
-  const handleDeleteService = async (serviceId: string) => {
-    const updatedServices = services.filter(s => s.id !== serviceId);
+  const handleDeleteService = async (itemServiceId: string) => {
+    const deletedService = services.find(s => s.id === itemServiceId);
+    const updatedServices = services.filter(s => s.id !== itemServiceId);
     setServices(updatedServices);
     setDeleteConfirmId(null);
 
@@ -369,6 +593,25 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         vehicleId,
         data: { services: updatedServices },
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Service deleted from vehicle ${vehicle?.plateNumber} - ${deletedService?.description} (AED ${deletedService?.amount})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          vehicleId: vehicleId,
+          vehiclePlate: vehicle?.plateNumber,
+          deletedServiceDescription: deletedService?.description,
+          deletedServiceAmount: deletedService?.amount,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Service removed',
@@ -415,6 +658,25 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         vehicleId,
         data: { services: updatedServices },
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId: id,
+        activityType: 'service_updated',
+        description: `Service updated for vehicle ${vehicle?.plateNumber} - ${editingService.description} (AED ${editingService.amount})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role || 'unknown',
+        metadata: {
+          serviceId: serviceId,
+          vehicleId: vehicleId,
+          vehiclePlate: vehicle?.plateNumber,
+          serviceDescription: editingService.description,
+          serviceAmount: editingService.amount,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Service updated successfully',
@@ -615,7 +877,7 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
 
       {/* Status and Other Info */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-6">
-        
+
 
         <Card>
           <CardHeader className="pb-2">
@@ -650,14 +912,14 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
               <CardTitle className="text-sm">Status</CardTitle>
 
               {status !== 'completed' && (
-                
+
                 <div className="group relative cursor-help">
                   <div className="w-4 h-4 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-bold">!</div>
                   <div className="absolute -top-3 -left-2 md:left-1/3 transform translate-x-1/2  px-3 py-2 bg-yellow-600 text-white text-xs rounded-lg whitespace-nowrap  transition-opacity pointer-events-none z-50 animate-pulse">
                     Select 'Completed' when done
                   </div>
                 </div>
-              )} 
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -667,7 +929,7 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in-progress">In Progress</SelectItem>
+                {/* <SelectItem value="in-progress">In Progress</SelectItem> */}
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
@@ -762,8 +1024,8 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
                   onDragOver={!isEmployeeRole ? handleDragOver : undefined}
                   onDrop={(e) => !isEmployeeRole && handleDrop(e, service.id)}
                   className={`flex items-start justify-between p-3 border rounded-lg transition-all ${isEmployeeRole ? 'cursor-not-allowed ' : 'cursor-move'} ${draggedServiceId === service.id
-                      ? 'opacity-90 bg-blue-100'
-                      : 'hover:bg-gray-50'
+                    ? 'opacity-90 bg-blue-100'
+                    : 'hover:bg-gray-50'
                     }`}
                 >
                   <div className="flex-1">
@@ -854,9 +1116,9 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
                     <p className="text-xs text-gray-600 mt-1">{task.jobCardNo}</p>
                   </div>
                   <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                      task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-green-100 text-green-800'
+                    task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                      task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
                     }`}>
                     {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
                   </span>
@@ -874,9 +1136,9 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
                   <div>
                     <span className="text-gray-600">Status:</span>
                     <p className={`font-medium ${task.status === 'notStarted' ? 'text-red-800 bg-red-200 mx-2 px-2 py-1 rounded inline-block' :
-                        task.status === 'completed' ? 'text-yellow-800 bg-yellow-200 mx-2 px-2 py-1 rounded inline-block' :
-                          task.status === 'inProgress' ? 'text-blue-800 bg-blue-200 mx-2 px-2 py-1 rounded inline-block' :
-                            'text-green-800 bg-green-300 mx-2 px-2 py-1 rounded inline-block'
+                      task.status === 'completed' ? 'text-yellow-800 bg-yellow-200 mx-2 px-2 py-1 rounded inline-block' :
+                        task.status === 'inProgress' ? 'text-blue-800 bg-blue-200 mx-2 px-2 py-1 rounded inline-block' :
+                          'text-green-800 bg-green-300 mx-2 px-2 py-1 rounded inline-block'
                       }`}>
                       {task.status === 'notStarted' ? 'Not Started' :
                         task.status === 'inProgress' ? 'In Progress' :
@@ -957,7 +1219,13 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
 
               {/* Employees */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                <div className='flex justify-between items-center'>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                  <Button onClick={() => handleOpenEmployeeDialog()} className="bg-indigo-600 hover:bg-indigo-700 mb-3">
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Add Employee
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
                   {employees.length === 0 ? (
                     <p className="text-sm text-gray-500 col-span-2">No employees found</p>
@@ -1143,6 +1411,118 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Add Employee Dialog */}
+      <Dialog open={isEmployeeDialogOpen} onOpenChange={setIsEmployeeDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingEmployee ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
+            <DialogDescription>
+              {editingEmployee ? 'Update employee information' : 'Add a new employee to the system'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEmployeeSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Employee name"
+                  value={employeeFormData.name}
+                  onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="email@example.com"
+                    value={employeeFormData.email}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="+971 50 454 1234"
+                    value={employeeFormData.phone}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="department">Department *</Label>
+                <Select value={employeeFormData.department} onValueChange={(value) => setEmployeeFormData({ ...employeeFormData, department: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Sales">Sales</SelectItem>
+                    <SelectItem value="Service">Service</SelectItem>
+                    <SelectItem value="Support">Support</SelectItem>
+                    <SelectItem value="Finance">Finance</SelectItem>
+                    <SelectItem value="HR">HR</SelectItem>
+                    <SelectItem value="Management">Management</SelectItem>
+                    <SelectItem value="Administration">Administration</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="position">Position *</Label>
+                <Input
+                  id="position"
+                  type="text"
+                  placeholder="e.g., Sales Executive, Service Manager"
+                  value={employeeFormData.position}
+                  onChange={(e) => setEmployeeFormData({ ...employeeFormData, position: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="joiningDate">Joining Date *</Label>
+                  <Input
+                    id="joiningDate"
+                    type="date"
+                    value={employeeFormData.joiningDate}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, joiningDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="salary">Salary (Monthly) *</Label>
+                  <Input
+                    id="salary"
+                    type="number"
+                    placeholder="50000"
+                    value={employeeFormData.salary}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, salary: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCloseEmployeeDialog}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={employeeSubmitting}>
+                {employeeSubmitting ? 'Saving...' : editingEmployee ? 'Update' : 'Add Employee'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
@@ -1228,6 +1608,16 @@ export default function VehicleDetailPage({ params }: VehicleDetailPageProps) {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Activity History Button */}
+      <ActivityHistoryButton onClick={() => setShowActivityHistory(true)} />
+
+      {/* Activity History Modal */}
+      <ActivityHistoryModal
+        companyId={id}
+        isOpen={showActivityHistory}
+        onClose={() => setShowActivityHistory(false)}
+      />
     </div>
   );
 }

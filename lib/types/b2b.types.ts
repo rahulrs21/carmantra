@@ -117,6 +117,7 @@ export interface B2BPreInspection {
 export interface B2BReferral {
   id: string;
   serviceId: string;
+  jobCardNo?: string; // Service Job Card number for tracking
   personName: string;
   contact: string;
   commission: number;
@@ -301,6 +302,7 @@ export interface ReferralFormData {
   contact: string;
   commission: number;
   referralDate: Date;
+  jobCardNo?: string; // Service Job Card number for tracking
   status?: string;
   notes?: string;
 }

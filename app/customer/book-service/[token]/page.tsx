@@ -15,6 +15,7 @@ interface LeadData {
   email: string;
   phone: string;
   service?: string;
+  mode?: string;
 }
 
 export default function CustomerBookingFormPage() {
@@ -248,6 +249,17 @@ export default function CustomerBookingFormPage() {
             <div className="flex justify-between">
               <span className="text-gray-600">Service you chosen:</span>
               <span className="font-medium">{leadData.service || '—'}</span>
+            </div>
+            <div className='flex justify-between'>
+              <span className="text-gray-600">Service Mode:</span>
+              <span className="font-medium">
+                {leadData.mode ? (
+                  leadData.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
+                  leadData.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                  leadData.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                  leadData.mode
+                ) : '—'}
+              </span>
             </div>
           </div>
         </Card>

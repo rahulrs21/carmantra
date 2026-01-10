@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useServices, useCompanyById } from '@/hooks/useB2B';
 import { useUser } from '@/lib/userContext';
@@ -9,6 +9,8 @@ import { ServiceList } from '@/components/admin/b2b/ServiceList';
 import { QuotationList } from '@/components/admin/b2b/QuotationList';
 import { InvoiceList } from '@/components/admin/b2b/InvoiceList';
 import { CompanyForm } from '@/components/admin/b2b/CompanyForm';
+import { ActivityHistoryModal } from '@/components/ActivityHistoryModal';
+import { ActivityHistoryButton } from '@/components/ActivityHistoryButton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Edit } from 'lucide-react';
@@ -43,57 +45,59 @@ export default function CompanyDetailPage({ params }: CompanyDetailPageProps) {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [quotationsLoading, setQuotationsLoading] = useState(false);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [showActivityHistory, setShowActivityHistory] = useState(false);
 
   // Create a stable string of service IDs to use as dependency
   const serviceIdsString = services?.map((s) => s.id).join(',') || '';
 
-  // Fetch quotations and invoices from all services
-  useEffect(() => {
+  // Fetch quotations and invoices from all services (defined outside useEffect so it can be called from handlers)
+  const fetchAllQuotationsAndInvoices = useCallback(async () => {
     if (!services || services.length === 0) {
       setQuotations([]);
       setInvoices([]);
       return;
     }
 
-    const fetchAllQuotationsAndInvoices = async () => {
-      try {
-        setQuotationsLoading(true);
-        setInvoicesLoading(true);
+    try {
+      setQuotationsLoading(true);
+      setInvoicesLoading(true);
 
-        const allQuotations: any[] = [];
-        const allInvoices: any[] = [];
+      const allQuotations: any[] = [];
+      const allInvoices: any[] = [];
 
-        // Fetch from firestore for each service
-        for (const service of services) {
-          try {
-            const quots = await quotationsService.fetchQuotations(id, service.id);
-            if (quots && quots.length > 0) {
-              // Add serviceId to each quotation for later reference
-              allQuotations.push(...quots.map((q) => ({ ...q, serviceId: service.id })));
-            }
-
-            const invs = await invoicesService.fetchInvoices(id, service.id);
-            if (invs && invs.length > 0) {
-              // Add serviceId to each invoice for later reference
-              allInvoices.push(...invs.map((i) => ({ ...i, serviceId: service.id })));
-            }
-          } catch (error) {
-            console.error(`Error fetching data for service ${service.id}:`, error);
+      // Fetch from firestore for each service
+      for (const service of services) {
+        try {
+          const quots = await quotationsService.fetchQuotations(id, service.id);
+          if (quots && quots.length > 0) {
+            // Add serviceId to each quotation for later reference
+            allQuotations.push(...quots.map((q) => ({ ...q, serviceId: service.id })));
           }
+
+          const invs = await invoicesService.fetchInvoices(id, service.id);
+          if (invs && invs.length > 0) {
+            // Add serviceId to each invoice for later reference
+            allInvoices.push(...invs.map((i) => ({ ...i, serviceId: service.id })));
+          }
+        } catch (error) {
+          console.error(`Error fetching data for service ${service.id}:`, error);
         }
-
-        setQuotations(allQuotations);
-        setInvoices(allInvoices);
-      } catch (error) {
-        console.error('Error fetching quotations and invoices:', error);
-      } finally {
-        setQuotationsLoading(false);
-        setInvoicesLoading(false);
       }
-    };
 
+      setQuotations(allQuotations);
+      setInvoices(allInvoices);
+    } catch (error) {
+      console.error('Error fetching quotations and invoices:', error);
+    } finally {
+      setQuotationsLoading(false);
+      setInvoicesLoading(false);
+    }
+  }, [services, id]);
+
+  // Fetch quotations and invoices when services change
+  useEffect(() => {
     fetchAllQuotationsAndInvoices();
-  }, [id, serviceIdsString]);
+  }, [serviceIdsString]);
 
   if (companyLoading) {
     return <div className="p-8 text-center">Loading company details...</div>;
@@ -213,7 +217,7 @@ export default function CompanyDetailPage({ params }: CompanyDetailPageProps) {
           services={services}
           company={company}
           isLoading={servicesLoading}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => fetchAllQuotationsAndInvoices()}
           onGenerateQuotation={handleGenerateQuotation}
           onGenerateInvoice={handleGenerateInvoice}
         />
@@ -226,7 +230,7 @@ export default function CompanyDetailPage({ params }: CompanyDetailPageProps) {
           serviceId=""
           quotations={quotations}
           isLoading={quotationsLoading}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => fetchAllQuotationsAndInvoices()}
         />
       </div>
 
@@ -237,9 +241,19 @@ export default function CompanyDetailPage({ params }: CompanyDetailPageProps) {
           serviceId=""
           invoices={invoices}
           isLoading={invoicesLoading}
-          onRefresh={() => window.location.reload()}
+          onRefresh={() => fetchAllQuotationsAndInvoices()}
         />
       </div>
+
+      {/* Activity History Button */}
+      <ActivityHistoryButton onClick={() => setShowActivityHistory(true)} />
+
+      {/* Activity History Modal */}
+      <ActivityHistoryModal
+        companyId={id}
+        isOpen={showActivityHistory}
+        onClose={() => setShowActivityHistory(false)}
+      />
     </div>
   );
 }

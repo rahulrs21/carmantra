@@ -34,6 +34,7 @@ import { VehicleFormData } from '@/lib/types/b2b.types';
 import { Plus, Edit } from 'lucide-react';
 import { UserContext } from '@/lib/userContext';
 import { useToast } from '@/hooks/use-toast';
+import { activityService } from '@/lib/firestore/activity-service';
 
 const vehicleSchema = z.object({
   plateNumber: z.string().min(1, 'Plate number is required'),
@@ -62,6 +63,7 @@ interface VehicleFormProps {
 export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger, disabled = false }: VehicleFormProps) {
   const userContext = useContext(UserContext);
   const user = userContext?.user;
+  const role = userContext?.role || 'unknown';
   const addVehicle = useAddVehicle();
   const updateVehicle = useUpdateVehicle();
   const { toast } = useToast();
@@ -124,6 +126,30 @@ export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger,
           vehicleId: vehicle.id,
           data: { ...formData, status: data.status },
         });
+
+        // Log activity for vehicle update
+        await activityService.logActivity({
+          companyId,
+          activityType: 'service_updated',
+          description: `Vehicle updated - ${data.brand} ${data.model} (${data.plateNumber})`,
+          userId: user.uid,
+          userName: user.displayName || 'Unknown User',
+          userEmail: user.email || 'unknown@email.com',
+          userRole: role,
+          metadata: {
+            serviceId: serviceId,
+            vehicleId: vehicle.id,
+            vehiclePlate: data.plateNumber,
+            brand: data.brand,
+            model: data.model,
+            year: data.year,
+            color: data.color,
+            vin: data.vin,
+            vehicleType: data.vehicleType,
+            fuelType: data.fuelType,
+          },
+        });
+
         toast({ title: 'Vehicle updated successfully' });
       } else {
         await addVehicle.mutateAsync({
@@ -132,6 +158,29 @@ export function VehicleForm({ companyId, serviceId, vehicle, onSuccess, trigger,
           data: formData,
           userId: user.uid,
         });
+
+        // Log activity for vehicle creation
+        await activityService.logActivity({
+          companyId,
+          activityType: 'service_updated',
+          description: `Vehicle added - ${data.brand} ${data.model} (${data.plateNumber})`,
+          userId: user.uid,
+          userName: user.displayName || 'Unknown User',
+          userEmail: user.email || 'unknown@email.com',
+          userRole: role,
+          metadata: {
+            serviceId: serviceId,
+            vehiclePlate: data.plateNumber,
+            brand: data.brand,
+            model: data.model,
+            year: data.year,
+            color: data.color,
+            vin: data.vin,
+            vehicleType: data.vehicleType,
+            fuelType: data.fuelType,
+          },
+        });
+
         toast({ title: 'Vehicle added successfully' });
       }
 

@@ -813,7 +813,8 @@ export const quotationsService = {
     company: B2BCompany,
     services: any[],
     userId: string,
-    serviceTotals?: Record<string, number>
+    serviceTotals?: Record<string, number>,
+    referralTotals?: Record<string, number>
   ) {
     try {
       const now = Timestamp.now();
@@ -824,9 +825,8 @@ export const quotationsService = {
       const timestamp = Date.now().toString().slice(-6);
       const quotationNumber = `QT-${companyId.slice(0, 5).toUpperCase()}-${timestamp}`;
 
-      // Collect vehicles and referrals from all selected services
+      // Collect vehicles from all selected services
       const allVehicles: any[] = [];
-      const allReferrals: any[] = [];
 
       for (const serviceId of serviceIds) {
         const service = services.find((s) => s.id === serviceId);
@@ -843,6 +843,8 @@ export const quotationsService = {
         );
         vehiclesSnap.docs.forEach((doc) => {
           const vehicle = doc.data() as B2BVehicle;
+          // Calculate vehicle service amount from services array
+          const vehicleServiceAmount = vehicle.services?.reduce((sum: number, svc: any) => sum + (svc.amount || 0), 0) || vehicle.serviceCost || 0;
           allVehicles.push({
             serviceId,
             serviceTitle: service.title, // Include service title for each vehicle
@@ -850,24 +852,10 @@ export const quotationsService = {
             brand: vehicle.brand,
             model: vehicle.model,
             year: vehicle.year,
-            serviceAmount: vehicle.serviceCost,
+            serviceAmount: vehicleServiceAmount,
             services: vehicle.services, // Include services array for cost calculation in UI
             jobCardNo: service.jobCardNo, // Assign jobCardNo from the service to each vehicle
             serviceDate: serviceDate, // Include service date for matching
-          });
-        });
-
-        // Fetch referrals for this service
-        const referralsSnap = await getDocs(
-          collection(db, 'companies', companyId, 'services', serviceId, 'referrals')
-        );
-        referralsSnap.docs.forEach((doc) => {
-          const referral = doc.data() as B2BReferral;
-          allReferrals.push({
-            serviceId,
-            personName: referral.personName,
-            contact: referral.contact,
-            commission: referral.commission,
           });
         });
       }
@@ -885,8 +873,15 @@ export const quotationsService = {
         }, 0);
       }
       
-      const referralTotal = allReferrals.reduce((sum, r) => sum + r.commission, 0);
-      const totalAmount = subtotal + referralTotal;
+      // Calculate referral total from passed referralTotals
+      let referralTotal = 0;
+      if (referralTotals && Object.keys(referralTotals).length > 0) {
+        referralTotal = Object.values(referralTotals).reduce((sum, total) => sum + total, 0);
+      }
+      
+      // Initially, don't include referral in totalAmount - only show subtotal
+      // Referral will be added when user explicitly enables showReferralCommission
+      const totalAmount = subtotal;
 
       const quotation = {
         quotationNumber,
@@ -900,12 +895,13 @@ export const quotationsService = {
         serviceIds,
         jobCardNo: services.find((s) => serviceIds.includes(s.id))?.jobCardNo || null,
         vehicles: allVehicles,
-        referrals: allReferrals,
+        referrals: [],
         subtotal,
         referralTotal,
         totalAmount,
         status: 'draft' as const,
         notes: '',
+        showReferralCommission: false,
         generatedAt: now,
         generatedBy: userId,
       };

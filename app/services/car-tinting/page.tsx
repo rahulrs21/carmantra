@@ -2,53 +2,21 @@
 
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { AnimatedSection } from '@/components/AnimatedSection';
 import { ContactForm } from '@/components/ContactForm';
-import { Palette, Sun, Shield, Eye, CheckCircle, Star, Clock, ArrowRight, Thermometer } from 'lucide-react';
+import { Palette, Sun, Shield, Eye, CheckCircle, Star, Clock, ArrowRight, Thermometer, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import ModalForm from '@/components/ModalForm';
+import { useServiceData } from '@/lib/hooks/useServiceData';
 
 export default function CarTintingPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedService, setSelectedService] = useState('');
-  
-    const openModal = (service: string) => {
-      setSelectedService(service + " - Car Tinting");
-      setIsModalOpen(true);
-    };
-  
-    const closeModal = () => setIsModalOpen(false);
-  const tintOptions = [
-    {
-      name: 'Ceramic Tint',
-      vlt: '15%, 35%, 50%, 70%',
-      features: ['Superior heat rejection', 'No signal interference', 'Color stable', 'Lifetime warranty'],
-      price: 'From AED 299',
-      popular: true
-    },
-    {
-      name: 'Carbon Tint',
-      vlt: '20%, 35%, 50%',
-      features: ['Good heat rejection', 'Matte finish', 'Fade resistant', '5-year warranty'],
-      price: 'From AED 199',
-      popular: false
-    },
-    {
-      name: 'Crystalline Tint',
-      vlt: '40%, 70%, 90%',
-      features: ['Maximum clarity', 'Excellent heat rejection', 'Nearly invisible', 'Premium option'],
-      price: 'From AED 499',
-      popular: false
-    },
-    {
-      name: 'Dyed Tint',
-      vlt: '15%, 35%, 50%',
-      features: ['Budget friendly', 'Basic UV protection', 'Good privacy', '3-year warranty'],
-      price: 'From AED 99',
-      popular: false
-    }
-  ];
+  const [selectedService, setSelectedService] = useState('');
+  const { category, products, loading, error } = useServiceData('car-tinting');
+
+  const closeModal = () => setIsModalOpen(false);
 
   const benefits = [
     { icon: Sun, title: 'UV Protection', description: 'Blocks up to 99% of harmful UV rays' },
@@ -114,43 +82,53 @@ export default function CarTintingPage() {
             <p className="text-lg text-gray-600">Professional-grade window films for every need and budget</p>
           </AnimatedSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {tintOptions.map((option, index) => (
-              <AnimatedSection key={option.name} delay={index * 100}>
-                <div className={`bg-white rounded-lg shadow-lg p-6 border-2 hover:shadow-xl transition-shadow duration-300 ${option.popular ? 'border-purple-500 scale-105' : 'border-gray-200'}`}>
-                  {option.popular && (
-                    <div className="bg-purple-500 text-white text-xs font-bold uppercase px-3 py-1 rounded-full mb-4 inline-block">
-                      Most Popular
+          {loading && (
+            <div className="flex justify-center items-center py-12">
+              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            </div>
+          )}
+
+          {error && (
+            <Card className="p-6 mb-8 bg-red-50 border-red-200">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                <p className="text-red-800">{error}</p>
+              </div>
+            </Card>
+          )}
+
+          {!loading && products.length === 0 && !error && (
+            <Card className="p-6 text-center bg-yellow-50 border-yellow-200">
+              <p className="text-yellow-800">No services available at the moment</p>
+            </Card>
+          )}
+
+          {!loading && products.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {products.map((product, index) => (
+                <AnimatedSection key={product.id} delay={index * 100}>
+                  <div className="bg-white rounded-lg shadow-lg p-6 border-2 hover:shadow-xl transition-shadow duration-300 border-gray-200">
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">{product.name}</h3>
+                    <p className="text-gray-600 mb-4">{product.description}</p>
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-2xl font-bold text-purple-600">From AED {product.price?.toLocaleString()}</span>
+                      <div className="flex items-center text-gray-500 text-sm">
+                        <Clock className="h-4 w-4 mr-1" />
+                        {product.duration}
+                      </div>
                     </div>
-                  )}
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">{option.name}</h3>
-                  <div className="flex items-center text-sm text-gray-600 mb-4">
-                    <span className="font-semibold">VLT Options: </span>
-                    <span className="ml-1">{option.vlt}</span>
+                    <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => {
+                      setSelectedService(product.name + " - Car Tinting");
+                      setIsModalOpen(true);
+                    }}>
+                      Select This Option
+                      <ArrowRight size={16} className="ml-2" />
+                    </Button>
                   </div>
-                  <ul className="space-y-2 text-gray-800 mb-6">
-                    {option.features.map((feature, i) => (
-                      <li key={i} className="flex items-center text-sm">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-2xl font-bold text-purple-600">{option.price}</span>
-                    <div className="flex items-center text-gray-500 text-sm">
-                      <Clock className="h-4 w-4 mr-1" />
-                      2-3 hours
-                    </div>
-                  </div>
-                  <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => openModal(option.name)}>
-                    Select This Option
-                    <ArrowRight size={16} className="ml-2" />
-                  </Button>
-                </div>
-              </AnimatedSection>
-            ))}
-          </div>
+                </AnimatedSection>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

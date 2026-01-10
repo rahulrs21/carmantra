@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { activityService } from '@/lib/firestore/activity-service';
+import { UserContext } from '@/lib/userContext';
 import {
   Dialog,
   DialogContent,
@@ -61,17 +63,31 @@ export function InvoiceForm({
   onClose,
   onSuccess,
 }: InvoiceFormProps) {
+  const userContext = useContext(UserContext);
+  const user = userContext?.user;
+  const role = userContext?.role || 'unknown';
   const updateInvoice = useUpdateInvoice();
   const { toast } = useToast();
   const [displayData, setDisplayData] = useState(invoice);
   const [quotationPaymentMethod, setQuotationPaymentMethod] = useState('');
+  const [editedCosts, setEditedCosts] = useState<Record<number, number>>({})
+  const [jobCardNo, setJobCardNo] = useState('')
   
   // Use serviceId from invoice if not provided as prop
   const actualServiceId = serviceId || invoice?.serviceId;
 
   useEffect(() => {
     setDisplayData(invoice);
+    // Reset edited costs when invoice changes to avoid stale data
+    setEditedCosts({});
   }, [invoice]);
+
+  // Reset edited costs when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setEditedCosts({});
+    }
+  }, [isOpen]);
 
   // Fetch quotation data to get payment method
   useEffect(() => {
@@ -104,6 +120,36 @@ export function InvoiceForm({
     }
   }, [invoice?.quotationId, companyId, actualServiceId, isOpen]);
 
+  // Fetch service data to get Job Card Number
+  useEffect(() => {
+    const fetchJobCardNo = async () => {
+      if (!companyId || !actualServiceId) return;
+      
+      try {
+        const serviceRef = doc(
+          db,
+          'companies',
+          companyId,
+          'services',
+          actualServiceId
+        );
+        const serviceDoc = await getDoc(serviceRef);
+        
+        if (serviceDoc.exists()) {
+          const serviceData = serviceDoc.data();
+          setJobCardNo(serviceData?.jobCardNo || 'N/A');
+        }
+      } catch (error) {
+        console.warn('Could not fetch job card number:', error);
+        setJobCardNo('N/A');
+      }
+    };
+
+    if (isOpen) {
+      fetchJobCardNo();
+    }
+  }, [companyId, actualServiceId, isOpen]);
+
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
@@ -118,8 +164,29 @@ export function InvoiceForm({
 
   // Watch the showReferralCommission field to update total dynamically
   const showReferralCommission = form.watch('showReferralCommission');
+  const status = form.watch('status');
   const amountStatus = form.watch('amountStatus');
   
+  // Calculate subtotal from vehicles dynamically
+  const calculatedSubtotal = displayData?.vehicles?.reduce((total: number, vehicle: any, idx: number) => {
+    let vehicleServiceCost = 0;
+    // Prioritize serviceAmount field (updated from form)
+    if (vehicle.serviceAmount !== undefined && vehicle.serviceAmount !== null) {
+      vehicleServiceCost = vehicle.serviceAmount;
+    } else if (vehicle.services && Array.isArray(vehicle.services) && vehicle.services.length > 0) {
+      vehicleServiceCost = vehicle.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+    } else {
+      vehicleServiceCost = 0;
+    }
+    // Use edited cost if available, otherwise use database value
+    const displayCost = editedCosts[idx] !== undefined ? editedCosts[idx] : vehicleServiceCost;
+    return total + displayCost;
+  }, 0) || 0;
+
+  const calculatedTotal = showReferralCommission 
+    ? calculatedSubtotal + (displayData?.referralTotal || 0)
+    : calculatedSubtotal;
+
   // Auto-set Job Status to Paid when Amount Status is set to Paid
   useEffect(() => {
     if (amountStatus === 'paid') {
@@ -131,31 +198,91 @@ export function InvoiceForm({
     }
   }, [amountStatus, form]);
 
-  const calculatedTotal = showReferralCommission 
-    ? (displayData?.subtotal || 0) + (displayData?.referralTotal || 0)
-    : (displayData?.subtotal || 0);
-
   async function onSubmit(data: InvoiceFormData) {
     try {
+      // Calculate updated totals with edited costs
+      const updatedVehicles = displayData?.vehicles?.map((vehicle: any, idx: number) => ({
+        ...vehicle,
+        serviceAmount: editedCosts[idx] !== undefined ? editedCosts[idx] : vehicle.serviceAmount,
+      })) || [];
+
+      const newSubtotal = updatedVehicles.reduce((sum: number, v: any) => sum + (v.serviceAmount || 0), 0);
+      const newTotal = showReferralCommission ? newSubtotal + (displayData?.referralTotal || 0) : newSubtotal;
+
+      console.log('Submitting invoice update:', {
+        newSubtotal,
+        newTotal,
+        vehicleCount: updatedVehicles.length,
+        editedCosts,
+      });
+
+      // Pass form data and also pass vehicles/subtotal/totalAmount
       await updateInvoice.mutateAsync({
         companyId,
         serviceId: actualServiceId,
         invoiceId: invoice.id,
-        data,
+        data: {
+          status: data.status,
+          amountStatus: data.amountStatus,
+          cancellationReason: data.cancellationReason,
+          paymentMethod: data.paymentMethod,
+          showReferralCommission: data.showReferralCommission,
+          notes: data.notes,
+          vehicles: updatedVehicles,
+          subtotal: newSubtotal,
+          totalAmount: newTotal,
+        },
       });
+
+      // Log activity with updated total
+      await activityService.logActivity({
+        companyId,
+        activityType: 'invoice_updated',
+        description: `Invoice updated - ${invoice.invoiceNumber} (Total: AED ${newTotal})`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role,
+        metadata: {
+          serviceId: actualServiceId,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          status: data.status,
+          amountStatus: data.amountStatus,
+          paymentMethod: data.paymentMethod,
+          oldTotal: invoice.totalAmount,
+          newTotal: newTotal,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Invoice updated successfully',
       });
+      
+      // Clear edited costs after successful save
+      setEditedCosts({});
+      
+      // Call onClose and onSuccess immediately (data should be updated)
       onClose();
       onSuccess();
     } catch (error) {
       console.error('Error updating invoice:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update invoice',
-        variant: 'destructive',
-      });
+      
+      // Handle auth errors separately
+      if (error instanceof Error && error.message.includes('auth')) {
+        toast({
+          title: 'Session Error',
+          description: 'Your session may have expired. Please try again.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: error instanceof Error ? error.message : 'Failed to update invoice',
+          variant: 'destructive',
+        });
+      }
     }
   }
 
@@ -199,6 +326,7 @@ export function InvoiceForm({
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-2 py-1 text-left">Job Card No.</th>
                     <th className="px-2 py-1 text-left">Plate No.</th>
                     <th className="px-2 py-1 text-left">Brand</th>
                     <th className="px-2 py-1 text-left">Model</th>
@@ -206,31 +334,60 @@ export function InvoiceForm({
                   </tr>
                 </thead>
                 <tbody>
-                  {displayData?.vehicles?.map((vehicle: any, idx: number) => (
-                    <tr key={idx} className="border-t">
-                      <td className="px-2 py-1">{vehicle.plateNumber}</td>
-                      <td className="px-2 py-1">{vehicle.brand}</td>
-                      <td className="px-2 py-1">{vehicle.model}</td>
-                      <td className="px-2 py-1 text-right">
-                        {(vehicle.serviceCost || 0).toLocaleString('en-AE')}
-                      </td>
-                    </tr>
-                  ))}
+                  {displayData?.vehicles?.map((vehicle: any, idx: number) => {
+                    // Calculate vehicle service cost - prioritize serviceAmount field (updated from form)
+                    let vehicleServiceCost = 0;
+                    if (vehicle.serviceAmount !== undefined && vehicle.serviceAmount !== null) {
+                      vehicleServiceCost = vehicle.serviceAmount;
+                    } else if (vehicle.services && Array.isArray(vehicle.services) && vehicle.services.length > 0) {
+                      vehicleServiceCost = vehicle.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+                    } else {
+                      vehicleServiceCost = 0;
+                    }
+                    // Use edited cost if available, otherwise use database value
+                    const displayCost = editedCosts[idx] !== undefined ? editedCosts[idx] : vehicleServiceCost;
+                    return (
+                      <tr key={idx} className="border-t">
+                        <td className="px-2 py-1 font-mono font-semibold text-blue-600">{jobCardNo || 'N/A'}</td>
+                        <td className="px-2 py-1">{vehicle.plateNumber}</td>
+                        <td className="px-2 py-1">{vehicle.brand}</td>
+                        <td className="px-2 py-1">{vehicle.model}</td>
+                        <td className="px-2 py-1 text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={displayCost}
+                            onChange={(e) => setEditedCosts({ ...editedCosts, [idx]: parseFloat(e.target.value) || 0 })}
+                            className="w-full text-right"
+                            disabled={status === 'paid' && amountStatus === 'paid'}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          <div className="border-t pt-4">
+          <div className="border-t pt-4  ">
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div>
                 <span className="font-medium">Subtotal:</span> AED{' '}
-                {displayData?.subtotal?.toLocaleString('en-AE')}
+                {calculatedSubtotal.toLocaleString('en-AE')}
               </div>
-              <div>
-                <span className="font-medium">Referral Total:</span> AED{' '}
-                {displayData?.referralTotal?.toLocaleString('en-AE')}
-              </div>
+              {showReferralCommission ? (
+                <div className="text-center">
+                  <span className="font-medium">Referral Total:</span> AED{' '}
+                  {displayData?.referralTotal?.toLocaleString('en-AE')}
+                </div>
+              ) : (
+                <div className="text-center line-through">
+                  <span className="font-medium">Referral Total:</span> AED{' '}
+                  {displayData?.referralTotal?.toLocaleString('en-AE')}
+                </div>
+              )}
               <div className="font-semibold text-lg text-right">
                 Total: AED {calculatedTotal.toLocaleString('en-AE')}
               </div>

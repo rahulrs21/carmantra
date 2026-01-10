@@ -20,6 +20,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useDeleteInvoice } from '@/hooks/useB2B';
 import { Download, Edit, Trash2, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { activityService } from '@/lib/firestore/activity-service';
+import { useContext } from 'react';
+import { UserContext } from '@/lib/userContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -105,6 +108,9 @@ export function InvoiceList({
 }: InvoiceListProps) {
   const deleteInvoice = useDeleteInvoice();
   const { toast } = useToast();
+  const userContext = useContext(UserContext);
+  const user = userContext?.user;
+  const role = userContext?.role || 'unknown';
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [editingInvoice, setEditingInvoice] = useState<any>(null);
@@ -129,10 +135,12 @@ export function InvoiceList({
     const storedId = sessionStorage.getItem('newInvoiceId');
     if (storedId) {
       setNewInvoiceIds(new Set([storedId]));
+      // Refresh invoice list to show the newly created invoice
+      onRefresh();
       // Clear after reading
       sessionStorage.removeItem('newInvoiceId');
     }
-  }, []);
+  }, [onRefresh]);
 
   // Handle newly created invoice from prop
   useEffect(() => {
@@ -179,6 +187,25 @@ export function InvoiceList({
         serviceId: actualServiceId,
         invoiceId: selectedInvoice.id,
       });
+
+      // Log activity
+      await activityService.logActivity({
+        companyId,
+        activityType: 'invoice_deleted',
+        description: `Invoice deleted - ${selectedInvoice.invoiceNumber}`,
+        userId: user?.uid || 'unknown',
+        userName: user?.displayName || 'Unknown User',
+        userEmail: user?.email || 'unknown@email.com',
+        userRole: role,
+        metadata: {
+          serviceId: actualServiceId,
+          invoiceId: selectedInvoice.id,
+          invoiceNumber: selectedInvoice.invoiceNumber,
+          status: selectedInvoice.status,
+          totalAmount: selectedInvoice.totalAmount,
+        },
+      });
+
       toast({
         title: 'Success',
         description: 'Invoice deleted successfully',
@@ -227,6 +254,24 @@ export function InvoiceList({
           companyId,
           serviceId: actualServiceId,
           invoiceId: invoice.id,
+        });
+
+        // Log activity for each deleted invoice
+        await activityService.logActivity({
+          companyId,
+          activityType: 'invoice_deleted',
+          description: `Invoice deleted (bulk) - ${invoice.invoiceNumber}`,
+          userId: user?.uid || 'unknown',
+          userName: user?.displayName || 'Unknown User',
+          userEmail: user?.email || 'unknown@email.com',
+          userRole: role,
+          metadata: {
+            serviceId: actualServiceId,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            status: invoice.status,
+            totalAmount: invoice.totalAmount,
+          },
         });
       }
       toast({
@@ -290,10 +335,13 @@ export function InvoiceList({
         serviceTitle: invoice.serviceTitle || 'Service',
         vehicles: invoice.vehicles?.map((v: any) => {
           let vehicleServiceCost = 0;
-          if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+          // Prioritize serviceAmount field (updated value from form)
+          if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+            vehicleServiceCost = v.serviceAmount;
+          } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
             vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
           } else {
-            vehicleServiceCost = v.serviceAmount || 0;
+            vehicleServiceCost = 0;
           }
           return {
             plate: v.plateNumber || 'N/A',
@@ -394,10 +442,13 @@ export function InvoiceList({
           serviceTitle: invoice.serviceTitle || 'Service',
           vehicles: invoice.vehicles?.map((v: any) => {
             let vehicleServiceCost = 0;
-            if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+            // Prioritize serviceAmount field (updated value from form)
+            if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+              vehicleServiceCost = v.serviceAmount;
+            } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
               vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
             } else {
-              vehicleServiceCost = v.serviceAmount || 0;
+              vehicleServiceCost = 0;
             }
             return {
               plate: v.plateNumber || 'N/A',
@@ -440,10 +491,13 @@ export function InvoiceList({
       // Prepare vehicle data for email
       const vehicles = invoice.vehicles?.map((v: any) => {
         let vehicleServiceCost = 0;
-        if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+        // Prioritize serviceAmount field (updated value from form)
+        if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+          vehicleServiceCost = v.serviceAmount;
+        } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
           vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
         } else {
-          vehicleServiceCost = v.serviceAmount || 0;
+          vehicleServiceCost = 0;
         }
         return {
           plate: v.plateNumber || 'N/A',
@@ -545,6 +599,7 @@ export function InvoiceList({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="7days">Last 7 Days</SelectItem>
                   <SelectItem value="today">Today</SelectItem>
                   <SelectItem value="yesterday">Yesterday</SelectItem>
                   <SelectItem value="30days">Last 30 Days</SelectItem>
@@ -667,39 +722,58 @@ export function InvoiceList({
                         {formatDateDDMMYYYY(invoice.invoiceDate)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-2">
                           {invoice.vehicles && invoice.vehicles.length > 0 ? (
-                            invoice.vehicles.map((v: any) => {
-                              // Calculate vehicle service cost - prioritize services array, then serviceAmount
-                              let vehicleServiceCost = 0;
-                              if (v.services && Array.isArray(v.services) && v.services.length > 0) {
-                                vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
-                              } else {
-                                vehicleServiceCost = v.serviceAmount || 0;
-                              }
-                              return (
-                                <div key={v.plateNumber} className="text-sm">
-                                  <div className="flex items-center gap-2">
-                                    {v.jobCardNo && (
-                                      <span className="font-mono font-semibold text-blue-600 text-xs" title={`Service Date: ${v.serviceDate ? new Date(v.serviceDate instanceof Date ? v.serviceDate : v.serviceDate?.toDate?.()).toLocaleDateString() : 'N/A'}`}>
-                                        {v.jobCardNo} |
-                                      </span>
-                                    )}
-                                    <span className="font-mono text-gray-600">{v.plateNumber}:</span>
-                                    <span className="font-semibold ml-2">AED {vehicleServiceCost.toLocaleString('en-AE')}</span>
-                                  </div>
-                                </div>
-                              );
-                            })
+                            <>
+                              <div className="space-y-1">
+                                {invoice.vehicles.map((v: any) => {
+                                  // Calculate vehicle service cost - prioritize serviceAmount field (updated value from form)
+                                  let vehicleServiceCost = 0;
+                                  if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+                                    vehicleServiceCost = v.serviceAmount;
+                                  } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+                                    vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+                                  } else {
+                                    vehicleServiceCost = 0;
+                                  }
+                                  return (
+                                    <div key={v.plateNumber} className="text-sm">
+                                      <div className="flex items-center gap-2">
+                                        {v.jobCardNo && (
+                                          <span className="font-mono font-semibold text-blue-600 text-xs" title={`Service Date: ${v.serviceDate ? new Date(v.serviceDate instanceof Date ? v.serviceDate : v.serviceDate?.toDate?.()).toLocaleDateString() : 'N/A'}`}>
+                                            {v.jobCardNo} |
+                                          </span>
+                                        )}
+                                        <span className="font-mono text-gray-600">{v.plateNumber}:</span>
+                                        <span className="font-semibold ml-2">AED {vehicleServiceCost.toLocaleString('en-AE')}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="text-sm font-bold pt-2 border-t border-gray-300 text-gray-900">
+                                Subtotal: AED {(() => {
+                                  const costs = invoice.vehicles?.map((v: any) => {
+                                    let vehicleServiceCost = 0;
+                                    // Prioritize serviceAmount field (updated value from form)
+                                    if (v.serviceAmount !== undefined && v.serviceAmount !== null) {
+                                      vehicleServiceCost = v.serviceAmount;
+                                    } else if (v.services && Array.isArray(v.services) && v.services.length > 0) {
+                                      vehicleServiceCost = v.services.reduce((s: number, svc: any) => s + (svc.amount || 0), 0);
+                                    } else {
+                                      vehicleServiceCost = 0;
+                                    }
+                                    return vehicleServiceCost;
+                                  }) || [];
+                                  const total = costs.reduce((sum: number, cost: number) => sum + cost, 0);
+                                  return total.toLocaleString('en-AE');
+                                })()}
+                              </div>
+                            </>
                           ) : (
                             <span className="text-sm text-gray-500">-</span>
                           )}
                         </div>
-                        {invoice.subtotal > 0 && (
-                          <div className="text-sm font-bold mt-2 pt-2 border-t border-gray-200">
-                            Subtotal: AED {invoice.subtotal.toLocaleString('en-AE')}
-                          </div>
-                        )}
                       </TableCell>
 
                       <TableCell className="text-right font-semibold">
@@ -722,9 +796,9 @@ export function InvoiceList({
 
                       <TableCell>
                         <div className="relative flex flex-col gap-1">
-                          <div className='absolute bottom-5 text-xs    w-full flex justify-end'>
+                          <div className=' text-xs flex '>
                             {invoice.status === 'draft' && (
-                              <span className="text-gray-600 ">Update status before sending email</span>
+                              <span className="text-gray-600 ">Update status</span>
                             )}
                           </div>
                           
@@ -821,9 +895,9 @@ export function InvoiceList({
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-gray-400"
                             onClick={() => handleDelete(invoice)}
-                            disabled={deleteInvoice.isPending}
+                            disabled={deleteInvoice.isPending || (invoice.status === 'paid' && invoice.amountStatus === 'paid')}
                           >
                             <Trash2 size={16} />
                           </Button>
