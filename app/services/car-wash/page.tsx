@@ -135,7 +135,7 @@ export default function CarWashPage() {
                     </div>
                     <Button className="w-full bg-blue-600 hover:bg-blue-700"
                       onClick={() => {
-                        setSelectedService(product.name + " - Car Wash");
+                        setSelectedService(`(${product.name}) - Car Wash`);
                         setIsModalOpen(true);
                       }}
                     >

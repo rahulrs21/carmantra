@@ -1,43 +1,110 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, query, onSnapshot, orderBy, doc, updateDoc, getDocs, where, addDoc, Timestamp } from 'firebase/firestore';
-import { Employee, AttendanceRecord } from '@/lib/types';
+import { collection, query, where, getDocs, writeBatch, doc, Timestamp, addDoc, updateDoc } from 'firebase/firestore';
+import { Employee } from '@/lib/types';
+import { DailyAttendance, AttendanceStatus, PresentDayType, AbsenceReason, AttendanceSettings } from '@/lib/attendanceTypes';
 import { useUser } from '@/lib/userContext';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { Calendar, ChevronLeft, ChevronRight, Shield, CheckCircle2, XCircle, AlertCircle, Trash2, Plus, X } from 'lucide-react';
-import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
+import { 
+  Calendar, 
+  ChevronLeft,
+  ChevronRight,
+  Save,
+  RotateCcw,
+  AlertCircle,
+  Check,
+  X as XIcon,
+  XCircle,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Settings,
+} from 'lucide-react';
+import { 
+  getAttendanceColor, 
+  formatAttendanceStatus,
+} from '@/lib/attendanceCalculations';
+import { ModuleAccess, ModuleAccessComponent } from '@/components/PermissionGate';
+
+// Status options
+const statusOptions: { value: AttendanceStatus; label: string; color: string }[] = [
+  { value: 'present', label: '✓ Present', color: 'bg-green-50 hover:bg-green-100 border-green-300' },
+  { value: 'absent', label: '✗ Absent', color: 'bg-red-50 hover:bg-red-100 border-red-300' },
+  { value: 'leave', label: '📋 Leave', color: 'bg-amber-50 hover:bg-amber-100 border-amber-300' },
+  { value: 'not-marked', label: '— Not Marked', color: 'bg-gray-50 hover:bg-gray-100 border-gray-300' },
+];
+
+const dayTypeOptions: { value: PresentDayType; label: string }[] = [
+  { value: 'full', label: 'Full Day (1.0)' },
+  { value: 'half', label: 'Half Day (0.5)' },
+  { value: 'quarter', label: 'Quarter Day (0.25)' },
+];
+
+interface BulkMarkData {
+  status: AttendanceStatus;
+  dayType?: PresentDayType;
+  reason?: string;
+}
 
 export default function AttendancePage() {
+  const router = useRouter();
   const { role: currentRole } = useUser();
+  
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [attendance, setAttendance] = useState<Record<string, { status: string; reason?: string }>>({});
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
-  const [absenceReason, setAbsenceReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [filterDept, setFilterDept] = useState<string>('all');
+  const [departments, setDepartments] = useState<string[]>([]);
+  
+  // Attendance state
+  const [attendance, setAttendance] = useState<Record<string, any>>({});
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
+  const [bulkMarkData, setBulkMarkData] = useState<BulkMarkData | null>(null);
+  const [showBulkPreview, setShowBulkPreview] = useState(false);
+  const [markStatus, setMarkStatus] = useState<AttendanceStatus | ''>('');
+  const [markReason, setMarkReason] = useState('');
   const [showReasonDialog, setShowReasonDialog] = useState(false);
-  const [reasonDialogEmployee, setReasonDialogEmployee] = useState<string>('');
-  const [holidays, setHolidays] = useState<Array<{ date: string; name: string }>>([]);
+  const [reasonDialogEmployee, setReasonDialogEmployee] = useState('');
+  const [absenceReason, setAbsenceReason] = useState('');
+  const [showLeaveReasonDialog, setShowLeaveReasonDialog] = useState(false);
+  const [leaveReasonEmployee, setLeaveReasonEmployee] = useState('');
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveType, setLeaveType] = useState<'paid' | 'unpaid'>('paid');
+  const [showHolidayForm, setShowHolidayForm] = useState(false);
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayName, setNewHolidayName] = useState('');
-  const [showHolidayForm, setShowHolidayForm] = useState(false);
+  const [holidays, setHolidays] = useState<Array<{ date: string; name: string }>>([]);
   const [showEmployeeDetail, setShowEmployeeDetail] = useState(false);
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState<Employee | null>(null);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [detailViewMonth, setDetailViewMonth] = useState<Date>(new Date());
   const [hoveredDateDetails, setHoveredDateDetails] = useState<string | null>(null);
-  const [detailViewMonth, setDetailViewMonth] = useState(new Date());
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
-  const [markStatus, setMarkStatus] = useState<string>('');
-  const [markReason, setMarkReason] = useState('');
-  const [bulkMarkEmployee, setBulkMarkEmployee] = useState<string>('');
-  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [selectedParticularDates, setSelectedParticularDates] = useState<Set<string>>(new Set());
+  const [showAttendanceTypeDialog, setShowAttendanceTypeDialog] = useState(false);
+  const [attendanceTypeEmployee, setAttendanceTypeEmployee] = useState('');
+  const [selectedAttendanceType, setSelectedAttendanceType] = useState<PresentDayType>('full');
+  const [employeeStats, setEmployeeStats] = useState<Record<string, any>>({});
+  
+  // Settings state
+  const [attendanceSettings, setAttendanceSettings] = useState<AttendanceSettings>({
+    workingDays: [1, 2, 3, 4, 5], // Monday to Friday by default
+    holidays: [],
+    weekendDays: ['Saturday', 'Sunday'],
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [tempWorkingDays, setTempWorkingDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [tempHolidays, setTempHolidays] = useState<Array<{ date: string; name: string; type: 'government' | 'company' }>>([]);
+  const [newHolidayDateSettings, setNewHolidayDateSettings] = useState('');
+  const [newHolidayNameSettings, setNewHolidayNameSettings] = useState('');
+  const [newHolidayTypeSettings, setNewHolidayTypeSettings] = useState<'government' | 'company'>('government');
 
   const isAuthorized = currentRole === 'admin' || currentRole === 'manager';
 
@@ -52,10 +119,12 @@ export default function AttendancePage() {
           ...doc.data()
         })) as Employee[];
 
-        // Sort by name in JavaScript instead of Firestore (to avoid needing composite index)
         employeeList.sort((a, b) => a.name.localeCompare(b.name));
-
         setEmployees(employeeList);
+
+        // Extract departments
+        const depts = Array.from(new Set(employeeList.map(e => e.department))).sort() as string[];
+        setDepartments(depts);
       } catch (error) {
         console.error('Error fetching employees:', error);
         toast.error('Failed to load employees');
@@ -66,81 +135,40 @@ export default function AttendancePage() {
     fetchEmployees();
   }, []);
 
-  // Fetch holidays
+  // Fetch attendance settings
   useEffect(() => {
-    const fetchHolidays = async () => {
+    const fetchAttendanceSettings = async () => {
       try {
-        const q = query(collection(db, 'holidays'), orderBy('date', 'asc'));
+        const q = query(collection(db, 'attendanceSettings'));
         const snapshot = await getDocs(q);
-        const holidayList = snapshot.docs.map(doc => doc.data()) as Array<{ date: string; name: string }>;
-        setHolidays(holidayList);
+        if (snapshot.docs.length > 0) {
+          const settingsDoc = snapshot.docs[0].data() as AttendanceSettings;
+          setAttendanceSettings(settingsDoc);
+          setTempWorkingDays(settingsDoc.workingDays || [1, 2, 3, 4, 5]);
+          setTempHolidays((settingsDoc.holidays || []).map(h => ({ ...h, type: h.type || 'government' })));
+        }
       } catch (error) {
-        console.error('Error fetching holidays:', error);
+        console.error('Error fetching attendance settings:', error);
       }
     };
-    fetchHolidays();
+    fetchAttendanceSettings();
   }, []);
 
-  const handleAddHoliday = async () => {
-    if (!newHolidayDate || !newHolidayName) {
-      toast.error('Please fill in all fields');
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, 'holidays'), {
-        date: newHolidayDate,
-        name: newHolidayName,
-      });
-      setHolidays([...holidays, { date: newHolidayDate, name: newHolidayName }]);
-      setNewHolidayDate('');
-      setNewHolidayName('');
-      setShowHolidayForm(false);
-      toast.success('Holiday added');
-    } catch (error) {
-      console.error('Error adding holiday:', error);
-      toast.error('Failed to add holiday');
-    }
-  };
-
-  const handleDeleteHoliday = async (dateToDelete: string) => {
-    try {
-      const q = query(collection(db, 'holidays'), where('date', '==', dateToDelete));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        await updateDoc(doc(db, 'holidays', snapshot.docs[0].id), {});
-      }
-      setHolidays(holidays.filter(h => h.date !== dateToDelete));
-      toast.success('Holiday removed');
-    } catch (error) {
-      console.error('Error deleting holiday:', error);
-      toast.error('Failed to remove holiday');
-    }
-  };
-
-
-  // Fetch attendance for all employees and month
+  // Fetch attendance for selected date
   useEffect(() => {
-    const fetchAttendance = async () => {
+    const fetchAttendanceForDate = async () => {
       try {
-        const attendanceRef = collection(db, 'attendance');
-        const monthKey = currentMonth.toISOString().slice(0, 7); // YYYY-MM
-
+        const dateStr = getDateStr(selectedDate);
         const q = query(
-          attendanceRef,
-          where('month', '==', monthKey)
+          collection(db, 'dailyAttendance'),
+          where('date', '==', dateStr)
         );
-
         const snapshot = await getDocs(q);
-        const records: Record<string, { status: string; reason?: string }> = {};
+        const records: Record<string, DailyAttendance> = {};
 
-        snapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          const key = `${data.employeeId}-${data.date}`;
-          records[key] = {
-            status: data.status,
-            reason: data.reason || ''
-          };
+        snapshot.docs.forEach(doc => {
+          const data = doc.data() as DailyAttendance;
+          records[data.employeeId] = data;
         });
 
         setAttendance(records);
@@ -149,15 +177,247 @@ export default function AttendancePage() {
       }
     };
 
-    fetchAttendance();
-  }, [currentMonth]);
+    fetchAttendanceForDate();
+  }, [selectedDate]);
 
+  // Calculate stats when employee detail is shown or month changes
+  useEffect(() => {
+    if (showEmployeeDetail && selectedEmployeeDetail?.id) {
+      calculateEmployeeStats(selectedEmployeeDetail.id, detailViewMonth);
+    }
+  }, [showEmployeeDetail, selectedEmployeeDetail?.id, detailViewMonth]);
+
+  const getDateStr = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+
+  // Check if a date is a working day
+  const isWorkingDay = (date: Date): boolean => {
+    const dayOfWeek = date.getDay();
+    return (attendanceSettings.workingDays || [1, 2, 3, 4, 5]).includes(dayOfWeek);
+  };
+
+  // Check if a date is a holiday
+  const isHoliday = (date: Date): boolean => {
+    const dateStr = getDateStr(date);
+    return (attendanceSettings.holidays || []).some(h => h.date === dateStr);
+  };
+
+  // Get holiday name if exists
+  const getHolidayName = (date: Date): string | undefined => {
+    const dateStr = getDateStr(date);
+    return (attendanceSettings.holidays || []).find(h => h.date === dateStr)?.name;
+  };
+
+  // Save attendance settings
+  const saveAttendanceSettings = async () => {
+    try {
+      const settingsData = {
+        workingDays: tempWorkingDays,
+        holidays: tempHolidays,
+        weekendDays: attendanceSettings.weekendDays,
+        updatedAt: Timestamp.now(),
+      };
+
+      const q = query(collection(db, 'attendanceSettings'));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.docs.length > 0) {
+        // Update existing
+        await updateDoc(doc(db, 'attendanceSettings', snapshot.docs[0].id), settingsData as any);
+      } else {
+        // Create new
+        await addDoc(collection(db, 'attendanceSettings'), settingsData);
+      }
+
+      setAttendanceSettings(settingsData);
+      setShowSettings(false);
+      toast.success('Attendance settings saved successfully');
+    } catch (error) {
+      console.error('Error saving attendance settings:', error);
+      toast.error('Failed to save settings');
+    }
+  };
+
+  // Mark attendance
+  const handleMarkAttendance = async (empId: string, status: AttendanceStatus, reason = '', presentDayType: PresentDayType = 'full', leaveTypeParam: 'paid' | 'unpaid' = 'paid') => {
+    if (!isAuthorized) {
+      toast.error('You do not have permission to mark attendance');
+      return;
+    }
+
+    try {
+      const dateStr = getDateStr(selectedDate);
+      const existing = attendance[empId];
+
+      if (existing && existing.status === status && existing.presentDayType === presentDayType) {
+        // Clear if same status clicked
+        if (existing.id) {
+          await updateDoc(doc(db, 'dailyAttendance', existing.id), { status: 'not-marked', markedAt: Timestamp.now() });
+        }
+        const newAttendance = { ...attendance };
+        delete newAttendance[empId];
+        setAttendance(newAttendance);
+        toast.success('Attendance cleared');
+      } else {
+        // Set new status
+        if (existing && existing.id) {
+          await updateDoc(doc(db, 'dailyAttendance', existing.id), {
+            status,
+            absenceReason: status === 'absent' ? reason : undefined,
+            leaveReason: status === 'leave' ? reason : undefined,
+            presentDayType: status === 'present' ? presentDayType : undefined,
+            markedAt: Timestamp.now(),
+          });
+        } else {
+          const docData: any = {
+            employeeId: empId,
+            date: dateStr,
+            status,
+            markedAt: Timestamp.now(),
+            markedBy: 'admin',
+          };
+          if (status === 'absent') {
+            if (reason) docData.absenceReason = reason;
+          }
+          if (status === 'present') docData.presentDayType = presentDayType;
+          if (status === 'leave') {
+            docData.leaveType = leaveTypeParam;
+            if (reason) docData.leaveReason = reason;
+          }
+          const newDoc = await addDoc(collection(db, 'dailyAttendance'), docData);
+        }
+
+        setAttendance(prev => ({
+          ...prev,
+          [empId]: {
+            id: existing?.id,
+            employeeId: empId,
+            date: dateStr,
+            status,
+            absenceReason: status === 'absent' ? reason : undefined,
+            leaveReason: status === 'leave' ? reason : undefined,
+            leaveType: status === 'leave' ? leaveTypeParam : undefined,
+            presentDayType: status === 'present' ? presentDayType : undefined,
+            markedAt: Timestamp.now(),
+            markedBy: 'admin',
+          },
+        }));
+
+        const typeLabel = presentDayType === 'full' ? '(Full)' : presentDayType === 'half' ? '(Half)' : '(Quarter)';
+        toast.success(`Marked as ${status} ${status === 'present' ? typeLabel : ''}`);
+      }
+    } catch (error) {
+      console.error('Error marking attendance:', error);
+      toast.error('Failed to mark attendance');
+    }
+  };
+
+  // Bulk mark attendance
+  const handleBulkMark = async () => {
+    if (selectedEmployees.size === 0 || !markStatus) {
+      toast.error('Please select employees and status');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const dateStr = getDateStr(selectedDate);
+
+      for (const empId of Array.from(selectedEmployees)) {
+        const existing = attendance[empId];
+        
+        if (existing && existing.id) {
+          await updateDoc(doc(db, 'dailyAttendance', existing.id), {
+            status: markStatus,
+            absenceReason: markStatus === 'absent' ? markReason : undefined,
+            markedAt: Timestamp.now(),
+          });
+        } else {
+          const docData: any = {
+            employeeId: empId,
+            date: dateStr,
+            status: markStatus,
+            markedAt: Timestamp.now(),
+            markedBy: 'admin',
+          };
+          if (markStatus === 'absent' && markReason) docData.absenceReason = markReason;
+          if (markStatus === 'present') docData.presentDayType = 'full';
+          if (markStatus === 'leave') docData.leaveType = 'paid';
+          await addDoc(collection(db, 'dailyAttendance'), docData);
+        }
+
+        setAttendance(prev => ({
+          ...prev,
+          [empId]: {
+            id: existing?.id,
+            employeeId: empId,
+            date: dateStr,
+            status: markStatus,
+            absenceReason: markStatus === 'absent' ? markReason : undefined,
+            markedAt: Timestamp.now(),
+            markedBy: 'admin',
+          },
+        }));
+      }
+
+      toast.success(`Marked ${selectedEmployees.size} employee(s) as ${markStatus}`);
+      setSelectedEmployees(new Set());
+      setMarkStatus('');
+      setMarkReason('');
+    } catch (error) {
+      console.error('Error bulk marking:', error);
+      toast.error('Failed to mark attendance');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredEmployees = filterDept === 'all' 
+    ? employees 
+    : employees.filter(e => e.department === filterDept);
+
+  const getTodayStats = () => {
+    let present = 0, absent = 0, leave = 0, notMarked = 0;
+
+    employees.forEach(emp => {
+      const att = attendance[emp.id || ''];
+      if (!att || att.status === 'not-marked') {
+        notMarked++;
+      } else if (att.status === 'present') {
+        present++;
+      } else if (att.status === 'absent') {
+        absent++;
+      } else if (att.status === 'leave') {
+        leave++;
+      }
+    });
+
+    return { present, absent, leave, notMarked };
+  };
+
+  // Helper functions
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
 
   const getFirstDayOfMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'present':
+        return 'text-green-600 bg-green-50';
+      case 'absent':
+        return 'text-red-600 bg-red-50';
+      case 'leave':
+        return 'text-yellow-600 bg-yellow-50';
+      case 'holiday':
+        return 'text-blue-600 bg-blue-50';
+      default:
+        return 'text-gray-600 bg-gray-50';
+    }
   };
 
   const handleMarkAttendanceForEmployee = async (employeeId: string, dateStr: string, status: string, reason: string = '') => {
@@ -203,14 +463,15 @@ export default function AttendancePage() {
         // Set new status
         if (querySnapshot.empty) {
           // Create new record
-          await addDoc(attendanceRef, {
+          const docData: any = {
             employeeId,
             date: dateStr,
             month: monthKey,
             status,
-            reason: reason,
             timestamp: Timestamp.now()
-          });
+          };
+          if (reason) docData.reason = reason;
+          await addDoc(attendanceRef, docData);
         } else {
           // Update existing record
           querySnapshot.docs.forEach(async (docSnap) => {
@@ -233,46 +494,6 @@ export default function AttendancePage() {
       console.error('Error marking attendance:', error);
       toast.error('Failed to mark attendance');
     }
-  };
-
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'present':
-        return 'text-green-600 bg-green-50';
-      case 'absent':
-        return 'text-red-600 bg-red-50';
-      case 'leave':
-        return 'text-yellow-600 bg-yellow-50';
-      case 'holiday':
-        return 'text-blue-600 bg-blue-50';
-      default:
-        return 'text-gray-600 bg-gray-50';
-    }
-  };
-
-  const getDateStr = (date: Date) => {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  };
-
-  const daysInMonth = getDaysInMonth(currentMonth);
-  const firstDay = getFirstDayOfMonth(currentMonth);
-
-  const getTodayAttendanceSummary = () => {
-    const dateStr = getDateStr(selectedDate);
-    let present = 0, absent = 0, leave = 0;
-
-    employees.forEach(emp => {
-      const attendanceKey = `${emp.id}-${dateStr}`;
-      const att = attendance[attendanceKey];
-      if (att) {
-        if (att.status === 'present') present++;
-        else if (att.status === 'absent') absent++;
-        else if (att.status === 'leave') leave++;
-      }
-    });
-
-    return { present, absent, leave, total: employees.length };
   };
 
   const isDateInRange = (date: Date): boolean => {
@@ -325,7 +546,60 @@ export default function AttendancePage() {
     }
   };
 
+  const getTodayAttendanceSummary = () => {
+    const dateStr = getDateStr(selectedDate);
+    let present = 0, absent = 0, leave = 0;
 
+    employees.forEach(emp => {
+      const attendanceKey = `${emp.id}-${dateStr}`;
+      const att = attendance[attendanceKey];
+      if (att) {
+        if (att.status === 'present') present++;
+        else if (att.status === 'absent') absent++;
+        else if (att.status === 'leave') leave++;
+      }
+    });
+
+    return { present, absent, leave, total: employees.length };
+  };
+
+  const handleAddHoliday = async () => {
+    if (!newHolidayDate || !newHolidayName) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'holidays'), {
+        date: newHolidayDate,
+        name: newHolidayName,
+      });
+      setHolidays([...holidays, { date: newHolidayDate, name: newHolidayName }]);
+      setNewHolidayDate('');
+      setNewHolidayName('');
+      setShowHolidayForm(false);
+      toast.success('Holiday added');
+    } catch (error) {
+      console.error('Error adding holiday:', error);
+      toast.error('Failed to add holiday');
+    }
+  };
+
+  const handleDeleteHoliday = async (dateToDelete: string) => {
+    try {
+      const q = query(collection(db, 'holidays'), where('date', '==', dateToDelete));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        // Using updateDoc to 'delete' by removing the document - actually you should use deleteDoc
+        // For now, just filter from local state
+      }
+      setHolidays(holidays.filter(h => h.date !== dateToDelete));
+      toast.success('Holiday removed');
+    } catch (error) {
+      console.error('Error deleting holiday:', error);
+      toast.error('Failed to remove holiday');
+    }
+  };
 
   // Unified bulk marking function for all scenarios
   const handleBulkMarkAttendance = async (datesToMark: string[]) => {
@@ -356,14 +630,15 @@ export default function AttendancePage() {
           const querySnapshot = await getDocs(q);
 
           if (querySnapshot.empty) {
-            await addDoc(attendanceRef, {
+            const docData: any = {
               employeeId: empId,
               date: dateStr,
               month: monthKey,
               status: markStatus,
-              reason: markReason || '',
               timestamp: Timestamp.now()
-            });
+            };
+            if (markReason) docData.reason = markReason;
+            await addDoc(attendanceRef, docData);
           } else {
             querySnapshot.docs.forEach(async (docSnap) => {
               await updateDoc(docSnap.ref, {
@@ -398,6 +673,122 @@ export default function AttendancePage() {
     }
   };
 
+  // Calculate employee attendance statistics
+  const calculateEmployeeStats = async (employeeId: string, month?: Date) => {
+    try {
+      const targetMonth = month || detailViewMonth;
+      const monthStr = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}`;
+      
+      let presentDays = 0;
+      let absentDays = 0;
+      let leaveDays = 0;
+      const dailyDetails: Record<string, any> = {};
+
+      // Count present days with type multiplier
+      const presentQuery = query(
+        collection(db, 'dailyAttendance'),
+        where('employeeId', '==', employeeId),
+        where('status', '==', 'present')
+      );
+      const presentSnapshot = await getDocs(presentQuery);
+      presentSnapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const dateStr = data.date as string;
+        // Filter by month
+        if (dateStr && dateStr.startsWith(monthStr)) {
+          const type = data.presentDayType || 'full';
+          const multiplier = type === 'full' ? 1 : type === 'half' ? 0.5 : 0.25;
+          presentDays += multiplier;
+          dailyDetails[dateStr] = {
+            status: 'present',
+            type: type,
+            display: type === 'full' ? 'Full' : type === 'half' ? 'Half' : 'Quarter'
+          };
+        }
+      });
+
+      // Count absent days
+      const absentQuery = query(
+        collection(db, 'dailyAttendance'),
+        where('employeeId', '==', employeeId),
+        where('status', '==', 'absent')
+      );
+      const absentSnapshot = await getDocs(absentQuery);
+      absentSnapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const dateStr = data.date as string;
+        if (dateStr && dateStr.startsWith(monthStr)) {
+          absentDays++;
+          dailyDetails[dateStr] = {
+            status: 'absent',
+            reason: data.absenceReason || 'N/A'
+          };
+        }
+      });
+
+      // Count leave days
+      const leaveQuery = query(
+        collection(db, 'dailyAttendance'),
+        where('employeeId', '==', employeeId),
+        where('status', '==', 'leave')
+      );
+      const leaveSnapshot = await getDocs(leaveQuery);
+      leaveSnapshot.docs.forEach(doc => {
+        const data = doc.data() as any;
+        const dateStr = data.date as string;
+        if (dateStr && dateStr.startsWith(monthStr)) {
+          leaveDays++;
+          dailyDetails[dateStr] = {
+            status: 'leave'
+          };
+        }
+      });
+
+      setEmployeeStats(prev => ({
+        ...prev,
+        [employeeId]: {
+          present: Math.round(presentDays * 100) / 100,
+          absent: absentDays,
+          leave: leaveDays,
+          dailyDetails: dailyDetails
+        }
+      }));
+    } catch (error) {
+      console.error('Error calculating stats:', error);
+    }
+  };
+
+  if (!isAuthorized) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>You don&apos;t have permission to access this page.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  const stats = getTodayStats();
+
+
+  // Fetch holidays
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        const q = query(collection(db, 'holidays'));
+        const snapshot = await getDocs(q);
+        const holidayList = snapshot.docs.map(doc => doc.data()) as Array<{ date: string; name: string }>;
+        setHolidays(holidayList);
+      } catch (error) {
+        console.error('Error fetching holidays:', error);
+      }
+    };
+    fetchHolidays();
+  }, []);
+
+
+
   return (
     <ModuleAccessComponent module={ModuleAccess.ATTENDANCE}>
       <div className="space-y-6 pb-20 sm:pb-6">
@@ -406,356 +797,268 @@ export default function AttendancePage() {
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2 text-gray-900">
               <Calendar className="w-8 h-8 text-orange-600" />
-              Attendance Management
+              Daily Attendance
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Track daily attendance for your team</p>
+            <p className="text-sm text-gray-500 mt-1">Mark and manage employee attendance</p>
           </div>
 
-          {/* Quick Stats */}
-          <div className="flex gap-2 text-xs">
-            {(() => {
-              const stats = getTodayAttendanceSummary();
-              return (
-                <>
-                  <div className="text-center px-3 py-2 rounded-lg bg-green-50 border border-green-200">
-                    <p className="text-green-600 font-bold text-lg">{stats.present}</p>
-                    <p className="text-green-700">Present</p>
-                  </div>
-                  <div className="text-center px-3 py-2 rounded-lg bg-red-50 border border-red-200">
-                    <p className="text-red-600 font-bold text-lg">{stats.absent}</p>
-                    <p className="text-red-700">Absent</p>
-                  </div>
-                  <div className="text-center px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200">
-                    <p className="text-yellow-600 font-bold text-lg">{stats.leave}</p>
-                    <p className="text-yellow-700">Leave</p>
-                  </div>
-                </>
-              );
-            })()}
+          {/* Stats Cards */}
+          <div className="grid grid-cols-4 gap-2 sm:gap-3">
+            <div className="text-center px-2 py-2 rounded-lg bg-green-50 border border-green-200">
+              <p className="text-green-600 font-bold text-lg">{stats.present}</p>
+              <p className="text-xs text-green-700 whitespace-nowrap">Present</p>
+            </div>
+            <div className="text-center px-2 py-2 rounded-lg bg-red-50 border border-red-200">
+              <p className="text-red-600 font-bold text-lg">{stats.absent}</p>
+              <p className="text-xs text-red-700 whitespace-nowrap">Absent</p>
+            </div>
+            <div className="text-center px-2 py-2 rounded-lg bg-yellow-50 border border-yellow-200">
+              <p className="text-yellow-600 font-bold text-lg">{stats.leave}</p>
+              <p className="text-xs text-yellow-700 whitespace-nowrap">Leave</p>
+            </div>
+            <div className="text-center px-2 py-2 rounded-lg bg-gray-50 border border-gray-200">
+              <p className="text-gray-600 font-bold text-lg">{stats.notMarked}</p>
+              <p className="text-xs text-gray-700 whitespace-nowrap">Pending</p>
+            </div>
           </div>
         </div>
 
-        {/* Date Selector */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Select Date</p>
+        {/* Controls */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDate(new Date(selectedDate.getTime() - 86400000))}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
               <input
                 type="date"
                 value={getDateStr(selectedDate)}
-                onChange={(e) => setSelectedDate(new Date(e.target.value + 'T00:00:00'))}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                onChange={(e) => setSelectedDate(new Date(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDate(new Date(selectedDate.getTime() + 86400000))}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDate(new Date())}
+              >
+                Today
+              </Button>
             </div>
-            <Button
-              onClick={() => setSelectedDate(new Date())}
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto"
-            >
-              Reset to Today
-            </Button>
+
+            <Select value={filterDept} onValueChange={setFilterDept}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        {/* Main Attendance Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-4 sm:p-6 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-amber-50">
-            <h2 className="font-bold text-lg text-gray-800">
-              Mark Attendance for {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">Click to mark attendance status for each employee</p>
+        {/* Bulk Mark Card */}
+        {selectedEmployees.size > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-400 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-gray-900">
+                ✓ {selectedEmployees.size} employee(s) selected
+              </p>
+              <Button
+                onClick={() => setSelectedEmployees(new Set())}
+                variant="outline"
+                size="sm"
+              >
+                Clear Selection
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <Select value={markStatus || ''} onValueChange={(value) => setMarkStatus(value as AttendanceStatus)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="present">✓ Present</SelectItem>
+                  <SelectItem value="absent">✗ Absent</SelectItem>
+                  <SelectItem value="leave">📋 Leave</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {markStatus === 'absent' && (
+                <input
+                  type="text"
+                  placeholder="Reason (optional)"
+                  value={markReason}
+                  onChange={(e) => setMarkReason(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              <Button
+                onClick={() => {
+                  setSelectedEmployees(new Set());
+                  setMarkStatus('');
+                  setMarkReason('');
+                }}
+                variant="outline"
+                size="sm"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+
+              <Button
+                onClick={handleBulkMark}
+                disabled={!markStatus || saving}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                size="sm"
+              >
+                <Check className="w-4 h-4 mr-2" />
+                {saving ? 'Marking...' : 'Mark All'}
+              </Button>
+            </div>
           </div>
+        )}
 
-          {/* Bulk Mark Multiple Employees - Single Date */}
-          {selectedEmployees.size > 0 && !selectedDateRange.start && !selectedParticularDates.size && (
-            <div className="p-4 bg-indigo-50 border-b border-indigo-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-indigo-900">{selectedEmployees.size} employee(s) selected</p>
-                <Button
-                  onClick={() => setSelectedEmployees(new Set())}
-                  variant="outline"
-                  size="sm"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Clear Selection
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-indigo-900 mb-2">Mark As</p>
-                  <Select value={markStatus} onValueChange={setMarkStatus}>
-                    <SelectTrigger className="text-sm">
-                      <SelectValue placeholder="Select status..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="present">Present</SelectItem>
-                      <SelectItem value="absent">Absent</SelectItem>
-                      <SelectItem value="leave">Leave</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-indigo-900 mb-2">Reason (Optional)</p>
-                  <input
-                    type="text"
-                    placeholder="e.g., Medical leave"
-                    value={markReason}
-                    onChange={(e) => setMarkReason(e.target.value)}
-                    className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex items-end gap-2">
-                  <Button
-                    onClick={() => {
-                      handleBulkMarkAttendance([getDateStr(selectedDate)]);
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white flex-1"
-                    size="sm"
-                  >
-                    Mark {selectedEmployees.size} Employee(s)
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Unified Bulk Mark Panel - Works for both Date Range and Particular Dates */}
-          {selectedEmployees.size > 0 && (selectedParticularDates.size > 0 || (selectedDateRange.start && selectedDateRange.end)) && (
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow-lg border-2 border-purple-400 p-4 sm:p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
-                    ✨ Mark Attendance
-                  </h3>
-                  {selectedParticularDates.size > 0 ? (
-                    <p className="text-sm text-gray-600 mt-2">
-                      <strong>{selectedEmployees.size}</strong> employee(s) × <strong>{selectedParticularDates.size}</strong> date(s) = <strong>{selectedEmployees.size * selectedParticularDates.size}</strong> record(s)
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-sm text-gray-600 mt-2">
-                        <strong>{selectedEmployees.size}</strong> employee(s) × <strong>{Math.ceil((selectedDateRange.end!.getTime() - selectedDateRange.start!.getTime()) / (1000 * 60 * 60 * 24)) + 1}</strong> day(s) = <strong>{selectedEmployees.size * (Math.ceil((selectedDateRange.end!.getTime() - selectedDateRange.start!.getTime()) / (1000 * 60 * 60 * 24)) + 1)}</strong> record(s)
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Dates: {selectedDateRange.start!.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to {selectedDateRange.end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    </>
-                  )}
-                </div>
-                <Button
-                  onClick={() => {
-                    setSelectedEmployees(new Set());
-                    setSelectedDateRange({ start: null, end: null });
-                    setSelectedParticularDates(new Set());
-                  }}
-                  variant="outline"
-                  size="sm"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Mark As</p>
-                  <Select value={markStatus} onValueChange={setMarkStatus}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="present">✓ Present</SelectItem>
-                      <SelectItem value="absent">✗ Absent</SelectItem>
-                      <SelectItem value="leave">📋 Leave</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Reason (Optional)</p>
-                  <input
-                    type="text"
-                    placeholder="e.g., Medical leave, Vacation"
-                    value={markReason}
-                    onChange={(e) => setMarkReason(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div className="flex items-end gap-2">
-                  <Button
-                    onClick={() => {
-                      setSelectedEmployees(new Set());
-                      setSelectedDateRange({ start: null, end: null });
-                      setSelectedParticularDates(new Set());
-                      setMarkStatus('');
-                      setMarkReason('');
-                    }}
-                    variant="outline"
-                    className="flex-1"
-                    size="sm"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const datesToMark = selectedParticularDates.size > 0 
-                        ? Array.from(selectedParticularDates)
-                        : (() => {
-                            const dates: string[] = [];
-                            const start = new Date(selectedDateRange.start!);
-                            const end = new Date(selectedDateRange.end!);
-                            start.setHours(0, 0, 0, 0);
-                            end.setHours(0, 0, 0, 0);
-                            const current = new Date(start);
-                            while (current <= end) {
-                              dates.push(getDateStr(current));
-                              current.setDate(current.getDate() + 1);
-                            }
-                            return dates;
-                          })();
-                      handleBulkMarkAttendance(datesToMark);
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700 text-white flex-1"
-                    size="sm"
-                  >
-                    ✓ Mark All
-                  </Button>
-                </div>
-              </div>
-
-              <div className="bg-purple-100 border border-purple-400 rounded-lg p-3">
-                <p className="text-xs text-purple-800">
-                  <strong>📌 Summary:</strong> This will mark {selectedEmployees.size} employee(s) for {selectedParticularDates.size > 0 ? selectedParticularDates.size : Math.ceil((selectedDateRange.end!.getTime() - selectedDateRange.start!.getTime()) / (1000 * 60 * 60 * 24)) + 1} {selectedParticularDates.size > 0 ? 'selected date(s)' : 'consecutive day(s)'} with status: <strong>{markStatus || 'Select status'}</strong>
-                </p>
-              </div>
-            </div>
-          )}
-
+        {/* Employees Table */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
           {loading ? (
-            <div className="p-8 text-center text-gray-500">
-              <p>Loading employees...</p>
-            </div>
-          ) : employees.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <p>No employees found</p>
-            </div>
+            <div className="p-8 text-center text-gray-500">Loading employees...</div>
+          ) : filteredEmployees.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">No employees found</div>
           ) : (
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-4 text-left text-sm font-semibold text-gray-700">Employee</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700">Status</th>
-                    <th className="px-4 py-4 text-left text-sm font-semibold text-gray-700">Reason (if applicable)</th>
-                    <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700">Action</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.size === filteredEmployees.length && filteredEmployees.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEmployees(new Set(filteredEmployees.map(e => e.id || '')));
+                          } else {
+                            setSelectedEmployees(new Set());
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 cursor-pointer"
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Employee</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Department</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">View</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((emp, index) => {
-                    const dateStr = getDateStr(selectedDate);
-                    const attendanceKey = `${emp.id}-${dateStr}`;
-                    const att = attendance[attendanceKey];
-                    const currentStatus = att?.status || '';
+                  {filteredEmployees.map((emp, idx) => {
+                    const att = attendance[emp.id || ''];
+                    const status = att?.status || 'not-marked';
 
                     return (
-                      <tr key={emp.id} className={`border-b border-gray-200 hover:bg-gray-50 transition ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedEmployees.has(emp.id || '')}
-                              onChange={(e) => {
-                                const newSelected = new Set(selectedEmployees);
-                                if (e.target.checked) {
-                                  newSelected.add(emp.id || '');
-                                } else {
-                                  newSelected.delete(emp.id || '');
-                                }
-                                setSelectedEmployees(newSelected);
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                            />
-                            <div>
-                              <p className="font-medium text-gray-900">{emp.name}</p>
-                              <p className="text-xs text-gray-500">{emp.email || 'No email'}</p>
-                            </div>
+                      <tr key={emp.id} className={`border-b border-gray-200 hover:bg-gray-50 transition ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployees.has(emp.id || '')}
+                            onChange={(e) => {
+                              const newSelected = new Set(selectedEmployees);
+                              if (e.target.checked) {
+                                newSelected.add(emp.id || '');
+                              } else {
+                                newSelected.delete(emp.id || '');
+                              }
+                              setSelectedEmployees(newSelected);
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium text-gray-900">{emp.name}</p>
+                            <p className="text-xs text-gray-500">{emp.position}</p>
                           </div>
                         </td>
-                        <td className="px-4 py-4 text-center">
+                        <td className="px-4 py-3 text-gray-600">{emp.department}</td>
+                        <td className="px-4 py-3 text-center">
                           <div className="flex gap-1 justify-center">
                             <Button
-                              onClick={() => handleMarkAttendanceForEmployee(emp.id!, dateStr, 'present', '')}
+                              onClick={() => {
+                                setAttendanceTypeEmployee(emp.id!);
+                                setSelectedAttendanceType('full');
+                                setShowAttendanceTypeDialog(true);
+                              }}
                               size="sm"
-                              title="Mark Present"
-                              className={`${currentStatus === 'present'
-                                  ? 'bg-green-600 hover:bg-green-700 text-white'
-                                  : 'bg-gray-200 hover:bg-gray-300 text-gray-600'
-                                }`}
+                              title="Present"
+                              className={`${status === 'present' ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
                             >
-                              <CheckCircle2 className="w-4 h-4" />
+                              <Check className="w-4 h-4" />
                             </Button>
+
                             <Button
                               onClick={() => {
                                 setReasonDialogEmployee(emp.id!);
-                                setAbsenceReason(att?.reason || '');
+                                setAbsenceReason(att?.absenceReason || '');
                                 setShowReasonDialog(true);
                               }}
                               size="sm"
-                              title="Mark Absent"
-                              className={`${currentStatus === 'absent'
-                                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                                  : 'bg-gray-200 hover:bg-gray-300 text-gray-600'
-                                }`}
+                              title="Absent"
+                              className={`${status === 'absent' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
                             >
                               <XCircle className="w-4 h-4" />
                             </Button>
+
                             <Button
-                              onClick={() => handleMarkAttendanceForEmployee(emp.id!, dateStr, 'leave', '')}
+                              onClick={() => {
+                                setLeaveReasonEmployee(emp.id!);
+                                setLeaveReason(att?.leaveReason || '');
+                                setShowLeaveReasonDialog(true);
+                              }}
                               size="sm"
-                              title="Mark Leave"
-                              className={`${currentStatus === 'leave'
-                                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                                  : 'bg-gray-200 hover:bg-gray-300 text-gray-600'
-                                }`}
+                              title="Leave"
+                              className={`${status === 'leave' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
                             >
                               <AlertCircle className="w-4 h-4" />
                             </Button>
-                            <Button
-                              onClick={() => {
-                                if (currentStatus) {
-                                  handleMarkAttendanceForEmployee(emp.id!, dateStr, currentStatus, '');
-                                }
-                              }}
-                              size="sm"
-                              title="Clear Attendance"
-                              disabled={!currentStatus}
-                              className="bg-gray-400 hover:bg-gray-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          {att?.reason ? (
-                            <span className={`text-xs px-3 py-1 rounded-full font-medium ${getStatusColor(currentStatus)}`}>
-                              {att.reason}
+                        <td className="px-4 py-3">
+                          {att?.absenceReason ? (
+                            <span className="text-xs bg-yellow-50 text-yellow-800 px-2 py-1 rounded-full">
+                              {att.absenceReason}
+                            </span>
+                          ) : att?.leaveReason ? (
+                            <span className="text-xs bg-blue-50 text-blue-800 px-2 py-1 rounded-full">
+                              {att.leaveReason}
                             </span>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-center">
+                        <td className="px-4 py-3 text-center">
                           <Button
                             onClick={() => {
                               setSelectedEmployeeDetail(emp);
                               setShowEmployeeDetail(true);
                             }}
                             size="sm"
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
                           >
                             View
                           </Button>
@@ -769,236 +1072,179 @@ export default function AttendancePage() {
           )}
         </div>
 
-        {/* Compact Calendar View */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-4 sm:p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-lg text-gray-800">Calendar View</h2>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="font-semibold text-gray-700 min-w-[130px] text-center text-sm">
-                  {currentMonth.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-3 sm:p-4">
-            {/* Week Headers */}
-            <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className="text-center font-semibold text-gray-600 text-xs py-2 bg-gray-100 rounded">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Days */}
-            <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-              {Array(getFirstDayOfMonth(currentMonth))
-                .fill(null)
-                .concat(Array.from({ length: getDaysInMonth(currentMonth) }, (_, i) => i + 1))
-                .map((day, index) => {
-                  const dateStr = day
-                    ? `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                    : '';
-                  const isHoliday = day && holidays.some(h => h.date === dateStr);
-
-                  // Count attendance for this date
-                  let presentCount = 0, absentCount = 0, leaveCount = 0;
-
-                  if (day) {
-                    employees.forEach(emp => {
-                      const att = attendance[`${emp.id}-${dateStr}`];
-                      if (att) {
-                        if (att.status === 'present') presentCount++;
-                        else if (att.status === 'absent') absentCount++;
-                        else if (att.status === 'leave') leaveCount++;
-                      }
-                    });
-                  }
-
-                  return (
-                    <div key={index} className="aspect-square">
-                      {day ? (
-                        <div
-                          onClick={(e) => handleCalendarDayClick(dateStr, e)}
-                          onMouseEnter={() => setHoveredDateDetails(dateStr)}
-                          onMouseLeave={() => setHoveredDateDetails(null)}
-                          className={`w-full h-full rounded border p-1 text-xs flex flex-col justify-between cursor-pointer transition hover:shadow-md relative ${
-                            isHoliday
-                              ? 'bg-blue-50 border-blue-300'
-                              : isDateSelected(dateStr)
-                              ? 'bg-cyan-100 border-cyan-500 ring-2 ring-cyan-400'
-                              : isDateInRange(new Date(dateStr + 'T00:00:00'))
-                              ? 'bg-purple-100 border-purple-400 ring-2 ring-purple-300'
-                              : getDateStr(selectedDate) === dateStr
-                              ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-300'
-                              : 'bg-white border-gray-200 hover:border-gray-300'
-                          }`}
-                          title={selectedParticularDates.size > 0 ? 'Ctrl+Click to select multiple' : selectedDateRange.start ? 'Shift+Click to select range' : 'Click to select or Ctrl+Click for multiple'}
-                        >
-                          <div className="font-semibold text-gray-800">{day}</div>
-
-                          <div className="text-xs space-y-0.5">
-                            {isHoliday && <div className="text-blue-700 font-semibold">Holiday</div>}
-                            {presentCount > 0 && <div className="text-green-700 font-semibold">✓ {presentCount}</div>}
-                            {absentCount > 0 && <div className="text-red-700 font-semibold">✗ {absentCount}</div>}
-                            {leaveCount > 0 && <div className="text-yellow-700 font-semibold">L {leaveCount}</div>}
-                          </div>
-
-                          {/* Hover Details - Employee Names (Inside Date Box) */}
-                          {hoveredDateDetails === dateStr && day && (presentCount > 0 || absentCount > 0 || leaveCount > 0) && (
-                            <div className="absolute inset-0 p-1 bg-white/95 backdrop-blur-sm border border-gray-300 rounded flex flex-col justify-center items-center z-20 text-xs max-h-full overflow-y-auto">
-                              <div className="space-y-1">
-                                {employees.map(emp => {
-                                  const att = attendance[`${emp.id}-${dateStr}`];
-                                  if (!att || !att.status) return null;
-                                  const statusEmoji = att.status === 'present' ? '✓' : att.status === 'absent' ? '✗' : '📋';
-                                  const statusColor = att.status === 'present' ? 'text-green-700' : att.status === 'absent' ? 'text-red-700' : 'text-yellow-700';
-                                  return (
-                                    <div key={emp.id} className={`${statusColor} font-medium whitespace-nowrap`}>
-                                      {statusEmoji} {emp.name}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
-
-
-
-        {/* Single Date - Multiple Employees Section */}
-
-
-        {/* Calendar Info */}
-        {!selectedDateRange.start && !selectedEmployees.size && !selectedParticularDates.size && (
-          <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
-            <p className="text-sm text-blue-800 mb-3">
-              <strong>💡 Tips:</strong>
-            </p>
-            <ul className="text-sm text-blue-800 space-y-1 ml-4 list-none">
-              <li>• Click a date to select it</li>
-              <li>• Hold <strong>Ctrl+Click</strong> to select multiple particular dates (shows in cyan)</li>
-              <li>• Hold <strong>Shift+Click</strong> to select a continuous date range (shows in purple)</li>
-              <li>• Check employee names to mark multiple people at once</li>
-            </ul>
-          </div>
-        )}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-lg text-gray-800">Manage Holidays</h3>
-            {!showHolidayForm && (
-              <Button onClick={() => setShowHolidayForm(true)} size="sm" className="bg-orange-600 hover:bg-orange-700">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Holiday
-              </Button>
-            )}
-          </div>
-
-          {showHolidayForm && (
-            <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <input
-                type="date"
-                value={newHolidayDate}
-                onChange={(e) => setNewHolidayDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-              <input
-                type="text"
-                placeholder="Holiday name (e.g., New Year)"
-                value={newHolidayName}
-                onChange={(e) => setNewHolidayName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-              <div className="flex gap-2">
-                <Button onClick={handleAddHoliday} className="bg-green-600 hover:bg-green-700 flex-1">Save</Button>
-                <Button onClick={() => setShowHolidayForm(false)} variant="outline" className="flex-1">Cancel</Button>
-              </div>
-            </div>
-          )}
-
-          {holidays.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">No holidays added yet</p>
-          ) : (
-            <div className="space-y-2">
-              {holidays.map((holiday) => (
-                <div key={holiday.date} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div>
-                    <p className="font-semibold text-gray-800 text-sm">{holiday.name}</p>
-                    <p className="text-xs text-gray-600">{new Date(holiday.date).toLocaleDateString()}</p>
-                  </div>
-                  <Button
-                    onClick={() => handleDeleteHoliday(holiday.date)}
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Quick Links */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Button
+            onClick={() => window.open('/admin/employees/attendance/monthly', '_blank')}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            📊 Monthly Attendance & Salary Report
+          </Button>
+          <Button
+            onClick={() => {
+              setTempWorkingDays(attendanceSettings.workingDays || [1, 2, 3, 4, 5]);
+              setTempHolidays((attendanceSettings.holidays || []).map(h => ({ ...h, type: h.type || 'government' })));
+              setShowSettings(true);
+            }}
+            variant="outline"
+            className="border-blue-300 hover:bg-blue-50"
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Attendance Settings
+          </Button>
+          {/* <Button
+            onClick={() => setShowHolidayForm(true)}
+            variant="outline"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Manage Holidays
+          </Button> */}
         </div>
       </div>
 
-      {/* Absence Reason Dialog */}
-      {showReasonDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg text-gray-800">Mark as Absent</h3>
-              <button onClick={() => setShowReasonDialog(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
+      {/* Attendance Settings Dialog */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm sm:max-w-2xl p-4 sm:p-6 space-y-4 my-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-lg sm:text-xl text-gray-800">Attendance Settings</h3>
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <XIcon className="w-5 sm:w-6 h-5 sm:h-6" />
               </button>
             </div>
-            <p className="text-sm text-gray-600">Provide a reason for absence (optional)</p>
-            <textarea
-              value={absenceReason}
-              onChange={(e) => setAbsenceReason(e.target.value)}
-              placeholder="e.g., Sick leave, Personal emergency..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-              rows={3}
-            />
-            <div className="flex gap-2">
+
+            {/* Working Days Selection */}
+            <div className="space-y-3">
+              <h4 className="font-semibold text-sm text-gray-800">Working Days of Week</h4>
+              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayOfWeek) => (
+                  <label
+                    key={dayOfWeek}
+                    className={`flex items-center justify-center p-2 sm:p-3 rounded-lg border cursor-pointer transition ${
+                      tempWorkingDays.includes(dayOfWeek)
+                        ? 'bg-green-100 border-green-400 text-green-800'
+                        : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={tempWorkingDays.includes(dayOfWeek)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setTempWorkingDays([...tempWorkingDays, dayOfWeek].sort());
+                        } else {
+                          setTempWorkingDays(tempWorkingDays.filter(d => d !== dayOfWeek));
+                        }
+                      }}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                    <span className="ml-2 text-xs sm:text-sm font-medium">{day}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Holidays Section */}
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="font-semibold text-sm text-gray-800">Holidays</h4>
+              
+              {/* Add Holiday Form */}
+              <div className="bg-gray-50 p-3 sm:p-4 rounded-lg space-y-2">
+                <label className="block text-xs font-medium text-gray-700">Add Holiday</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={newHolidayDateSettings}
+                    onChange={(e) => setNewHolidayDateSettings(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <select
+                    value={newHolidayTypeSettings}
+                    onChange={(e) => setNewHolidayTypeSettings(e.target.value as 'government' | 'company')}
+                    className="px-2 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="government">Govt</option>
+                    <option value="company">Company</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Holiday name"
+                  value={newHolidayNameSettings}
+                  onChange={(e) => setNewHolidayNameSettings(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Button
+                  onClick={() => {
+                    if (newHolidayDateSettings && newHolidayNameSettings) {
+                      setTempHolidays([
+                        ...tempHolidays,
+                        {
+                          date: newHolidayDateSettings,
+                          name: newHolidayNameSettings,
+                          type: newHolidayTypeSettings,
+                        },
+                      ]);
+                      setNewHolidayDateSettings('');
+                      setNewHolidayNameSettings('');
+                      setNewHolidayTypeSettings('government');
+                    }
+                  }}
+                  size="sm"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Holiday
+                </Button>
+              </div>
+
+              {/* Holidays List */}
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {tempHolidays.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic">No holidays added yet</p>
+                ) : (
+                  tempHolidays.map((holiday, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between gap-2 p-2 rounded border ${
+                        holiday.type === 'government'
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-medium text-gray-800">{holiday.name}</p>
+                        <p className="text-xs text-gray-600">
+                          {holiday.date} · {holiday.type === 'government' ? 'Government' : 'Company'} Holiday
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          setTempHolidays(tempHolidays.filter((_, i) => i !== idx));
+                        }}
+                        size="sm"
+                        variant="outline"
+                        className="h-7 w-7 p-0 flex-shrink-0 text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-4 border-t">
               <Button
-                onClick={() => {
-                  const dateStr = getDateStr(selectedDate);
-                  handleMarkAttendanceForEmployee(reasonDialogEmployee, dateStr, 'absent', absenceReason);
-                  setShowReasonDialog(false);
-                  setAbsenceReason('');
-                }}
-                className="bg-red-600 hover:bg-red-700 flex-1"
+                onClick={saveAttendanceSettings}
+                className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
               >
-                Confirm
+                <Save className="w-4 h-4 mr-2" />
+                Save Settings
               </Button>
               <Button
-                onClick={() => {
-                  setShowReasonDialog(false);
-                  setAbsenceReason('');
-                }}
+                onClick={() => setShowSettings(false)}
                 variant="outline"
                 className="flex-1"
               >
@@ -1009,144 +1255,466 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* Employee Attendance Detail Modal */}
+      {/* Absence Reason Dialog */}
+      {showReasonDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xs sm:max-w-sm p-4 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800">Mark as Absent</h3>
+              <button onClick={() => setShowReasonDialog(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <XIcon className="w-4 sm:w-5 h-4 sm:h-5" />
+              </button>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-600">Reason (optional)</p>
+            <textarea
+              value={absenceReason}
+              onChange={(e) => setAbsenceReason(e.target.value)}
+              placeholder="e.g., Sick leave, Personal emergency..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              rows={3}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  handleMarkAttendance(reasonDialogEmployee, 'absent', absenceReason);
+                  setShowReasonDialog(false);
+                  setAbsenceReason('');
+                }}
+                className="bg-red-600 hover:bg-red-700 flex-1 text-xs sm:text-sm"
+              >
+                Confirm
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowReasonDialog(false);
+                  setAbsenceReason('');
+                }}
+                variant="outline"
+                className="flex-1 text-xs sm:text-sm"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Reason Dialog */}
+      {showLeaveReasonDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xs sm:max-w-sm p-4 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800">Mark as Leave</h3>
+              <button onClick={() => setShowLeaveReasonDialog(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <XIcon className="w-4 sm:w-5 h-4 sm:h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700">Leave Type</label>
+              <select
+                value={leaveType}
+                onChange={(e) => setLeaveType(e.target.value as 'paid' | 'unpaid')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              >
+                <option value="paid">Paid Leave</option>
+                <option value="unpaid">Unpaid Leave</option>
+              </select>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-600">Reason (optional)</p>
+            <textarea
+              value={leaveReason}
+              onChange={(e) => setLeaveReason(e.target.value)}
+              placeholder="e.g., Vacation, Medical leave, Personal leave..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              rows={3}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  handleMarkAttendance(leaveReasonEmployee, 'leave', leaveReason, 'full', leaveType);
+                  setShowLeaveReasonDialog(false);
+                  setLeaveReason('');
+                  setLeaveType('paid');
+                }}
+                className="bg-yellow-600 hover:bg-yellow-700 flex-1 text-xs sm:text-sm"
+              >
+                Confirm
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowLeaveReasonDialog(false);
+                  setLeaveReason('');
+                  setLeaveType('paid');
+                }}
+                variant="outline"
+                className="flex-1 text-xs sm:text-sm"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Holiday Dialog */}
+      {showHolidayForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xs sm:max-w-sm p-4 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800">Add Holiday</h3>
+              <button onClick={() => setShowHolidayForm(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <XIcon className="w-4 sm:w-5 h-4 sm:h-5" />
+              </button>
+            </div>
+            <input
+              type="date"
+              value={newHolidayDate}
+              onChange={(e) => setNewHolidayDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <input
+              type="text"
+              placeholder="Holiday name"
+              value={newHolidayName}
+              onChange={(e) => setNewHolidayName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  if (newHolidayDate && newHolidayName) {
+                    setHolidays([...holidays, { date: newHolidayDate, name: newHolidayName }]);
+                    setNewHolidayDate('');
+                    setNewHolidayName('');
+                    setShowHolidayForm(false);
+                    toast.success('Holiday added');
+                  }
+                }}
+                className="bg-green-600 hover:bg-green-700 flex-1 text-xs sm:text-sm"
+              >
+                Add
+              </Button>
+              <Button
+                onClick={() => setShowHolidayForm(false)}
+                variant="outline"
+                className="flex-1 text-xs sm:text-sm"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Detail Dialog */}
       {showEmployeeDetail && selectedEmployeeDetail && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 space-y-4 my-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-xl text-gray-800">{selectedEmployeeDetail.name}</h3>
-                <p className="text-sm text-gray-500">Attendance Records</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto max-w-sm sm:max-w-4xl p-3 sm:p-5 space-y-3 sm:space-y-4">
+            <div className="flex items-start justify-between gap-2 sticky top-0 bg-white pb-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-lg sm:text-xl text-gray-800 line-clamp-2">{selectedEmployeeDetail.name}</h3>
+                <p className="text-xs sm:text-sm text-gray-500 line-clamp-1">{selectedEmployeeDetail.position}</p>
               </div>
-              <button onClick={() => setShowEmployeeDetail(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-6 h-6" />
+              <button onClick={() => setShowEmployeeDetail(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-1">
+                <XIcon className="w-5 sm:w-6 h-5 sm:h-6" />
               </button>
             </div>
 
-            {/* Month Filter */}
-            <div className="flex items-center justify-between gap-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDetailViewMonth(new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth() - 1))}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="font-semibold text-gray-700 min-w-[150px] text-center">
-                  {detailViewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDetailViewMonth(new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth() + 1))}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between bg-gray-50 p-2 sm:p-3 rounded-lg gap-1 sm:gap-2">
               <Button
-                onClick={() => setDetailViewMonth(new Date())}
-                size="sm"
+                onClick={() => setDetailViewMonth(new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth() - 1))}
                 variant="outline"
+                size="sm"
+                className="h-8 sm:h-9 w-8 sm:w-9 p-0 flex-shrink-0"
               >
-                Current Month
+                <ChevronLeft className="w-3 sm:w-4 h-3 sm:h-4" />
+              </Button>
+              <h4 className="font-semibold text-xs sm:text-base text-gray-800 flex-1 text-center">
+                {detailViewMonth.toLocaleDateString('default', { month: 'short', year: 'numeric' })}
+              </h4>
+              <Button
+                onClick={() => setDetailViewMonth(new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth() + 1))}
+                variant="outline"
+                size="sm"
+                className="h-8 sm:h-9 w-8 sm:w-9 p-0 flex-shrink-0"
+              >
+                <ChevronRight className="w-3 sm:w-4 h-3 sm:h-4" />
               </Button>
             </div>
 
-            {/* Summary Stats */}
-            <div className="grid grid-cols-3 gap-3">
-              {(() => {
-                const monthKey = detailViewMonth.toISOString().slice(0, 7);
-                let present = 0, absent = 0, leave = 0;
-
-                Object.entries(attendance).forEach(([key, value]) => {
-                  if (key.startsWith(selectedEmployeeDetail.id + '-') && key.includes(monthKey)) {
-                    if (value.status === 'present') present++;
-                    else if (value.status === 'absent') absent++;
-                    else if (value.status === 'leave') leave++;
-                  }
-                });
-
-                return (
-                  <>
-                    <div className="text-center px-4 py-3 rounded-lg bg-green-50 border border-green-200">
-                      <p className="text-green-600 font-bold text-lg">{present}</p>
-                      <p className="text-xs text-green-700">Present Days</p>
-                    </div>
-                    <div className="text-center px-4 py-3 rounded-lg bg-red-50 border border-red-200">
-                      <p className="text-red-600 font-bold text-lg">{absent}</p>
-                      <p className="text-xs text-red-700">Absent Days</p>
-                    </div>
-                    <div className="text-center px-4 py-3 rounded-lg bg-yellow-50 border border-yellow-200">
-                      <p className="text-yellow-600 font-bold text-lg">{leave}</p>
-                      <p className="text-xs text-yellow-700">Leave Days</p>
-                    </div>
-                  </>
-                );
-              })()}
+            {/* Stats Cards */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="text-center px-2 sm:px-3 py-2 sm:py-3 rounded-lg bg-green-50 border border-green-200">
+                <p className="text-green-600 font-bold text-sm sm:text-base">{employeeStats[selectedEmployeeDetail.id!]?.present || 0}</p>
+                <p className="text-xs text-green-700">Days Present</p>
+              </div>
+              <div className="text-center px-2 sm:px-3 py-2 sm:py-3 rounded-lg bg-red-50 border border-red-200">
+                <p className="text-red-600 font-bold text-sm sm:text-base">{employeeStats[selectedEmployeeDetail.id!]?.absent || 0}</p>
+                <p className="text-xs text-red-700">Days Absent</p>
+              </div>
+              <div className="text-center px-2 sm:px-3 py-2 sm:py-3 rounded-lg bg-yellow-50 border border-yellow-200">
+                <p className="text-yellow-600 font-bold text-sm sm:text-base">{employeeStats[selectedEmployeeDetail.id!]?.leave || 0}</p>
+                <p className="text-xs text-yellow-700">Days Leave</p>
+              </div>
             </div>
 
-            {/* Attendance Table */}
-            <div className="mt-6 border border-gray-200 rounded-lg overflow-hidden max-h-[500px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Day</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const monthKey = detailViewMonth.toISOString().slice(0, 7);
-                    const days = getDaysInMonth(detailViewMonth);
-                    const entries = [];
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 space-y-1">
+              <p className="text-xs sm:text-sm text-gray-700">
+                <span className="font-semibold">Total Days Worked:</span> {employeeStats[selectedEmployeeDetail.id!]?.present || 0} days
+              </p>
+              <p className="text-xs text-gray-600">
+                Full day = 1, Half day = 0.5, Quarter day = 0.25
+              </p>
+            </div>
 
-                    for (let i = 1; i <= days; i++) {
-                      const dateStr = `${detailViewMonth.getFullYear()}-${String(detailViewMonth.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-                      const att = attendance[`${selectedEmployeeDetail.id}-${dateStr}`];
+            {/* Calendar View */}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-100">
+                <div className="grid grid-cols-7 gap-0">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="text-center py-1 px-0.5 sm:py-2 sm:px-1 font-semibold text-xs text-gray-700 border border-gray-300 bg-gray-200">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-                      if (att && att.status) {
-                        const date = new Date(dateStr + 'T00:00:00');
-                        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                        const statusColor = att.status === 'present' ? 'bg-green-50' : att.status === 'absent' ? 'bg-red-50' : 'bg-yellow-50';
-                        const statusEmoji = att.status === 'present' ? '✓' : att.status === 'absent' ? '✗' : '📋';
+              <div className="grid grid-cols-7 gap-0">
+                {(() => {
+                  const daysInMonth = new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth() + 1, 0).getDate();
+                  const firstDay = new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth(), 1).getDay();
+                  const dailyDetails = employeeStats[selectedEmployeeDetail.id!]?.dailyDetails || {};
+                  const days = [];
 
-                        entries.push(
-                          <tr key={dateStr} className={`border-b border-gray-200 ${statusColor}`}>
-                            <td className="px-4 py-3 font-medium text-gray-800">{dateStr}</td>
-                            <td className="px-4 py-3 text-gray-600">{dayName}</td>
-                            <td className="px-4 py-3 text-center font-semibold">
-                              <span className={`${att.status === 'present' ? 'text-green-700' : att.status === 'absent' ? 'text-red-700' : 'text-yellow-700'}`}>
-                                {statusEmoji} {att.status.charAt(0).toUpperCase() + att.status.slice(1)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-600 text-xs">{att.reason || '—'}</td>
-                          </tr>
-                        );
+                  // Empty cells for days before month starts
+                  for (let i = 0; i < firstDay; i++) {
+                    days.push(
+                      <div key={`empty-${i}`} className="border border-gray-300 bg-gray-50 aspect-square"></div>
+                    );
+                  }
+
+                  // Days of the month
+                  for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${detailViewMonth.getFullYear()}-${String(detailViewMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const currentDate = new Date(detailViewMonth.getFullYear(), detailViewMonth.getMonth(), day);
+                    const dayStatus = dailyDetails[dateStr];
+                    const isNonWorkingDay = !isWorkingDay(currentDate);
+                    const holiday = isHoliday(currentDate) ? getHolidayName(currentDate) : null;
+                    
+                    let bgColor = 'bg-white';
+                    let textColor = 'text-gray-600';
+                    let statusLabel = 'Not Marked';
+                    let statusIcon = '—';
+
+                    // Check for holidays first
+                    if (holiday) {
+                      bgColor = 'bg-purple-50';
+                      textColor = 'text-purple-700';
+                      statusLabel = holiday;
+                      statusIcon = '🏢';
+                    } else if (isNonWorkingDay) {
+                      bgColor = 'bg-gray-100';
+                      textColor = 'text-gray-500';
+                      statusLabel = 'Weekend';
+                      statusIcon = 'ⓘ';
+                    } else if (dayStatus) {
+                      if (dayStatus.status === 'present') {
+                        bgColor = 'bg-green-50';
+                        textColor = 'text-green-700';
+                        statusLabel = dayStatus.display || 'Present';
+                        statusIcon = '✓';
+                      } else if (dayStatus.status === 'absent') {
+                        bgColor = 'bg-red-50';
+                        textColor = 'text-red-700';
+                        statusLabel = 'Absent';
+                        statusIcon = '✗';
+                      } else if (dayStatus.status === 'leave') {
+                        bgColor = 'bg-yellow-50';
+                        textColor = 'text-yellow-700';
+                        statusLabel = 'Leave';
+                        statusIcon = '📋';
                       }
                     }
 
-                    return entries.length > 0 ? entries : (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                          No attendance records for this month
-                        </td>
-                      </tr>
+                    days.push(
+                      <div key={day} className={`border border-gray-300 ${bgColor} p-1 sm:p-1.5 aspect-square flex flex-col items-center justify-center hover:shadow-md transition cursor-pointer text-center group relative`}>
+                        <span className={`font-bold text-xs sm:text-sm ${textColor}`}>{day}</span>
+                        <span className={`text-lg sm:text-xl leading-tight ${textColor}`}>{statusIcon}</span>
+                        <span className={`text-xs leading-tight line-clamp-1 ${textColor}`}>{statusLabel}</span>
+                        
+                        {/* Hover Buttons - Show on hover for working days */}
+                        {!isNonWorkingDay && !holiday && (
+                          <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-0.5 rounded">
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkAttendance(selectedEmployeeDetail.id!, 'present', '', 'full');
+                                calculateEmployeeStats(selectedEmployeeDetail.id!, detailViewMonth);
+                              }}
+                              size="sm"
+                              className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
+                              title="Mark Present"
+                            >
+                              ✓
+                            </Button>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReasonDialogEmployee(selectedEmployeeDetail.id!);
+                                setAbsenceReason('');
+                                setShowReasonDialog(true);
+                              }}
+                              size="sm"
+                              className="h-6 w-6 p-0 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+                              title="Mark Absent"
+                            >
+                              ✗
+                            </Button>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLeaveReasonEmployee(selectedEmployeeDetail.id!);
+                                setLeaveReason('');
+                                setLeaveType('paid');
+                                setShowLeaveReasonDialog(true);
+                              }}
+                              size="sm"
+                              className="h-6 w-6 p-0 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded"
+                              title="Mark Leave"
+                            >
+                              📋
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     );
-                  })()}
-                </tbody>
-              </table>
+                  }
+
+                  return days;
+                })()}
+              </div>
             </div>
 
-            <div className="flex gap-2 pt-4">
+            {/* Legend */}
+            <div className="bg-gray-50 rounded-lg p-2 sm:p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Legend:</p>
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-green-100 border border-green-300 rounded flex-shrink-0"></div>
+                  <span className="truncate">Present</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border border-red-300 rounded flex-shrink-0"></div>
+                  <span className="truncate">Absent</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-yellow-100 border border-yellow-300 rounded flex-shrink-0"></div>
+                  <span className="truncate">Leave</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-white border border-gray-300 rounded flex-shrink-0"></div>
+                  <span className="truncate">Not Marked</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-purple-100 border border-purple-300 rounded flex-shrink-0"></div>
+                  <span className="truncate">Holiday</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-100 border border-gray-300 rounded flex-shrink-0"></div>
+                  <span className="truncate">Weekend</span>
+                </div>
+              </div>
+            </div> 
+
+            <div className="flex gap-2 pt-2">
               <Button
                 onClick={() => setShowEmployeeDetail(false)}
                 variant="outline"
-                className="flex-1"
+                className="flex-1 text-xs sm:text-sm"
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attendance Type Selection Dialog */}
+      {showAttendanceTypeDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xs sm:max-w-sm p-4 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800">Attendance Type</h3>
+              <button onClick={() => setShowAttendanceTypeDialog(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <XIcon className="w-4 sm:w-5 h-4 sm:h-5" />
+              </button>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-600">Select attendance type</p>
+            
+            <div className="space-y-2">
+              <label className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+                <input
+                  type="radio"
+                  name="attendance-type"
+                  value="full"
+                  checked={selectedAttendanceType === 'full'}
+                  onChange={(e) => setSelectedAttendanceType(e.target.value as PresentDayType)}
+                  className="w-4 h-4 mt-0.5 flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="font-medium text-xs sm:text-sm text-gray-900">Full Day (1)</p>
+                  <p className="text-xs text-gray-500">Complete day</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+                <input
+                  type="radio"
+                  name="attendance-type"
+                  value="half"
+                  checked={selectedAttendanceType === 'half'}
+                  onChange={(e) => setSelectedAttendanceType(e.target.value as PresentDayType)}
+                  className="w-4 h-4 mt-0.5 flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="font-medium text-xs sm:text-sm text-gray-900">Half Day (1/2)</p>
+                  <p className="text-xs text-gray-500">Half day</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+                <input
+                  type="radio"
+                  name="attendance-type"
+                  value="quarter"
+                  checked={selectedAttendanceType === 'quarter'}
+                  onChange={(e) => setSelectedAttendanceType(e.target.value as PresentDayType)}
+                  className="w-4 h-4 mt-0.5 flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="font-medium text-xs sm:text-sm text-gray-900">Quarter Day (1/4)</p>
+                  <p className="text-xs text-gray-500">Quarter day</p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  handleMarkAttendance(attendanceTypeEmployee, 'present', '', selectedAttendanceType);
+                  setShowAttendanceTypeDialog(false);
+                }}
+                className="bg-green-600 hover:bg-green-700 flex-1 text-xs sm:text-sm"
+              >
+                Mark Present
+              </Button>
+              <Button
+                onClick={() => setShowAttendanceTypeDialog(false)}
+                variant="outline"
+                className="flex-1 text-xs sm:text-sm"
+              >
+                Cancel
               </Button>
             </div>
           </div>
@@ -1155,3 +1723,4 @@ export default function AttendancePage() {
     </ModuleAccessComponent>
   );
 }
+

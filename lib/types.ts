@@ -217,6 +217,7 @@ export interface Employee {
   position: string;
   joiningDate: any;
   salary: number; // Base salary
+  jobStatus?: 'full-time' | 'part-time' | 'freelance'; // Job status
   photoURL?: string;
   status: 'active' | 'inactive';
   userId?: string; // Link to Users module (optional)

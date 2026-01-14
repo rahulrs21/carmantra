@@ -118,7 +118,7 @@ export default function CarTintingPage() {
                       </div>
                     </div>
                     <Button className="w-full bg-purple-600 hover:bg-purple-700" onClick={() => {
-                      setSelectedService(product.name + " - Car Tinting");
+                      setSelectedService(`(${product.name}) - Car Tinting`);
                       setIsModalOpen(true);
                     }}>
                       Select This Option

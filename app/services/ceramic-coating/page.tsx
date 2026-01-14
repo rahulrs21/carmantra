@@ -143,7 +143,7 @@ export default function CeramicCoatingPage() {
                         </div>
                       </div>
                       <Button className="w-full" onClick={() => {
-                        setSelectedService(product.name + " - Ceramic Coating");
+                        setSelectedService(`(${product.name}) - Ceramic Coating`);
                         setIsModalOpen(true);
                       }}>
                         Get Quote

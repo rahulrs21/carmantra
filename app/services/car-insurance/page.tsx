@@ -45,7 +45,7 @@ export default function CarInsurancePage() {
   ];
 
   const openModal = (service: string) => {
-    setSelectedService(service + ' - Car Insurance');
+    setSelectedService(`(${service}) - Car Insurance`);
     setIsModalOpen(true);
   };
 

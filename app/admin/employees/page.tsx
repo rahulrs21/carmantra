@@ -36,6 +36,7 @@ export default function EmployeesPage() {
     position: '',
     joiningDate: new Date().toISOString().split('T')[0],
     salary: '',
+    jobStatus: 'full-time' as 'full-time' | 'part-time' | 'freelance',
   });
 
   const isAdmin = currentRole === 'admin' || currentRole === 'manager';
@@ -101,6 +102,7 @@ export default function EmployeesPage() {
         position: employee.position,
         joiningDate: joiningDate.toISOString().split('T')[0],
         salary: employee.salary.toString(),
+        jobStatus: employee.jobStatus || 'full-time',
       });
     } else {
       setEditingEmployee(null);
@@ -112,6 +114,7 @@ export default function EmployeesPage() {
         position: '',
         joiningDate: new Date().toISOString().split('T')[0],
         salary: '',
+        jobStatus: 'full-time',
       });
     }
     setIsDialogOpen(true);
@@ -145,6 +148,7 @@ export default function EmployeesPage() {
         position: formData.position,
         joiningDate: Timestamp.fromDate(new Date(formData.joiningDate)),
         salary: parseFloat(formData.salary),
+        jobStatus: formData.jobStatus,
         status: 'active' as const,
         updatedAt: Timestamp.now(),
       };
@@ -429,6 +433,20 @@ export default function EmployeesPage() {
                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="jobStatus">Job Status *</Label>
+                  <Select value={formData.jobStatus} onValueChange={(value: any) => setFormData({ ...formData, jobStatus: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select job status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full-time">Full Time</SelectItem>
+                      <SelectItem value="part-time">Part Time</SelectItem>
+                      <SelectItem value="freelance">Freelance</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

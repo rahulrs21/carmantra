@@ -54,6 +54,8 @@ interface ReferralFormProps {
   jobCardNo?: string; // Job Card number for tracking
   referral?: Referral; // For edit mode
   onSuccess?: () => void;
+  onAddReferral?: (referralData: ReferralFormData) => void; // Callback when a new referral is added
+  onEditReferral?: (referralData: ReferralFormData) => void; // Callback when a referral is edited
   trigger?: React.ReactNode; // Custom trigger for edit button
   disabled?: boolean; // Disable add/edit for employee role
 }
@@ -63,6 +65,8 @@ export function ReferralForm({
   jobCardNo,
   referral,
   onSuccess,
+  onAddReferral,
+  onEditReferral,
   trigger,
   disabled = false,
 }: ReferralFormProps) {
@@ -123,6 +127,9 @@ export function ReferralForm({
           updatedAt: Timestamp.now(),
         });
 
+        // Call the onEditReferral callback
+        onEditReferral?.(formData);
+
         toast({
           title: 'Success',
           description: 'Referral updated successfully',
@@ -156,6 +163,9 @@ export function ReferralForm({
         });
 
         console.log('[ReferralForm] Referral added successfully');
+
+        // Call the onAddReferral callback
+        onAddReferral?.(formData);
 
         toast({
           title: 'Success',

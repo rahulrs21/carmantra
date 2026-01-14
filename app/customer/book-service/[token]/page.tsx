@@ -32,10 +32,12 @@ export default function CustomerBookingFormPage() {
 
   const [formData, setFormData] = useState({
     category: '',
+    subCategory: '',
     vehicleType: '',
     vehicleBrand: '',
     modelName: '',
     numberPlate: '',
+    color: '',
     fuelType: '',
     vinNumber: '',
     country: '',
@@ -47,6 +49,7 @@ export default function CustomerBookingFormPage() {
   const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
   const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
   const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
+  const [expandServiceDetails, setExpandServiceDetails] = useState(true);
 
   // Verify token and get lead data
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function CustomerBookingFormPage() {
         }
 
         const formDoc = formSnap.data();
-        
+
         // Check if form is already submitted
         if (formDoc.submitted) {
           setError('This form has already been submitted. Please contact support for updates.');
@@ -94,13 +97,25 @@ export default function CustomerBookingFormPage() {
         }
 
         const lead = leadSnap.data();
-        setLeadData({
+        const leadInfo: LeadData = {
           id: leadSnap.id,
           name: lead.name || '',
           email: lead.email || '',
           phone: lead.phone || '',
           service: lead.service || '',
-        });
+          mode: lead.mode || '',
+        };
+        setLeadData(leadInfo);
+
+        // Auto-populate service category and sub-category from lead.service
+        if (lead.service) {
+          const parsed = parseServiceField(lead.service);
+          setFormData(prev => ({
+            ...prev,
+            category: parsed.category,
+            subCategory: parsed.subCategory,
+          }));
+        }
       } catch (err: any) {
         safeConsoleError('Error verifying form:', err);
         setError('Error loading form. Please try again.');
@@ -129,6 +144,24 @@ export default function CustomerBookingFormPage() {
   const removeMulkiya = (index: number) => {
     setMulkiyaFiles((prev) => prev.filter((_, i) => i !== index));
     setMulkiyaPreview((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Helper function to parse service string format: (sub category) - Main category
+  const parseServiceField = (serviceString: string) => {
+    if (!serviceString) return { category: '', subCategory: '' };
+
+    // Match pattern: (sub category) - Main category
+    const match = serviceString.match(/\(([^)]*)\)\s*-\s*(.*)/);
+
+    if (match) {
+      return {
+        subCategory: match[1].trim(),
+        category: match[2].trim()
+      };
+    }
+
+    // If no match, treat entire string as category
+    return { category: serviceString, subCategory: '' };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -190,7 +223,7 @@ export default function CustomerBookingFormPage() {
       setShowSuccessModal(true);
       setTimeout(() => {
         router.push('/');
-      }, 5000);
+      }, 10000);
     } catch (err: any) {
       safeConsoleError('Error submitting form:', err);
       setSubmitStatus('Error submitting form. Please try again.');
@@ -227,41 +260,111 @@ export default function CustomerBookingFormPage() {
     );
   }
 
+  const serviceCategory = formData.category;
+  const [mainSubCategory, mainCategory] = serviceCategory.split(' - ');
+
+  console.log('The Main Category = ', mainCategory);
+  console.log('The Sub Category = ', mainSubCategory)
+
   return (
     <div className="min-h-screen relative bg-gradient-to-br from-orange-50 to-blue-50 py-8 pt-14 px-4">
-        <div className='bg-black min-h-[4em] absolute top-0 left-0 right-0'> 
+      <div className='bg-black min-h-[4em] absolute top-0 left-0 right-0'>
 
-        </div>
+      </div>
       <div className="max-w-2xl mx-auto relative z-10 pt-6">
         {/* Header */}
         <Card className="p-6 mb-6 border-2 border-orange-200">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Book Your Service</h1>
-          <p className="text-gray-600">Hi {leadData.name}, please fill in the details below</p>
+          <p className="text-gray-600">Hi <b>{leadData.name}</b>, please fill the vehicle details below</p>
           <div className="mt-4 space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Email:</span>
-              <span className="font-medium">{leadData.email}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Phone:</span>
-              <span className="font-medium">{leadData.phone}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Service you chosen:</span>
-              <span className="font-medium">{leadData.service || '—'}</span>
-            </div>
-            <div className='flex justify-between'>
-              <span className="text-gray-600">Service Mode:</span>
-              <span className="font-medium">
-                {leadData.mode ? (
-                  leadData.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
-                  leadData.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
-                  leadData.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
-                  leadData.mode
-                ) : '—'}
-              </span>
-            </div>
+
+
+            {/* Service Details Toggle */}
+            <button
+              type="button"
+              onClick={() => setExpandServiceDetails(!expandServiceDetails)}
+              className="w-full mt-4 flex items-center justify-between p-3 bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+            >
+              <span className="font-semibold text-orange-700">Service Details</span>
+              <svg
+                className={`w-5 h-5 text-orange-600 transition-transform duration-300 ${expandServiceDetails ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+
+            {/* Service Details Content */}
+            {expandServiceDetails && (
+              <div className='p-2 bg-orange-50 border border-gray-200 rounded mt-2 space-y-2'>
+
+
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Email:</span>
+                  <span className="font-medium">{leadData.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Phone:</span>
+                  <span className="font-medium">{leadData.phone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Service you chosen:</span>
+                  <span className="font-medium">{leadData.service || '—'}</span>
+                </div>
+                <div className='flex justify-between'>
+                  <span className="text-gray-600">Service Mode:</span>
+                  <span className="font-medium">
+                    {leadData.mode ? (
+                      leadData.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
+                        leadData.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                          leadData.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                            leadData.mode
+                    ) : '—'}
+                  </span>
+                </div>
+
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+                      <div>
+                  <label className="block text-sm   text-gray-700 mb-1">Service Category *</label>
+                  <select
+                    required
+                    value={mainCategory}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    disabled={!!leadData.service}
+                  >
+                    <option value="">Select Service</option>
+                    <option value="Paint Protection Film & Wrapping">Paint Protection Film & Wrapping</option>
+                    <option value="Ceramic Coating">Ceramic Coating</option>
+                    <option value="Car Tinting">Car Tinting</option>
+                    <option value="Car Wash">Car Wash</option>
+                    <option value="Car Polishing">Car Polishing</option>
+                    <option value="Car Insurance">Car Insurance</option>
+                    <option value="Car Passing">Car Passing</option>
+                    <option value="Pre-Purchase Inspection">Pre-Purchase Inspection</option>
+                    <option value="Instant Help">Instant Help</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm  text-gray-700 mb-1 text-right">Sub Category *</label>
+                  <input
+                    type="text"
+                    value={mainSubCategory}
+                    onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
+                    placeholder="e.g., Full Body, Door Panels"
+                    className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    disabled={!!leadData.service}
+                  />
+                </div>
+                </div>
+                
+              </div>
+            )}
           </div>
+
         </Card>
 
         {/* Form */}
@@ -276,11 +379,10 @@ export default function CustomerBookingFormPage() {
           )}
 
           {submitStatus && !submitting && (
-            <div className={`mb-4 p-4 rounded ${
-              submitStatus.includes('Error')
-                ? 'bg-red-50 text-red-800'
-                : 'bg-blue-50 text-blue-800'
-            }`}>
+            <div className={`mb-4 p-4 rounded ${submitStatus.includes('Error')
+              ? 'bg-red-50 text-red-800'
+              : 'bg-blue-50 text-blue-800'
+              }`}>
               {submitStatus}
             </div>
           )}
@@ -288,26 +390,8 @@ export default function CustomerBookingFormPage() {
           <form onSubmit={handleSubmit}>
             <fieldset disabled={submitting} className="space-y-6">
               {/* Service Category */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Service Category *</label>
-                <select
-                  required
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="">Select Service</option>
-                  <option value="ppf-wrapping">PPF Wrapping</option>
-                  <option value="ceramic-coating">Ceramic Coating</option>
-                  <option value="car-tinting">Car Tinting</option>
-                  <option value="car-wash">Car Wash</option>
-                  <option value="car-polishing">Car Polishing</option>
-                  <option value="car-insurance">Car Insurance</option>
-                  <option value="car-passing">Car Passing</option>
-                  <option value="pre-purchase-inspection">Pre-Purchase Inspection</option>
-                  <option value="instant-help">Instant Help</option>
-                </select>
-              </div>
+
+
 
               {/* Vehicle Details */}
               <div>
@@ -359,6 +443,16 @@ export default function CustomerBookingFormPage() {
                       value={formData.numberPlate}
                       onChange={(e) => setFormData({ ...formData, numberPlate: e.target.value })}
                       placeholder="e.g., ABC123"
+                      className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-2">Vehicle Color</label>
+                    <input
+                      type="text"
+                      value={formData.color}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      placeholder="e.g., Black, White, Silver"
                       className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>

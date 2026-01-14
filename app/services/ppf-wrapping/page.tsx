@@ -133,7 +133,7 @@ export default function PPFWrappingPage() {
                         </div>
                       </div>
                       <Button className="w-full" onClick={() => {
-                        setSelectedService(product.name + " - PPF & Wrapping");
+                        setSelectedService(`(${product.name}) - Paint Protection Film & Wrapping`);
                         setIsModalOpen(true);
                       }}>
                         Get Quote

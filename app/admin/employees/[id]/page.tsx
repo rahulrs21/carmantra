@@ -60,6 +60,8 @@ export default function EmployeeDetailPage() {
     department: '',
     position: '',
     joiningDate: '',
+    salary: '',
+    jobStatus: 'full-time' as 'full-time' | 'part-time' | 'freelance',
     status: 'active' as 'active' | 'inactive',
   });
 
@@ -104,6 +106,8 @@ export default function EmployeeDetailPage() {
             department: data.department,
             position: data.position,
             joiningDate: joiningDate.toISOString().split('T')[0],
+            salary: data.salary ? String(data.salary) : '',
+            jobStatus: data.jobStatus || 'full-time',
             status: data.status as 'active' | 'inactive',
           });
 
@@ -174,18 +178,22 @@ export default function EmployeeDetailPage() {
 
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'employees', employeeId), {
+      const updateData = {
         name: formData.name,
-        email: formData.email || null,
-        phone: formData.phone || null,
+        email: formData.email || undefined,
+        phone: formData.phone || undefined,
         department: formData.department,
         position: formData.position,
         joiningDate: Timestamp.fromDate(new Date(formData.joiningDate)),
+        salary: formData.salary ? Number(formData.salary) : null,
+        jobStatus: formData.jobStatus,
         status: formData.status,
         updatedAt: Timestamp.now(),
-      });
+      };
 
-      setEmployee(prev => prev ? { ...prev, ...formData } : null);
+      await updateDoc(doc(db, 'employees', employeeId), updateData);
+
+      setEmployee(prev => prev ? { ...prev, ...updateData } as Employee : null);
       setEditing(false);
       toast.success('Employee updated successfully');
     } catch (error) {
@@ -596,6 +604,22 @@ export default function EmployeeDetailPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Job Status *</label>
+                        <Select value={formData.jobStatus} onValueChange={(value: any) => setFormData({ ...formData, jobStatus: value })}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select job status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full-time">Full Time</SelectItem>
+                            <SelectItem value="part-time">Part Time</SelectItem>
+                            <SelectItem value="freelance">Freelance</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Joining Date *</label>
                         <Input
                           type="date"
@@ -603,6 +627,18 @@ export default function EmployeeDetailPage() {
                           onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
                         />
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Salary (AED)</label>
+                        <Input
+                          type="number"
+                          value={formData.salary}
+                          onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                          placeholder="e.g., 5000"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
                         <Select value={formData.status} onValueChange={(value: any) => setFormData({ ...formData, status: value })}>
@@ -615,6 +651,7 @@ export default function EmployeeDetailPage() {
                           </SelectContent>
                         </Select>
                       </div>
+ 
                     </div>
 
                     <div className="flex gap-2 pt-4">
@@ -657,10 +694,20 @@ export default function EmployeeDetailPage() {
                       <p className="text-lg font-medium text-gray-900">{employee.position}</p>
                     </div>
                     <div className="border-l-4 border-indigo-600 pl-4">
+                      <p className="text-sm text-gray-600">Job Status</p>
+                      <p className="text-lg font-medium text-gray-900">
+                        {employee.jobStatus === 'full-time' ? 'Full Time' : employee.jobStatus === 'part-time' ? 'Part Time' : 'Freelance'}
+                      </p>
+                    </div>
+                    <div className="border-l-4 border-indigo-600 pl-4">
                       <p className="text-sm text-gray-600">Joining Date</p>
                       <p className="text-lg font-medium text-gray-900">
                         {employee.joiningDate?.toDate?.()?.toLocaleDateString?.() || new Date(employee.joiningDate).toLocaleDateString()}
                       </p>
+                    </div>
+                    <div className="border-l-4 border-indigo-600 pl-4">
+                      <p className="text-sm text-gray-600">Salary</p>
+                      <p className="text-lg font-medium text-gray-900">{employee.salary ? `AED ${Number(employee.salary).toLocaleString()}` : '—'}</p>
                     </div>
                     <div className="border-l-4 border-indigo-600 pl-4">
                       <p className="text-sm text-gray-600">Status</p>

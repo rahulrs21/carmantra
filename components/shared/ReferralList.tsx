@@ -23,6 +23,7 @@ interface ReferralListProps {
   onDelete: (referralId: string) => Promise<void>;
   disabled?: boolean;
   onAddSuccess?: () => void;
+  onEditReferral?: (referralData: any) => Promise<void>;
 }
 
 export function ReferralList({
@@ -33,6 +34,7 @@ export function ReferralList({
   onDelete,
   disabled = false,
   onAddSuccess,
+  onEditReferral,
 }: ReferralListProps) {
   const { toast } = useToast();
 
@@ -125,6 +127,7 @@ export function ReferralList({
                           serviceId={serviceId}
                           referral={referral}
                           onSuccess={onRefresh}
+                          onEditReferral={onEditReferral}
                           trigger={
                             <Button size="sm" variant="outline" className="gap-1">
                               <Pencil size={14} />
@@ -151,9 +154,9 @@ export function ReferralList({
 
         {referrals.length > 0 && (
           <div className="border-t pt-4 flex justify-end">
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Total Commission</p>
-              <p className="text-2xl font-bold text-purple-600">AED {totalCommission.toLocaleString('en-AE')}</p>
+            <div className="flex justify-between items-center gap-3 text-right">
+              <p className="text-sm text-gray-600">Total Commission:</p>
+              <p className="text-xl font-bold text-purple-600">AED {totalCommission.toLocaleString('en-AE')}</p>
             </div>
           </div>
         )}

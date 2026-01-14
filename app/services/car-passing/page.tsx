@@ -45,7 +45,7 @@ export default function CarPassingPage() {
   ];
 
   const openModal = (service: string) => {
-    setSelectedService(service + ' - Car Passing');
+    setSelectedService(`(${service}) - Car Passing`);
     setIsModalOpen(true);
   };
 

@@ -137,10 +137,12 @@ export default function BookServiceDetails() {
     city: string;
     address: string;
     source: string;
+    mode: string;
     vehicleType: string;
     vehicleBrand: string;
     modelName: string;
     numberPlate: string;
+    color: string;
     fuelType: string;
     vinNumber: string;
     mulkiyaUrl: string;
@@ -162,10 +164,12 @@ export default function BookServiceDetails() {
     city: '',
     address: '',
     source: '',
+    mode: '',
     vehicleType: '',
     vehicleBrand: '',
     modelName: '',
     numberPlate: '',
+    color: '',
     fuelType: '',
     vinNumber: '',
     mulkiyaUrl: '',
@@ -177,6 +181,7 @@ export default function BookServiceDetails() {
     vehicleBrand: '',
     modelName: '',
     numberPlate: '',
+    color: '',
     fuelType: '',
     vinNumber: '',
     category: '',
@@ -423,6 +428,28 @@ export default function BookServiceDetails() {
     return formatDateTime12(parsed);
   }
 
+  // Activity logging function
+  async function logActivity(activityType: string, details?: string) {
+    if (!id) return;
+    try {
+      const actorId = user?.uid || 'unknown';
+      const actorEmail = user?.email || 'unknown';
+      const actorName = displayName || actorEmail;
+
+      await addDoc(collection(db, 'serviceActivities'), {
+        serviceBookingId: id,
+        activityType,
+        details: details || '',
+        createdAt: Timestamp.now(),
+        createdBy: actorId,
+        createdByEmail: actorEmail,
+        createdByName: actorName,
+      });
+    } catch (err: any) {
+      safeConsoleError('Activity logging error', err);
+    }
+  }
+
   useEffect(() => {
     if (!id) return;
     (async () => {
@@ -456,10 +483,12 @@ export default function BookServiceDetails() {
           city: data.city || '',
           address: data.address || '',
           source: detectedSource,
+          mode: data.mode || '',
           vehicleType: data.vehicleType || '',
           vehicleBrand: data.vehicleBrand || '',
           modelName: data.modelName || '',
           numberPlate: data.numberPlate || '',
+          color: data.color || '',
           fuelType: data.fuelType || '',
           vinNumber: data.vinNumber || '',
           mulkiyaUrl: data.mulkiyaUrl || '',
@@ -527,6 +556,28 @@ export default function BookServiceDetails() {
       }
     );
 
+    return () => unsubscribe();
+  }, [id]);
+
+  const [activities, setActivities] = useState<any[]>([]);
+
+  // Fetch activities for this service
+  useEffect(() => {
+    if (!id) return;
+    const activitiesQuery = query(
+      collection(db, 'serviceActivities'),
+      where('serviceBookingId', '==', id)
+    );
+    const unsubscribe = onSnapshot(
+      activitiesQuery,
+      (snap) => {
+        const activitiesList = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+        setActivities(activitiesList);
+      },
+      (err) => {
+        safeConsoleError('Activities fetch error', err);
+      }
+    );
     return () => unsubscribe();
   }, [id]);
 
@@ -636,6 +687,14 @@ export default function BookServiceDetails() {
       };
 
       await addDoc(collection(db, 'tasks'), taskData);
+      
+      // Log activity for task assignment
+      const assignedList = assignedNames.join(', ');
+      await logActivity(
+        'Assigned Tasks',
+        `Tasks assigned to: ${assignedList} | Priority: ${newTaskData.priority} | Category: ${newTaskData.category}`
+      );
+      
       setStatus('✓ Task created successfully');
       setShowAddTaskModal(false);
       setNewTaskData({
@@ -876,6 +935,7 @@ export default function BookServiceDetails() {
       setPreVideos([]);
       setPreImagePreview([]);
       setPreVideoPreview([]);
+      await logActivity('Pre-Inspection Added', `Images: ${uploadedImages.length}, Videos: ${uploadedVideos.length}`);
       setStatus('✓ Pre-inspection saved');
     } catch (err: any) {
       safeConsoleError('Pre-inspection save error', err);
@@ -1171,6 +1231,7 @@ export default function BookServiceDetails() {
         vehicleBrand: editForm.vehicleBrand,
         modelName: editForm.modelName,
         numberPlate: editForm.numberPlate,
+        color: editForm.color,
         fuelType: editForm.fuelType,
         vinNumber: editForm.vinNumber,
       };
@@ -1217,6 +1278,7 @@ export default function BookServiceDetails() {
       setService((prev: any) => prev ? { ...prev, ...payload } : prev);
       setStatus('✓ Details updated successfully');
       setEditing(false);
+      await logActivity('Customer Details Updated', `${service?.customerType === 'b2b' ? 'Company: ' + editForm.companyName : 'Customer: ' + editForm.firstName + ' ' + editForm.lastName}`);
       setTimeout(() => setStatus(null), 3000);
     } catch (err: any) {
       safeConsoleError('Update error', err);
@@ -1234,6 +1296,7 @@ export default function BookServiceDetails() {
       vehicleBrand: '',
       modelName: '',
       numberPlate: '',
+      color: '',
       fuelType: '',
       vinNumber: '',
       category: '',
@@ -1249,6 +1312,7 @@ export default function BookServiceDetails() {
       vehicleBrand: vehicle.vehicleBrand || '',
       modelName: vehicle.modelName || '',
       numberPlate: vehicle.numberPlate || '',
+      color: vehicle.color || '',
       fuelType: vehicle.fuelType || '',
       vinNumber: vehicle.vinNumber || '',
       category: vehicle.category || '',
@@ -1280,6 +1344,7 @@ export default function BookServiceDetails() {
           vehicleBrand: vehicleEditForm.vehicleBrand,
           modelName: vehicleEditForm.modelName,
           numberPlate: vehicleEditForm.numberPlate,
+          color: vehicleEditForm.color,
           fuelType: vehicleEditForm.fuelType,
           vinNumber: vehicleEditForm.vinNumber,
           category: vehicleEditForm.category,
@@ -1309,6 +1374,7 @@ export default function BookServiceDetails() {
       setStatus('✓ Vehicle updated successfully');
       setEditingVehicleIndex(null);
       resetVehicleEditForm();
+      await logActivity('Vehicle Details Updated', `Vehicle: ${vehicleEditForm.vehicleBrand} ${vehicleEditForm.modelName} - ${vehicleEditForm.numberPlate}`);
       setTimeout(() => setStatus(null), 3000);
     } catch (err: any) {
       safeConsoleError('Vehicle update error', err);
@@ -1328,6 +1394,7 @@ export default function BookServiceDetails() {
       poRef: service.poRef || '',
       companyVat: service.companyVat || '',
       servicesHistory: service.servicesHistory || '',
+      
       firstName: service.firstName || '',
       lastName: service.lastName || '',
       mobileNo: service.mobileNo || '',
@@ -1337,10 +1404,12 @@ export default function BookServiceDetails() {
       city: service.city || '',
       address: service.address || '',
       source: detectedSource,
+      mode: service.mode || '',
       vehicleType: service.vehicleType || '',
       vehicleBrand: service.vehicleBrand || '',
       modelName: service.modelName || '',
       numberPlate: service.numberPlate || '',
+      color: service.color || '',
       fuelType: service.fuelType || '',
       vinNumber: service.vinNumber || '',
       mulkiyaUrl: service.mulkiyaUrl || '',
@@ -1380,10 +1449,12 @@ export default function BookServiceDetails() {
           ...expenseData,
           updatedAt: Timestamp.now(),
         });
+        await logActivity('Expense Updated', `${expenseFormData.category} - AED ${expenseFormData.amount}`);
         setStatus('✓ Expense updated successfully');
       } else {
         // Add new expense
         await addDoc(collection(db, 'expenses'), expenseData);
+        await logActivity('Expense Added', `${expenseFormData.category} - AED ${expenseFormData.amount}`);
         setStatus('✓ Expense added successfully');
       }
 
@@ -1411,10 +1482,12 @@ export default function BookServiceDetails() {
 
     try {
       setStatus('Deleting expense...');
+      const expenseToDelete = expenses.find(e => e.id === expenseId);
       await updateDoc(doc(db, 'expenses', expenseId), {
         deletedAt: Timestamp.now(),
         deletedBy: user?.uid,
       });
+      await logActivity('Expense Deleted', `${expenseToDelete?.category} - AED ${expenseToDelete?.amount}`);
       setStatus('✓ Expense deleted successfully');
       setTimeout(() => setStatus(null), 3000);
     } catch (err: any) {
@@ -1583,50 +1656,83 @@ export default function BookServiceDetails() {
     return info?.email || uid;
   };
 
+  const getUserInfo = (uid?: string, explicitEmail?: string, explicitName?: string): { name: string; email: string } => {
+    const email = explicitEmail || (uid ? (userInfo[uid]?.email || uid) : '-');
+    const name = explicitName || (uid ? (userInfo[uid]?.name || email) : '-');
+    return { name, email };
+  };
+
   const historyItems = [
     service?.createdAt ? {
       label: 'Booking Created',
       user: userLabel(service?.createdBy as string, (service as any)?.createdByEmail),
+      userName: service?.createdByName || (service?.createdBy ? userInfo[service.createdBy]?.name : undefined),
       time: formatHistoryDate(service.createdAt),
+      timestamp: service.createdAt?.seconds ? service.createdAt.seconds * 1000 : new Date(service.createdAt).getTime(),
     } : null,
     service?.rescheduledAt ? {
       label: 'Service Rescheduled',
       user: userLabel(service?.rescheduledBy as string, (service as any)?.rescheduledByEmail),
+      userName: (service as any)?.rescheduledByName || (service?.rescheduledBy ? userInfo[service.rescheduledBy]?.name : undefined),
       time: formatHistoryDate((service as any)?.rescheduledAt),
       detail: `Rescheduled to ${formatDateTime12(service?.scheduledDate)}`,
+      timestamp: (service as any)?.rescheduledAt?.seconds ? (service as any).rescheduledAt.seconds * 1000 : new Date((service as any).rescheduledAt).getTime(),
     } : null,
     quotation?.createdAt ? {
       label: 'Quotation Created',
       user: userLabel(quotation?.createdBy as string, (quotation as any)?.createdByEmail) || userLabel(service?.createdBy as string, (service as any)?.createdByEmail),
+      userName: (quotation as any)?.createdByName || quotation?.createdBy ? userInfo[quotation.createdBy]?.name : undefined,
       time: formatHistoryDate(quotation?.createdAt),
+      timestamp: quotation?.createdAt?.seconds ? quotation.createdAt.seconds * 1000 : new Date(quotation.createdAt).getTime(),
     } : null,
     quotation?.updatedAt ? {
       label: 'Quotation Updated',
       user: userLabel(quotation?.updatedBy as string, (quotation as any)?.updatedByEmail),
+      userName: (quotation as any)?.updatedByName || (quotation?.updatedBy ? userInfo[quotation.updatedBy]?.name : undefined),
       time: formatHistoryDate((quotation as any)?.updatedAt),
+      timestamp: (quotation as any)?.updatedAt?.seconds ? (quotation as any).updatedAt.seconds * 1000 : new Date((quotation as any).updatedAt).getTime(),
     } : null,
     quotation?.status === 'accepted' ? {
       label: 'Quotation Accepted',
       user: userLabel((quotation as any)?.acceptedBy as string, (quotation as any)?.acceptedByEmail),
+      userName: (quotation as any)?.acceptedByName || ((quotation as any)?.acceptedBy ? userInfo[(quotation as any).acceptedBy]?.name : undefined),
       time: formatHistoryDate((quotation as any)?.acceptedAt),
+      timestamp: (quotation as any)?.acceptedAt?.seconds ? (quotation as any).acceptedAt.seconds * 1000 : new Date((quotation as any).acceptedAt).getTime(),
     } : null,
     service?.invoiceId ? {
       label: 'Invoice Generated',
       user: userLabel(service?.completedBy as string, (service as any)?.completedByEmail),
+      userName: (service as any)?.completedByName || (service?.completedBy ? userInfo[service.completedBy]?.name : undefined),
       time: formatHistoryDate(service?.completedAt || service?.updatedAt),
+      timestamp: service?.completedAt?.seconds ? service.completedAt.seconds * 1000 : new Date(service?.completedAt || service?.updatedAt).getTime(),
     } : null,
     service?.status === 'completed' ? {
       label: 'Work Completed',
       user: userLabel(service?.completedBy as string, (service as any)?.completedByEmail),
+      userName: (service as any)?.completedByName || (service?.completedBy ? userInfo[service.completedBy]?.name : undefined),
       time: formatHistoryDate(service?.completedAt || service?.updatedAt),
+      timestamp: service?.completedAt?.seconds ? service.completedAt.seconds * 1000 : new Date(service?.completedAt || service?.updatedAt).getTime(),
     } : null,
     service?.status === 'cancelled' ? {
       label: 'Booking Cancelled',
       user: userLabel(service?.cancelledBy as string, (service as any)?.cancelledByEmail),
+      userName: (service as any)?.cancelledByName || (service?.cancelledBy ? userInfo[service.cancelledBy]?.name : undefined),
       time: formatHistoryDate((service as any)?.cancelledAt || service?.updatedAt),
       detail: `Reason: ${(service as any)?.cancelReason || 'No reason provided'}`,
+      timestamp: (service as any)?.cancelledAt?.seconds ? (service as any).cancelledAt.seconds * 1000 : new Date((service as any)?.cancelledAt || service?.updatedAt).getTime(),
     } : null,
-  ].filter((item) => item && item.time) as Array<{ label: string; user: string; time: string; detail?: string }>;
+    ...activities.map(activity => ({
+      label: activity.activityType,
+      user: userLabel(activity.createdBy, activity.createdByEmail),
+      userName: activity.createdByName,
+      time: formatHistoryDate(activity.createdAt),
+      detail: activity.details || undefined,
+      timestamp: activity.createdAt?.seconds ? activity.createdAt.seconds * 1000 : new Date(activity.createdAt).getTime(),
+    })),
+  ].filter((item) => item && item.time) as Array<{ label: string; user: string; userName?: string; time: string; detail?: string; timestamp: number }>;
+  
+  // Sort history items by timestamp in ascending order (oldest first)
+  historyItems.sort((a, b) => a.timestamp - b.timestamp);
 
   if (loading) return <div className="p-6 text-center">Loading...</div>;
   if (!service) return <div className="p-6 text-center text-red-600">Service not found</div>;
@@ -1715,6 +1821,23 @@ export default function BookServiceDetails() {
                 <span className="text-gray-600">Category:</span>
                 <span className="font-medium">{service.category}</span>
               </div>
+              {service.subCategory && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Sub-Category:</span>  
+                  <span className="font-medium">{service.subCategory}</span>
+                </div>
+              )}
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Service Mode:</span>
+                <span className="font-medium">
+                  {service.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
+                   service.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                   service.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                   service.mode || '—'}
+                </span>
+              </div>
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Source:</span>
                 <span className="font-medium">{sourceLabel}</span>
@@ -2138,6 +2261,16 @@ export default function BookServiceDetails() {
                     />
                   </div>
                   <div>
+                    <label className="block text-xs text-gray-600 mb-1">Vehicle Color</label>
+                    <input
+                      type="text"
+                      value={editForm.color}
+                      onChange={(e) => setEditForm({ ...editForm, color: e.target.value })}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                      placeholder="e.g., Black, White, Silver"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
                     <select
                       value={editForm.fuelType}
@@ -2360,6 +2493,16 @@ export default function BookServiceDetails() {
                                   />
                                 </div>
                                 <div>
+                                  <label className="block text-xs text-gray-600 mb-1">Vehicle Color</label>
+                                  <input
+                                    type="text"
+                                    value={vehicleEditForm.color}
+                                    onChange={(e) => setVehicleEditForm({ ...vehicleEditForm, color: e.target.value })}
+                                    className="w-full border rounded px-2 py-1 text-sm"
+                                    placeholder="e.g., Black, White, Silver"
+                                  />
+                                </div>
+                                <div>
                                   <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
                                   <select
                                     value={vehicleEditForm.fuelType}
@@ -2411,6 +2554,11 @@ export default function BookServiceDetails() {
                                   <span className="text-gray-600">Number Plate:</span>
                                   <span className="font-medium">{vehicle.numberPlate || '-'}</span>
                                 </div>
+                                <div>
+                                  <span className='text-gray-600'>Vehicle Color:</span>
+                                  <span className="font-medium">{vehicle.color || '-'}</span>
+                                </div>
+
                                 <div className="flex justify-between">
                                   <span className="text-gray-600">Fuel Type:</span>
                                   <span className="font-medium">{vehicle.fuelType || '-'}</span>
@@ -2466,8 +2614,16 @@ export default function BookServiceDetails() {
                       <span className="font-medium">{service.numberPlate}</span>
                     </div>
                     <div className="flex justify-between">
+                      <span className="text-gray-600">Vehicle color:</span>
+                      <span className="font-medium">{service.color || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-600">VIN:</span>
                       <span className="font-medium">{service.vinNumber || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Fuel Type:</span>
+                      <span className="font-medium">{service.fuelType}</span>
                     </div>
                     <div className="flex justify-between items-center gap-3">
                       <span className="text-gray-600">Mulkiya:</span>
@@ -2490,10 +2646,7 @@ export default function BookServiceDetails() {
                         ))}
                       </div>
                     ) : null}
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Fuel Type:</span>
-                      <span className="font-medium">{service.fuelType}</span>
-                    </div>
+                    
                   </>
                 )
               )}
@@ -2886,6 +3039,7 @@ export default function BookServiceDetails() {
                                 ...service,
                                 preInspection: { ...(service.preInspection || {}), message: '' }
                               });
+                              await logActivity('Pre-Inspection Note Removed');
                               setStatus('Removed pre-inspection note');
                             } catch (err) {
                               safeConsoleError('Remove pre-inspection note error', err);
@@ -3172,6 +3326,20 @@ export default function BookServiceDetails() {
                       </select>
                     </div>
 
+                    {/* Description */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        📝 Description
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="e.g. Engine oil, brake pads, etc."
+                        value={expenseFormData.description}
+                        onChange={(e) => setExpenseFormData({ ...expenseFormData, description: e.target.value })}
+                        className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                      />
+                    </div>
+
                     {/* Amount & Quantity Row */}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -3201,19 +3369,7 @@ export default function BookServiceDetails() {
                       </div>
                     </div>
 
-                    {/* Description */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                        📝 Description
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="e.g. Engine oil, brake pads, etc."
-                        value={expenseFormData.description}
-                        onChange={(e) => setExpenseFormData({ ...expenseFormData, description: e.target.value })}
-                        className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
-                      />
-                    </div>
+                    
 
                     {/* Vendor & Date Row */}
                     <div className="grid grid-cols-2 gap-4">
@@ -3403,6 +3559,9 @@ export default function BookServiceDetails() {
                       setShowReferralForm(false);
                       setShowReferralList(true);
                     }}
+                    onAddReferral={async (referralData) => {
+                      await logActivity('Referral Added', `${referralData.personName} - AED ${referralData.commission}`);
+                    }}
                     trigger={
                       <Button
                         size="sm"
@@ -3425,7 +3584,16 @@ export default function BookServiceDetails() {
                   onRefresh={() => {
                     // Referrals will auto-refresh via the hook
                   }}
-                  onDelete={deleteReferral}
+                  onDelete={async (referralId: string) => {
+                    const referral = referrals.find(r => r.id === referralId);
+                    await deleteReferral(referralId);
+                    if (referral) {
+                      await logActivity('Referral Deleted', `${referral.personName} - AED ${referral.commission}`);
+                    }
+                  }}
+                  onEditReferral={async (referralData) => {
+                    await logActivity('Referral Edited', `${referralData.personName} - AED ${referralData.commission}`);
+                  }}
                   disabled={isEmployee || service?.status === 'completed' || service?.status === 'cancelled'}
                 />
               )}
@@ -3618,7 +3786,12 @@ export default function BookServiceDetails() {
                       <div className="w-2 h-2 rounded-full bg-green-500" aria-hidden />
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{item.label}</p>
-                        <p className="text-xs text-gray-600 truncate">By: {item.user}</p>
+                        <p className="text-xs text-gray-600">
+                          By: <span className="font-medium text-gray-700">{item.userName || item.user}</span>
+                          {item.userName && item.user !== item.userName && (
+                            <span className="text-gray-500"> ({item.user})</span>
+                          )}
+                        </p>
                         {item.detail && (
                           <p className="text-xs text-gray-700 break-words">{item.detail}</p>
                         )}

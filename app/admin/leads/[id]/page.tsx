@@ -47,7 +47,7 @@ interface CustomerFormSubmission {
 export default function LeadDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const { role } = useUser();
+  const { role, user, displayName } = useUser();
   const id = params?.id as string | undefined;
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,10 +58,13 @@ export default function LeadDetailsPage() {
   const [bookingForm, setBookingForm] = useState({
     scheduledDate: '',
     category: '',
+    subCategory: '',
+    mode: '',
     vehicleType: '',
     vehicleBrand: '',
     modelName: '',
     numberPlate: '',
+    color: '',
     fuelType: '',
     vinNumber: '',
     mulkiyaUrl: '',
@@ -159,7 +162,7 @@ export default function LeadDetailsPage() {
         id: doc.id,
         ...doc.data()
       } as CustomerFormSubmission));
-      
+
       // Helper function to safely convert timestamp to Date
       const getTime = (timestamp: any): number => {
         if (!timestamp) return 0;
@@ -171,7 +174,7 @@ export default function LeadDetailsPage() {
         }
         return 0;
       };
-      
+
       setCustomerFormSubmissions(submissions.sort((a, b) => {
         const aTime = getTime(a.submittedAt);
         const bTime = getTime(b.submittedAt);
@@ -248,6 +251,24 @@ export default function LeadDetailsPage() {
     return `${hour}:${m} ${suffix}`;
   };
 
+  // Helper function to parse service string format: (sub category) - Main category
+  const parseServiceField = (serviceString: string) => {
+    if (!serviceString) return { category: '', subCategory: '' };
+
+    // Match pattern: (sub category) - Main category
+    const match = serviceString.match(/\(([^)]*)\)\s*-\s*(.*)/);
+
+    if (match) {
+      return {
+        subCategory: match[1].trim(),
+        category: match[2].trim()
+      };
+    }
+
+    // If no match, treat entire string as category
+    return { category: serviceString, subCategory: '' };
+  };
+
   async function handleAddNote(e: React.FormEvent) {
     e.preventDefault();
     if (!newNote.trim() || !id) return;
@@ -263,7 +284,7 @@ export default function LeadDetailsPage() {
           createdBy: role || 'User',
         }
       ];
-      
+
       await updateDoc(doc(db, 'crm-leads', id), {
         notes: updatedNotes,
       });
@@ -279,7 +300,7 @@ export default function LeadDetailsPage() {
 
   async function handleDeleteNote(noteId: string) {
     if (!id) return;
-    
+
     try {
       const updatedNotes = notes.filter((note) => note.id !== noteId);
       await updateDoc(doc(db, 'crm-leads', id), {
@@ -324,13 +345,12 @@ export default function LeadDetailsPage() {
           type="button"
           key={day}
           onClick={() => !disabled && setSelectedDate(date)}
-          className={`p-2 min-h-[96px] border text-left transition-colors focus:outline-none ${
-            disabled
+          className={`p-2 min-h-[96px] border text-left transition-colors focus:outline-none ${disabled
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : isSelected
                 ? 'bg-orange-100 border-orange-500 shadow-inner'
                 : 'hover:bg-orange-50'
-          } ${isPastDate(date) ? 'opacity-80' : ''}`}
+            } ${isPastDate(date) ? 'opacity-80' : ''}`}
         >
           <div className="flex items-start justify-between gap-2">
             <span className="font-semibold text-sm">{day}</span>
@@ -344,13 +364,12 @@ export default function LeadDetailsPage() {
             {dayServices.slice(0, 2).map((service, idx) => (
               <div
                 key={idx}
-                className={`px-1 py-0.5 rounded text-white truncate ${
-                  service.status === 'completed'
+                className={`px-1 py-0.5 rounded text-white truncate ${service.status === 'completed'
                     ? 'bg-green-500'
                     : service.status === 'cancelled'
                       ? 'bg-red-500'
                       : 'bg-blue-500'
-                }`}
+                  }`}
               >
                 {service.firstName || 'Booking'}
               </div>
@@ -396,7 +415,7 @@ export default function LeadDetailsPage() {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
       const token = data.token;
       const link = `${appUrl}/customer/book-service/${token}`;
-      
+
       setFormLink(link);
       setFormLinkModal(true);
       setCopySuccess(false);
@@ -473,27 +492,29 @@ export default function LeadDetailsPage() {
 
       // Create booking
       const jobCardNo = generateJobCardNo();
-      
+
       // Upload mulkiya images if provided
       let uploadedMulkiyaUrls: string[] = [];
       if (mulkiyaFiles.length > 0) {
         setMulkiyaUploading(true);
         setBookingStatus('Uploading mulkiya images...');
-        
+
         for (const file of mulkiyaFiles) {
           const storageRef = ref(storage, `mulkiya/${jobCardNo}/${file.name}-${Date.now()}`);
           await uploadBytes(storageRef, file);
           const url = await getDownloadURL(storageRef);
           uploadedMulkiyaUrls.push(url);
         }
-        
+
         setMulkiyaUploading(false);
         setBookingStatus('Creating booking...');
       }
-      
+
       const bookingRef = await addDoc(collection(db, 'bookedServices'), {
         jobCardNo,
         category: bookingForm.category,
+        subCategory: bookingForm.subCategory,
+        mode: lead.mode || '',
         scheduledDate: Timestamp.fromDate(scheduledDateTime),
         firstName,
         lastName,
@@ -519,8 +540,32 @@ export default function LeadDetailsPage() {
         quotationStatus: 'not_created',
         quotationId: null,
         createdAt: Timestamp.now(),
+        createdBy: user?.uid || 'unknown',
+        createdByEmail: user?.email || 'unknown',
+        createdByName: user?.displayName || 'Admin',
         sourceLeadId: id,
+        source: 'lead',
       });
+
+      // Log activity for booking created from lead
+      try {
+        const actorId = user?.uid || 'unknown';
+        const actorEmail = user?.email || 'unknown';
+        const actorName = user?.displayName || actorEmail;
+
+        await addDoc(collection(db, 'serviceActivities'), {
+          serviceBookingId: bookingRef.id,
+          activityType: 'Booking Created from Lead',
+          details: `Lead: ${lead.name || 'Unknown'} - Service: ${bookingForm.category}`,
+          createdAt: Timestamp.now(),
+          createdBy: actorId,
+          createdByEmail: actorEmail,
+          createdByName: actorName,
+        });
+      } catch (activityErr: any) {
+        console.warn('Activity logging warning:', activityErr);
+        // Don't fail the booking if activity logging fails
+      }
 
       // Update lead status
       await updateDoc(doc(db, 'crm-leads', id), {
@@ -579,7 +624,7 @@ export default function LeadDetailsPage() {
         router.push(`/admin/book-service/${bookingRef.id}`);
       }, 1500);
       setSelectedTime('09:00');
-      
+
       // Refresh related bookings
       if (id) fetchRelatedBookings(id);
     } catch (err: any) {
@@ -589,6 +634,10 @@ export default function LeadDetailsPage() {
       setBookingLoading(false);
     }
   }
+
+
+  const serviceCategory = bookingForm.category;
+  const [mainSubCategory, mainCategory] = serviceCategory.split(' - ');
 
   return (
     <div className="p-1 sm:p-6 max-w-7xl w-full mx-auto space-y-6 overflow-x-hidden">
@@ -617,13 +666,12 @@ export default function LeadDetailsPage() {
                     {bookingsLoading ? (
                       <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-600">Loading...</span>
                     ) : relatedBookings.length > 0 ? (
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        relatedBookings[0].status === 'completed'
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${relatedBookings[0].status === 'completed'
                           ? 'bg-green-100 text-green-800'
                           : relatedBookings[0].status === 'cancelled'
                             ? 'bg-red-100 text-red-800'
                             : 'bg-blue-100 text-blue-800'
-                      }`}>
+                        }`}>
                         {relatedBookings[0].status || 'pending'}
                       </span>
                     ) : (
@@ -643,18 +691,39 @@ export default function LeadDetailsPage() {
                   <span className="text-gray-600">Email:</span>
                   <span className="font-medium text-right sm:text-left break-all max-w-full">{lead.email || '—'}</span>
                 </div>
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <span className="text-gray-600">Service Interest:</span>
-                  <span className="font-medium text-right sm:text-left break-words max-w-full">{lead.service || '—'}</span>
-                </div>
+                {(() => {
+                  const parsed = parseServiceField(lead?.service || '');
+                  return (
+                    <>
+                      {parsed.subCategory && (
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <span className="text-gray-600">Service Sub Category:</span>
+                          <span className="font-medium text-right sm:text-left break-words max-w-full">{parsed.subCategory}</span>
+                        </div>
+                      )}
+                      {parsed.category && (
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <span className="text-gray-600">Service Category:</span>
+                          <span className="font-medium text-right sm:text-left break-words max-w-full">{parsed.category}</span>
+                        </div>
+                      )}
+                      {!lead?.service && (
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <span className="text-gray-600">Service Interest:</span>
+                          <span className="font-medium text-right sm:text-left break-words max-w-full">—</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <span className="text-gray-600">Service Mode:</span>
                   <span className="font-medium text-right sm:text-left break-words max-w-full">
                     {lead.mode ? (
                       lead.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
-                      lead.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
-                      lead.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
-                      lead.mode
+                        lead.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                          lead.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                            lead.mode
                     ) : '—'}
                   </span>
                 </div>
@@ -680,7 +749,7 @@ export default function LeadDetailsPage() {
                   </div>
                 )}
                 <h2 className="text-xl font-semibold mb-4 text-orange-700">Book Service from Lead</h2>
-                
+
                 {bookingStatus && (
                   <div className={`mb-4 p-3 rounded text-sm ${bookingStatus.includes('✓') ? 'bg-green-50 text-green-800' : bookingStatus.includes('Error') ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
                     {bookingStatus}
@@ -751,10 +820,10 @@ export default function LeadDetailsPage() {
                             <p className="font-semibold text-sm text-gray-800">
                               {selectedDate
                                 ? selectedDate.toLocaleDateString('en-US', {
-                                    weekday: 'long',
-                                    month: 'long',
-                                    day: 'numeric',
-                                  })
+                                  weekday: 'long',
+                                  month: 'long',
+                                  day: 'numeric',
+                                })
                                 : 'No date selected'}
                             </p>
                             <p className="text-xs text-gray-600 mt-1">{formatTimeLabel(selectedTime)}</p>
@@ -781,13 +850,12 @@ export default function LeadDetailsPage() {
                                   type="button"
                                   disabled={isTimeDisabled(time)}
                                   onClick={() => setSelectedTime(time)}
-                                  className={`p-2 text-sm rounded border transition-colors ${
-                                    isTimeDisabled(time)
+                                  className={`p-2 text-sm rounded border transition-colors ${isTimeDisabled(time)
                                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
                                       : selectedTime === time
                                         ? 'bg-orange-500 text-white border-orange-500'
                                         : 'border-gray-300 hover:bg-orange-50'
-                                  }`}
+                                    }`}
                                 >
                                   {formatTimeLabel(time)}
                                 </button>
@@ -801,25 +869,54 @@ export default function LeadDetailsPage() {
                     {/* Show remaining fields only after date and time are selected */}
                     {selectedDate && selectedTime ? (
                       <>
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1">Service Category *</label>
-                          <select
-                            required
-                            value={bookingForm.category}
-                            onChange={(e) => setBookingForm({...bookingForm, category: e.target.value})}
-                            className="w-full border rounded px-3 py-2 text-sm"
-                          >
-                            <option value="">Select Service</option>
-                            <option value="ppf-wrapping">PPF Wrapping</option>
-                            <option value="ceramic-coating">Ceramic Coating</option>
-                            <option value="car-tinting">Car Tinting</option>
-                            <option value="car-wash">Car Wash</option>
-                            <option value="car-polishing">Car Polishing</option>
-                            <option value="car-insurance">Car Insurance</option>
-                            <option value="car-passing">Car Passing</option>
-                            <option value="pre-purchase-inspection">Pre-Purchase Inspection</option>
-                            <option value="instant-help">Instant Help</option>
-                          </select>
+                        <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Service Category111 *</label>
+                            <select
+                              required
+                              value={mainCategory}
+                              onChange={(e) => setBookingForm({ ...bookingForm, category: e.target.value })}
+                              className="w-full border rounded px-3 py-2 text-sm"
+                            >
+                              <option value="">Select Service</option>
+                              <option value="Paint Protection Film & Wrapping">Paint Protection Film & Wrapping</option>
+                              <option value="Ceramic Coating">Ceramic Coating</option>
+                              <option value="Car Tinting">Car Tinting</option>
+                              <option value="Car Wash">Car Wash</option>
+                              <option value="Car Polishing">Car Polishing</option>
+                              <option value="Car Insurance">Car Insurance</option>
+                              <option value="Car Passing">Car Passing</option>
+                              <option value="Pre-Purchase Inspection">Pre-Purchase Inspection</option>
+                              <option value="Instant Help">Instant Help</option>
+                            </select>
+                          </div>
+
+
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Select Sub Category</label>
+                            <input
+                              type="text"
+                              value={mainSubCategory}
+                              onChange={(e) => setBookingForm({ ...bookingForm, subCategory: e.target.value })}
+                              className="w-full border rounded px-3 py-2 text-sm"
+                              placeholder="e.g., Full Body, Door Panels"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1  flex-wrap">
+                            <span className="text-xs text-gray-600">Service Mode:</span>
+                            <span className="text-xs break-words max-w-full border border-gray-300 rounded px-3 py-2">
+                              {lead.mode ? (
+                                lead.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
+                                  lead.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                                    lead.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                                      lead.mode
+                              ) : '—'}
+                            </span>
+                          </div>
+
+
                         </div>
 
                         {/* Vehicle Details */}
@@ -830,7 +927,7 @@ export default function LeadDetailsPage() {
                               <label className="block text-xs text-gray-600 mb-1">Vehicle Type</label>
                               <select
                                 value={bookingForm.vehicleType}
-                                onChange={(e) => setBookingForm({...bookingForm, vehicleType: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, vehicleType: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                               >
                                 <option value="">Select Type</option>
@@ -846,7 +943,7 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.vehicleBrand}
-                                onChange={(e) => setBookingForm({...bookingForm, vehicleBrand: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, vehicleBrand: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="e.g., BMW, Toyota"
                               />
@@ -856,7 +953,7 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.modelName}
-                                onChange={(e) => setBookingForm({...bookingForm, modelName: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, modelName: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="e.g., X5, Camry"
                               />
@@ -866,16 +963,26 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.numberPlate}
-                                onChange={(e) => setBookingForm({...bookingForm, numberPlate: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, numberPlate: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="e.g., ABC123"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Vehicle Color</label>
+                              <input
+                                type="text"
+                                value={bookingForm.color}
+                                onChange={(e) => setBookingForm({ ...bookingForm, color: e.target.value })}
+                                className="w-full border rounded px-3 py-2 text-sm"
+                                placeholder="e.g., Black, White, Silver"
                               />
                             </div>
                             <div>
                               <label className="block text-xs text-gray-600 mb-1">Fuel Type</label>
                               <select
                                 value={bookingForm.fuelType}
-                                onChange={(e) => setBookingForm({...bookingForm, fuelType: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, fuelType: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                               >
                                 <option value="">Select Fuel</option>
@@ -907,7 +1014,7 @@ export default function LeadDetailsPage() {
                               {mulkiyaUploading && (
                                 <p className="text-[11px] text-gray-600 mt-1">Uploading mulkiya images…</p>
                               )}
-                              
+
                               {/* Preview uploaded images */}
                               {mulkiyaPreview.length > 0 && (
                                 <div className="mt-3">
@@ -932,7 +1039,7 @@ export default function LeadDetailsPage() {
                                   </div>
                                 </div>
                               )}
-                              
+
                               {bookingForm.mulkiyaUrl && (
                                 <div className="flex items-center gap-3 text-xs text-gray-700 mt-2">
                                   <span className="font-semibold">Current:</span>
@@ -959,7 +1066,7 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.country}
-                                onChange={(e) => setBookingForm({...bookingForm, country: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, country: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="e.g., United Arab Emirates"
                               />
@@ -969,7 +1076,7 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.state}
-                                onChange={(e) => setBookingForm({...bookingForm, state: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, state: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="e.g., Dubai"
                               />
@@ -979,7 +1086,7 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.city}
-                                onChange={(e) => setBookingForm({...bookingForm, city: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, city: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="e.g., Dubai"
                               />
@@ -989,7 +1096,7 @@ export default function LeadDetailsPage() {
                               <input
                                 type="text"
                                 value={bookingForm.address}
-                                onChange={(e) => setBookingForm({...bookingForm, address: e.target.value})}
+                                onChange={(e) => setBookingForm({ ...bookingForm, address: e.target.value })}
                                 className="w-full border rounded px-3 py-2 text-sm"
                                 placeholder="Full address"
                               />
@@ -1035,35 +1142,34 @@ export default function LeadDetailsPage() {
                   {relatedBookings.map((booking) => {
                     const canViewBooking = hasPermission(role, 'services', 'view');
                     return (
-                    <div
-                      key={booking.id}
-                      className={`p-4 bg-gray-50 rounded border transition-colors ${
-                        canViewBooking ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
-                      }`}
-                      onClick={canViewBooking ? () => router.push(`/admin/book-service/${booking.id}`) : undefined}
-                    >
-                      <div className="flex justify-between items-start gap-3 flex-wrap">
-                        <div className="min-w-0">
-                          <div className="font-semibold text-sm">{booking.firstName} {booking.lastName}</div>
-                          <div className="text-xs text-gray-600 mt-1">{booking.category}</div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Job Card: {booking.jobCardNo}
+                      <div
+                        key={booking.id}
+                        className={`p-4 bg-gray-50 rounded border transition-colors ${canViewBooking ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
+                          }`}
+                        onClick={canViewBooking ? () => router.push(`/admin/book-service/${booking.id}`) : undefined}
+                      >
+                        <div className="flex justify-between items-start gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-sm">{booking.firstName} {booking.lastName}</div>
+                            <div className="text-xs text-gray-600 mt-1">{booking.category}</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Job Card: {booking.jobCardNo}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Scheduled: {formatDateTime(booking.scheduledDate)}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Scheduled: {formatDateTime(booking.scheduledDate)}
-                          </div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${booking.status === 'completed'
+                            ? 'bg-green-100 text-green-800'
+                            : booking.status === 'cancelled'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-blue-100 text-blue-800'
+                            }`}>
+                            {booking.status || 'pending'}
+                          </span>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${booking.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : booking.status === 'cancelled'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-blue-100 text-blue-800'
-                          }`}>
-                          {booking.status || 'pending'}
-                        </span>
                       </div>
-                    </div>
-                  );
+                    );
                   })}
                 </div>
               ) : (
@@ -1077,7 +1183,7 @@ export default function LeadDetailsPage() {
             {/* Notes Section */}
             <Card className="p-6 w-full">
               <h2 className="text-xl font-semibold mb-4">Notes</h2>
-              
+
               {/* Add Note Form */}
               <form onSubmit={handleAddNote} className="mb-6 pb-6 border-b">
                 <div className="space-y-3">
@@ -1091,8 +1197,8 @@ export default function LeadDetailsPage() {
                       disabled={savingNote}
                     />
                   </div>
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={savingNote || !newNote.trim()}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
@@ -1131,7 +1237,7 @@ export default function LeadDetailsPage() {
               )}
             </Card>
 
-            
+
           </div>
 
           {/* Actions Sidebar */}
@@ -1140,11 +1246,11 @@ export default function LeadDetailsPage() {
               <h3 className="font-semibold mb-4">Actions</h3>
               <div className="space-y-3">
                 <PermissionGate module="services" action="create">
-                  {!showBookService  && !relatedBookings.length && (
+                  {!showBookService && !relatedBookings.length && (
                     <>
                       {customerFormSubmissions.length == 0 && (
 
-                        <Button 
+                        <Button
                           className="w-full bg-blue-600 hover:bg-blue-700"
                           onClick={handleSendFormLink}
                           disabled={sendingFormLink}
@@ -1152,24 +1258,49 @@ export default function LeadDetailsPage() {
                           {sendingFormLink ? '📧 Sending...' : '📧 Send Booking Form'}
                         </Button>
                       )}
-                      <Button 
+                      <Button
                         className="w-full bg-orange-600 hover:bg-orange-700"
-                        onClick={() => setShowBookService(true)}
+                        onClick={() => {
+                          // Auto-fill from lead.service if available
+                          if (lead?.service) {
+                            const parsed = parseServiceField(lead.service);
+                            setBookingForm(prev => ({
+                              ...prev,
+                              category: parsed.category,
+                              subCategory: parsed.subCategory,
+                              mode: lead.mode || '',
+                              color: '',
+                            }));
+                          }
+                          setShowBookService(true);
+                        }}
                       >
                         📅 Book Service Directly
                       </Button>
                     </>
                   )}
                   {!showBookService && relatedBookings.length > 0 && (
-                    <Button 
+                    <Button
                       className="w-full bg-orange-600 hover:bg-orange-700"
-                      onClick={() => setShowBookService(true)}
+                      onClick={() => {
+                        // Auto-fill from lead.service if available
+                        if (lead?.service) {
+                          const parsed = parseServiceField(lead.service);
+                          setBookingForm(prev => ({
+                            ...prev,
+                            category: parsed.category,
+                            subCategory: parsed.subCategory,
+                            mode: lead.mode || '',
+                          }));
+                        }
+                        setShowBookService(true);
+                      }}
                     >
                       📅 Add Another Service
                     </Button>
                   )}
                 </PermissionGate>
-                <Button 
+                <Button
                   variant="outline"
                   className="w-full"
                   onClick={() => router.push(`/admin/customers`)}
@@ -1198,9 +1329,9 @@ export default function LeadDetailsPage() {
                             <div><span className="font-medium text-gray-700">Location:</span> <span className="text-gray-600">{submission.city}, {submission.state}, {submission.country}</span></div>
                             <div><span className="font-medium text-gray-700">Address:</span> <span className="text-gray-600">{submission.address}</span></div>
                           </div>
-                          
+
                           {submission.mulkiyaUrls && submission.mulkiyaUrls.length > 0 && (
-                            <div className="mt-3">
+                            <div className="mt-3 flex items-center gap-4">
                               <p className="text-xs font-medium text-gray-700 mb-2">📸 Mulkiya Images ({submission.mulkiyaUrls.length}):</p>
                               <button
                                 onClick={() => setViewingSubmissionId(submission.id)}
@@ -1210,6 +1341,36 @@ export default function LeadDetailsPage() {
                               </button>
                             </div>
                           )}
+
+                          <div className="w-full mt-4 flex flex-wrap gap-2">
+                            <button
+                              onClick={() => {
+                                setBookingForm({
+                                  scheduledDate: '',
+                                  category: submission.category || '',
+                                  subCategory: submission.subCategory || '',
+                                  mode: '',
+                                  vehicleType: submission.vehicleType || '',
+                                  vehicleBrand: submission.vehicleBrand || '',
+                                  modelName: submission.modelName || '',
+                                  numberPlate: submission.numberPlate || '',
+                                  color: submission.color || '',
+                                  fuelType: submission.fuelType || '',
+                                  vinNumber: submission.vinNumber || '',
+                                  mulkiyaUrl: submission.mulkiyaUrls?.length ? JSON.stringify(submission.mulkiyaUrls) : '',
+                                  country: submission.country || '',
+                                  state: submission.state || '',
+                                  city: submission.city || '',
+                                  address: submission.address || '',
+                                });
+                                setMulkiyaPreview(submission.mulkiyaUrls || []);
+                                setShowBookService(true);
+                              }}
+                              className="px-3 py-4  w-full bg-orange-600 hover:bg-orange-700 text-white text-xs rounded transition-colors font-medium"
+                            >
+                              Auto fill service
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1314,11 +1475,10 @@ export default function LeadDetailsPage() {
                   </code>
                   <button
                     onClick={handleCopyLink}
-                    className={`px-3 py-2 rounded text-xs font-medium flex-shrink-0 transition-colors ${
-                      copySuccess
+                    className={`px-3 py-2 rounded text-xs font-medium flex-shrink-0 transition-colors ${copySuccess
                         ? 'bg-green-100 text-green-800'
                         : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                    }`}
+                      }`}
                   >
                     {copySuccess ? '✓ Copied' : 'Copy'}
                   </button>

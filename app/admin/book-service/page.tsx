@@ -52,6 +52,8 @@ export default function BookServiceList() {
     const [formData, setFormData] = useState({
         jobCardNo: '',
         category: '',
+        subCategory: '',
+        mode: '',
         customerType: 'b2c' as const,
         // B2C
         firstName: '',
@@ -250,6 +252,9 @@ export default function BookServiceList() {
         setFormData((prev) => ({
             ...prev,
             jobCardNo: generateJobCardNo(),
+            category: '',
+            subCategory: '',
+            mode: '',
             customerType: 'b2c',
             firstName: '',
             lastName: '',
@@ -300,6 +305,7 @@ export default function BookServiceList() {
             const auth = getAuth();
             if (!auth.currentUser) throw new Error('Not authenticated');
             const actorId = auth.currentUser.uid;
+            const actorEmail = auth.currentUser.email || 'unknown';
             const actorName = auth.currentUser.displayName || 'Admin';
 
             const [hours, minutes] = selectedTime.split(':');
@@ -345,6 +351,8 @@ export default function BookServiceList() {
             const bookingData: any = {
                 ...formData,
                 category: bookingCategory,
+                subCategory: formData.subCategory,
+                mode: formData.mode,
                 vehicleType: primaryVehicle.vehicleType,
                 vehicleBrand: primaryVehicle.vehicleBrand,
                 modelName: primaryVehicle.modelName,
@@ -454,6 +462,22 @@ export default function BookServiceList() {
                     };
 
                     await addDoc(collection(db, 'tasks'), taskData);
+                    
+                    // Log activity for task assignment
+                    try {
+                      const assignedList = assignedNames.join(', ');
+                      await addDoc(collection(db, 'serviceActivities'), {
+                        serviceBookingId: docRef.id,
+                        activityType: 'Assigned Tasks',
+                        details: `Tasks assigned to: ${assignedList} | Priority: ${taskAssignment.priority} | Category: ${taskAssignment.category}`,
+                        createdAt: Timestamp.now(),
+                        createdBy: actorId,
+                        createdByEmail: actorEmail,
+                        createdByName: actorName,
+                      });
+                    } catch (activityErr: any) {
+                      console.warn('Activity logging warning:', activityErr);
+                    }
                 } catch (taskErr: any) {
                     safeConsoleError('Task creation error', taskErr);
                     // Don't fail the booking if task creation fails
@@ -468,6 +492,8 @@ export default function BookServiceList() {
             setFormData({
                 jobCardNo: '',
                 category: '',
+                subCategory: '',
+                mode: '',
                 customerType: 'b2c',
                 firstName: '',
                 lastName: '',
@@ -1109,21 +1135,48 @@ export default function BookServiceList() {
                                                 />
                                             </div>
                                             {/* Category for B2C */}
-                                            <div className="col-span-2">
+                                            <div className="col-span-1">
                                                 <Label htmlFor="category">Category*</Label>
                                                 <Select value={formData.category} onValueChange={(val) => updateFormField('category', val)}>
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Select Repair Category" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="car-wash">Car Wash</SelectItem>
-                                                        <SelectItem value="car-polishing">Car Polishing</SelectItem>
-                                                        <SelectItem value="ceramic-coating">Ceramic Coating</SelectItem>
-                                                        <SelectItem value="ppf-wrapping">PPF Wrapping</SelectItem>
-                                                        <SelectItem value="car-tinting">Car Tinting</SelectItem>
-                                                        <SelectItem value="pre-purchase-inspection">Pre-Purchase Inspection</SelectItem>
-                                                        <SelectItem value="car-passing">Car Passing</SelectItem>
-                                                        <SelectItem value="car-insurance">Car Insurance</SelectItem>
+                                                        <SelectItem value="Car Wash">Car Wash</SelectItem>
+                                                        <SelectItem value="Car Polishing">Car Polishing</SelectItem>
+                                                        <SelectItem value="Ceramic Coating">Ceramic Coating</SelectItem>
+                                                        <SelectItem value="PPF Wrapping">PPF Wrapping</SelectItem>
+                                                        <SelectItem value="Car Tinting">Car Tinting</SelectItem>
+                                                        <SelectItem value="Pre-Purchase Inspection">Pre-Purchase Inspection</SelectItem>
+                                                        <SelectItem value="Car Passing">Car Passing</SelectItem>
+                                                        <SelectItem value="Car Insurance">Car Insurance</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            {/* Sub Category */}
+                                            <div className="col-span-1">
+                                                <Label htmlFor="subCategory">Sub Category</Label>
+                                                <Input
+                                                    id="subCategory"
+                                                    value={formData.subCategory}
+                                                    onChange={(e) => updateFormField('subCategory', e.target.value)}
+                                                    placeholder="e.g., Full Body, Door Panels, etc."
+                                                />
+                                            </div>
+                                            {/* Service Mode */}
+                                            <div className="col-span-1">
+                                                <Label htmlFor="mode">Service Mode</Label>
+                                                <Select
+                                                    value={formData.mode}
+                                                    onValueChange={(val) => updateFormField('mode', val)}
+                                                >
+                                                    <SelectTrigger id="mode">
+                                                        <SelectValue placeholder="Select service mode" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="drive-to-garage">Drive to Garage (Free)</SelectItem>
+                                                        <SelectItem value="pick-up-service">Pick-up Service (+AED 150.00)</SelectItem>
+                                                        <SelectItem value="home-service">Home Service (+AED 100.00)</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                             </div>

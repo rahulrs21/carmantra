@@ -64,7 +64,7 @@ export default function InstantHelpPage() {
   ];
 
   const openModal = (service: string) => {
-    setSelectedService(service + ' - Instant Help');
+    setSelectedService(`(${service}) - Instant Help`);
     setIsModalOpen(true);
   };
 

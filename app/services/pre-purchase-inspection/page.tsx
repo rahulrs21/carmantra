@@ -45,7 +45,7 @@ export default function PrePurchaseInspectionPage() {
   ];
 
   const openModal = (service: string) => {
-    setSelectedService(service + ' - Pre Purchase Inspection');
+    setSelectedService(`(${service}) - Pre-Purchase Inspection`);
     setIsModalOpen(true);
   };
 
