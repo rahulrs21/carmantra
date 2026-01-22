@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ArrowLeft, Shield, FileText, User, Lock, Upload, Download, Trash2, Eye, EyeOff, X } from 'lucide-react';
+import { ArrowLeft, Shield, FileText, User, Lock, Upload, Download, Trash2, Eye, EyeOff, X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { ModuleAccess, ModuleAccessComponent } from '@/components/PermissionGate';
 
 interface Document {
@@ -25,6 +25,20 @@ interface Document {
   storagePath: string;
   size: number;
   uploadedAt: any;
+}
+
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  assignedTo: string[];
+  assignedToNames?: string[];
+  status: 'notStarted' | 'inProgress' | 'completed' | 'verified';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  deadline: any;
+  createdAt: any;
+  createdBy: string;
+  category?: 'maintenance' | 'service' | 'inspection' | 'other';
 }
 
 interface AccountSetup {
@@ -86,6 +100,13 @@ export default function EmployeeDetailPage() {
     role: 'employee',
   });
 
+  // Tasks state
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [selectedTaskMonth, setSelectedTaskMonth] = useState<Date>(new Date());
+  const [tasksPageSize, setTasksPageSize] = useState(10);
+  const [tasksCurrentPage, setTasksCurrentPage] = useState(1);
+
   const isAuthorized = currentRole === 'admin' || currentRole === 'manager';
 
   // Fetch employee and check for existing account
@@ -97,7 +118,7 @@ export default function EmployeeDetailPage() {
           const data = docSnap.data() as Employee;
           data.id = docSnap.id;
           setEmployee(data);
-          
+
           const joiningDate = data.joiningDate?.toDate?.() || new Date(data.joiningDate);
           setFormData({
             name: data.name,
@@ -114,7 +135,7 @@ export default function EmployeeDetailPage() {
           // Check for existing user account
           const userQuery = query(collection(db, 'users'), where('employeeId', '==', employeeId));
           const userSnapshot = await getDocs(userQuery);
-          
+
           if (!userSnapshot.empty) {
             const userData = userSnapshot.docs[0].data();
             setAccountEnabled(userData.status !== 'inactive');
@@ -161,9 +182,184 @@ export default function EmployeeDetailPage() {
         }
       }
     };
-    
+
     loadImageUrl();
   }, [viewingDoc]);
+
+  // Fetch tasks for the employee
+  const fetchEmployeeTasks = async () => {
+    setTasksLoading(true);
+    try {
+      // Fetch all tasks
+      const tasksQuery = query(collection(db, 'tasks'));
+      const snapshot = await getDocs(tasksQuery);
+      const allTasks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      } as Task));
+
+      console.log('Total tasks in database:', allTasks.length);
+      console.log('Looking for employee:', employee?.name, 'ID:', employeeId);
+
+      // Filter tasks where:
+      // 1. assignedToNames includes the employee name (case-insensitive, trimmed)
+      // 2. OR assignedTo array includes the employee ID
+      const employeeTasks = allTasks.filter(task => {
+        const assignedNames = task.assignedToNames || [];
+        const assignedIds = task.assignedTo || [];
+
+        // Check if employee name is in assignedToNames (case-insensitive)
+        const nameMatch = assignedNames.some(name =>
+          name?.trim().toLowerCase() === employee?.name?.trim().toLowerCase()
+        );
+
+        // Check if employee ID is in assignedTo
+        const idMatch = assignedIds.includes(employeeId);
+
+        if (nameMatch || idMatch) {
+          console.log('Found task:', task.id, task.title, 'by name:', nameMatch, 'by id:', idMatch);
+        }
+
+        return nameMatch || idMatch;
+      });
+
+      console.log('Tasks found for employee:', employeeTasks.length);
+
+      // Sort by creation date (newest first)
+      employeeTasks.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt?.seconds * 1000 || a.createdAt);
+        const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt?.seconds * 1000 || b.createdAt);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      setTasks(employeeTasks);
+      setTasksCurrentPage(1);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      toast.error('Failed to load tasks');
+    } finally {
+      setTasksLoading(false);
+    }
+  };
+
+  // Fetch tasks when employee is loaded
+  useEffect(() => {
+    if (employee) {
+      fetchEmployeeTasks();
+    }
+  }, [employeeId, employee?.name]);
+
+  // Filter tasks by selected month
+  const getTasksForMonth = () => {
+    const year = selectedTaskMonth.getFullYear();
+    const month = selectedTaskMonth.getMonth();
+
+    return tasks.filter(task => {
+      try {
+        let taskDate: Date;
+
+        // Parse deadline
+        if (task.deadline && typeof task.deadline === 'object' && 'seconds' in task.deadline) {
+          taskDate = new Date(task.deadline.seconds * 1000);
+        } else if (typeof task.deadline === 'string') {
+          taskDate = new Date(task.deadline);
+        } else if (task.deadline instanceof Date) {
+          taskDate = task.deadline;
+        } else if (typeof task.deadline === 'number') {
+          taskDate = new Date(task.deadline);
+        } else {
+          // If no deadline, use createdAt
+          if (task.createdAt && typeof task.createdAt === 'object' && 'seconds' in task.createdAt) {
+            taskDate = new Date(task.createdAt.seconds * 1000);
+          } else if (typeof task.createdAt === 'string') {
+            taskDate = new Date(task.createdAt);
+          } else {
+            return false;
+          }
+        }
+
+        return taskDate.getFullYear() === year && taskDate.getMonth() === month;
+      } catch (error) {
+        console.error('Error filtering task date:', error);
+        return false;
+      }
+    });
+  };
+
+  const monthTasks = getTasksForMonth();
+  const totalPages = Math.ceil(monthTasks.length / tasksPageSize);
+  const startIndex = (tasksCurrentPage - 1) * tasksPageSize;
+  const paginatedTasks = monthTasks.slice(startIndex, startIndex + tasksPageSize);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'verified':
+        return 'bg-green-100 text-green-800';
+      case 'inProgress':
+        return 'bg-blue-100 text-blue-800';
+      case 'notStarted':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'notStarted':
+        return 'Not Started';
+      case 'inProgress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'verified':
+        return 'Verified';
+      default:
+        return status;
+    }
+  };
+
+  const formatDate = (dateValue: any) => {
+    try {
+      let date: Date;
+
+      // Handle Firestore Timestamp with seconds and nanoseconds
+      if (dateValue && typeof dateValue === 'object' && 'seconds' in dateValue) {
+        date = new Date(dateValue.seconds * 1000);
+      }
+      // Handle string dates (YYYY-MM-DD)
+      else if (typeof dateValue === 'string') {
+        date = new Date(dateValue);
+      }
+      // Handle Date objects
+      else if (dateValue instanceof Date) {
+        date = dateValue;
+      }
+      // Handle millisecond timestamps
+      else if (typeof dateValue === 'number') {
+        date = new Date(dateValue);
+      }
+      else {
+        return 'N/A';
+      }
+
+      // Return formatted date
+      if (isNaN(date.getTime())) {
+        return 'N/A';
+      }
+
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'N/A';
+    }
+  };
 
   const handleSave = async () => {
     if (!isAuthorized) {
@@ -261,7 +457,7 @@ export default function EmployeeDetailPage() {
       };
 
       const docRef = await addDoc(collection(db, 'employeeDocuments'), docData);
-      
+
       // Update local state
       setDocuments(prev => [...prev, { id: docRef.id, ...docData } as Document]);
       toast.success(`${file.name} uploaded successfully`);
@@ -278,7 +474,7 @@ export default function EmployeeDetailPage() {
     try {
       const fileRef = ref(storage, doc.storagePath);
       const data = await getBytes(fileRef);
-      
+
       // Create download link
       const url = URL.createObjectURL(new Blob([data]));
       const link = document.createElement('a');
@@ -288,7 +484,7 @@ export default function EmployeeDetailPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       toast.success('Document downloaded');
     } catch (error) {
       console.error('Error downloading document:', error);
@@ -376,7 +572,7 @@ export default function EmployeeDetailPage() {
             createdAt: Timestamp.now(),
             createdBy: currentRole,
           });
-          
+
           toast.success('USER Role has been created successfully!');
         } catch (authError: any) {
           let errorMessage = 'Failed to create account';
@@ -487,11 +683,10 @@ export default function EmployeeDetailPage() {
           <div className="flex border-b">
             <button
               onClick={() => setActiveTab('basic')}
-              className={`flex-1 px-6 py-3 font-medium text-center transition ${
-                activeTab === 'basic'
+              className={`flex-1 px-6 py-3 font-medium text-center transition ${activeTab === 'basic'
                   ? 'border-b-2 border-indigo-600 text-indigo-600'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-center gap-2">
                 <User className="w-4 h-4" />
@@ -500,11 +695,10 @@ export default function EmployeeDetailPage() {
             </button>
             <button
               onClick={() => setActiveTab('documents')}
-              className={`flex-1 px-6 py-3 font-medium text-center transition ${
-                activeTab === 'documents'
+              className={`flex-1 px-6 py-3 font-medium text-center transition ${activeTab === 'documents'
                   ? 'border-b-2 border-indigo-600 text-indigo-600'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-center gap-2">
                 <FileText className="w-4 h-4" />
@@ -513,11 +707,10 @@ export default function EmployeeDetailPage() {
             </button>
             <button
               onClick={() => setActiveTab('account')}
-              className={`flex-1 px-6 py-3 font-medium text-center transition ${
-                activeTab === 'account'
+              className={`flex-1 px-6 py-3 font-medium text-center transition ${activeTab === 'account'
                   ? 'border-b-2 border-indigo-600 text-indigo-600'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-center gap-2">
                 <Lock className="w-4 h-4" />
@@ -651,7 +844,7 @@ export default function EmployeeDetailPage() {
                           </SelectContent>
                         </Select>
                       </div>
- 
+
                     </div>
 
                     <div className="flex gap-2 pt-4">
@@ -785,7 +978,7 @@ export default function EmployeeDetailPage() {
                               <Eye className="w-4 h-4 mr-1" />
                               View
                             </Button>
-                           
+
                             <Button
                               size="sm"
                               variant="destructive"
@@ -818,7 +1011,7 @@ export default function EmployeeDetailPage() {
 
                     <div className="bg-purple-50 rounded-lg p-6 border border-purple-200 space-y-4">
                       <h3 className="font-semibold text-gray-900">Create Employee Account</h3>
-                      
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Email/Username *</label>
                         <Input
@@ -912,7 +1105,7 @@ export default function EmployeeDetailPage() {
 
                     <div className="bg-green-50 rounded-lg p-6 border border-green-200 space-y-4">
                       <h3 className="font-semibold text-gray-900">Account Details</h3>
-                      
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="border-l-4 border-green-600 pl-4">
                           <p className="text-sm text-gray-600">Email/Username</p>
@@ -957,6 +1150,174 @@ export default function EmployeeDetailPage() {
               </div>
             )}
           </div>
+        </div>
+
+
+        {/* All Tasks Section */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="p-6 border-b">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <h2 className="text-2xl font-bold text-gray-900">Employee Tasks</h2>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newDate = new Date(selectedTaskMonth);
+                    newDate.setMonth(newDate.getMonth() - 1);
+                    setSelectedTaskMonth(newDate);
+                  }}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <input
+                  type="month"
+                  value={`${selectedTaskMonth.getFullYear()}-${String(selectedTaskMonth.getMonth() + 1).padStart(2, '0')}`}
+                  onChange={(e) => {
+                    const [year, month] = e.target.value.split('-');
+                    setSelectedTaskMonth(new Date(parseInt(year), parseInt(month) - 1));
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm min-w-[150px]"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newDate = new Date(selectedTaskMonth);
+                    newDate.setMonth(newDate.getMonth() + 1);
+                    setSelectedTaskMonth(newDate);
+                  }}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {tasksLoading ? (
+            <div className="p-8 text-center text-gray-500">
+              Loading tasks...
+            </div>
+          ) : monthTasks.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No tasks found for this month</p>
+              {tasks.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-gray-600 mb-3">
+                    But {tasks.length} task{tasks.length !== 1 ? 's' : ''} exist{tasks.length === 1 ? 's' : ''} overall. Try a different month.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4 p-6">
+              {/* Page Size Selector */}
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-600">Show per page:</span>
+                <Select value={tasksPageSize.toString()} onValueChange={(value) => {
+                  setTasksPageSize(parseInt(value));
+                  setTasksCurrentPage(1);
+                }}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-gray-600 ml-auto">
+                  {monthTasks.length} task{monthTasks.length !== 1 ? 's' : ''} total
+                </span>
+              </div>
+
+              {/* Tasks Table */}
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Task Title</th>
+
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Priority</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Due Date</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">Task Status</th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-700">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedTasks.map((task, idx) => (
+                      <tr key={task.id} className={`border-b border-gray-200 hover:bg-gray-50 transition ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium text-gray-900 line-clamp-2">{task.title}</p>
+                            <p className="text-xs text-gray-500 line-clamp-1">{task.description}</p>
+                          </div>
+                        </td>
+                        
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${task.priority === 'high' ? 'bg-red-100 text-red-800' :
+                              task.priority === 'medium' ? 'bg-orange-100 text-orange-800' :
+                                'bg-blue-100 text-blue-800'
+                            }`}>
+                            {task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {formatDate(task.deadline)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
+                            {getStatusLabel(task.status)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          <Button
+                            size="sm"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                            onClick={() => window.open(`/admin/tasks/${task.id}`, '_blank')}
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4">
+                  <div className="text-sm text-gray-600">
+                    Page <span className="font-semibold">{tasksCurrentPage}</span> of <span className="font-semibold">{totalPages}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTasksCurrentPage(Math.max(1, tasksCurrentPage - 1))}
+                      disabled={tasksCurrentPage === 1}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTasksCurrentPage(Math.min(totalPages, tasksCurrentPage + 1))}
+                      disabled={tasksCurrentPage === totalPages}
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* View Document Modal */}

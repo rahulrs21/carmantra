@@ -8,12 +8,17 @@ import { useUser } from '@/lib/userContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  calculateMonthlyAttendanceSummary,
+  calculateSalaryBreakdown,
+} from '@/lib/attendanceCalculations';
+import { AttendanceSettings, DailyAttendance } from '@/lib/attendanceTypes';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { DollarSign, Plus, Download, Eye, Shield } from 'lucide-react';
+import { DollarSign, Plus, Download, Eye, Shield, Grid3x3, Table as TableIcon } from 'lucide-react';
 import { ModuleAccess, PermissionGate, ModuleAccessComponent } from '@/components/PermissionGate';
 
 export default function SalaryPage() {
@@ -28,6 +33,7 @@ export default function SalaryPage() {
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -40,6 +46,11 @@ export default function SalaryPage() {
     providentFund: '',
     otherDeduction: '',
   });
+
+  const [autoFetching, setAutoFetching] = useState(false);
+
+  const [salarySummary, setSalarySummary] = useState<any>(null);
+  const [includeHolidays, setIncludeHolidays] = useState(true);
 
   const isAuthorized = currentRole === 'admin' || currentRole === 'manager';
 
@@ -68,9 +79,218 @@ export default function SalaryPage() {
       setSalaries(data);
       setLoading(false);
     });
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch attendance settings
+  const [attendanceSettings, setAttendanceSettings] = useState<AttendanceSettings>({
+    workingDays: [1, 2, 3, 4, 5],
+    holidays: [],
+    weekendDays: ['Saturday', 'Sunday'],
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'attendanceSettings'));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (snapshot.docs.length > 0) {
+          const settingsDoc = snapshot.docs[0].data() as AttendanceSettings;
+          setAttendanceSettings(settingsDoc);
+        }
+      },
+      (error) => {
+        console.error('Error listening to attendance settings:', error);
+      }
+    );
 
     return () => unsubscribe();
   }, []);
+
+  // Auto-fetch salary data when employee and month are selected
+  useEffect(() => {
+    const autoFetchSalaryData = async () => {
+      if (!formData.employeeId || !formData.month || selectedSalary) return;
+
+      setAutoFetching(true);
+      setSalarySummary(null);
+      try {
+        // Check if salary record exists for this month
+        const q = query(
+          collection(db, 'salaryRecords'),
+          where('employeeId', '==', formData.employeeId),
+          where('month', '==', formData.month)
+        );
+        const snapshot = await getDocs(q);
+
+        if (snapshot.docs.length > 0) {
+          // Use existing salary record
+          const salaryRecord = snapshot.docs[0].data() as SalaryRecord;
+          setSalarySummary(null);
+          setFormData({
+            employeeId: salaryRecord.employeeId,
+            month: salaryRecord.month,
+            baseSalary: salaryRecord.baseSalary.toString(),
+            daAllowance: (salaryRecord.allowances?.DA || '').toString(),
+            hraAllowance: (salaryRecord.allowances?.HRA || '').toString(),
+            otherAllowance: (salaryRecord.allowances?.Other || '').toString(),
+            incomeTax: (salaryRecord.deductions?.IncomeTax || '').toString(),
+            providentFund: (salaryRecord.deductions?.PF || '').toString(),
+            otherDeduction: (salaryRecord.deductions?.Other || '').toString(),
+          });
+          toast.success('Salary data fetched from existing record');
+        } else {
+          // Fetch employee's base salary and calculate from attendance using the same logic as attendance page
+          const employee = employees.find(e => e.id === formData.employeeId);
+          if (employee && employee.salary) {
+            const baseSalary = employee.salary;
+
+            // Get attendance data for the month
+            const year = parseInt(formData.month.split('-')[0]);
+            const month = parseInt(formData.month.split('-')[1]);
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+            const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+            // Fetch all attendance records for this employee in this month
+            const attQuery = query(
+              collection(db, 'dailyAttendance'),
+              where('employeeId', '==', formData.employeeId),
+              where('date', '>=', startDateStr),
+              where('date', '<=', endDateStr)
+            );
+
+            let monthRecords: DailyAttendance[] = [];
+
+            try {
+              const attSnapshot = await getDocs(attQuery);
+              monthRecords = attSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+              } as DailyAttendance));
+            } catch (error: any) {
+              // If composite index is not available, query by employeeId only and filter client-side
+              if (error.code === 'failed-precondition') {
+                console.log('Using client-side filtering due to index requirement');
+                const attQuery2 = query(
+                  collection(db, 'dailyAttendance'),
+                  where('employeeId', '==', formData.employeeId)
+                );
+                const attSnapshot = await getDocs(attQuery2);
+                monthRecords = attSnapshot.docs
+                  .map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                  } as DailyAttendance))
+                  .filter(doc => {
+                    const docDate = typeof doc.date === 'string' ? doc.date : (doc.date as any)?.toDate?.()?.toISOString().split('T')[0] || '';
+                    return docDate >= startDateStr && docDate <= endDateStr;
+                  });
+              } else {
+                throw error;
+              }
+            }
+
+            // Use the same calculation function as attendance page
+            const holidayDates = (attendanceSettings.holidays || []).map(h => {
+              const [y, m, d] = h.date.split('-').map(Number);
+              return new Date(y, m - 1, d);
+            });
+
+            const summary = calculateMonthlyAttendanceSummary(
+              formData.employeeId,
+              year,
+              month,
+              monthRecords,
+              holidayDates,
+              'system',
+              attendanceSettings.workingDays || [1, 2, 3, 4, 5]
+            );
+
+            // Use calculateSalaryBreakdown exactly like attendance page does
+            const salaryBreakdown = calculateSalaryBreakdown(
+              formData.employeeId,
+              year,
+              month,
+              baseSalary,
+              summary,
+              'system'
+            );
+
+            // Calculate attendance rate from summary
+            const attendanceRate = ((summary.totalPresentDays + summary.totalPaidLeaveDays) / salaryBreakdown.workingDaysInMonth) * 100;
+
+            // Calculate holiday breakdown for the month
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const weekendDaysList = attendanceSettings.weekendDays || ['Saturday', 'Sunday'];
+            let totalHolidays = 0;
+
+            // Count weekend days
+            for (let day = 1; day <= daysInMonth; day++) {
+              const date = new Date(year, month - 1, day);
+              const dayName = dayNames[date.getDay()];
+              if (weekendDaysList.includes(dayName)) {
+                totalHolidays++;
+              }
+            }
+
+            // Count custom holidays
+            const allHolidaysInMonth = (attendanceSettings.holidays || []).filter(h => {
+              const [y, m] = h.date.split('-').map(Number);
+              return y === year && m === month;
+            });
+            totalHolidays += allHolidaysInMonth.length;
+
+            setSalarySummary({
+              presentDays: summary.totalPresentDays,
+              absentPaidDays: summary.totalAbsentPaidDays || 0,
+              absentUnpaidDays: summary.totalAbsentUnpaidDays || 0,
+              paidLeaveDays: summary.totalPaidLeaveDays,
+              unpaidLeaveDays: summary.totalUnpaidLeaveDays,
+              notMarkedDays: summary.totalNotMarkedDays,
+              workingDays: salaryBreakdown.workingDaysInMonth,
+              basePayableDays: salaryBreakdown.totalPayableDays,
+              payableDays: salaryBreakdown.totalPayableDays.toFixed(1),
+              perDaySalary: salaryBreakdown.perDaySalary.toFixed(2),
+              attendanceRate: attendanceRate.toFixed(2),
+              baseSalary: baseSalary.toFixed(2),
+              grossSalary: salaryBreakdown.grossSalary.toFixed(2),
+              totalDeductions: salaryBreakdown.totalDeductions.toFixed(2),
+              deductionReason: `Absent Unpaid: ${summary.totalAbsentUnpaidDays} day${summary.totalAbsentUnpaidDays !== 1 ? 's' : ''}`,
+              netSalary: salaryBreakdown.netSalary.toFixed(2),
+              totalHolidays: totalHolidays,
+            });
+
+            const deductionFromAbsent = salaryBreakdown.totalDeductions;
+
+            setFormData(prev => ({
+              ...prev,
+              baseSalary: baseSalary.toString(),
+              incomeTax: '0',
+              providentFund: '0',
+              otherDeduction: deductionFromAbsent.toFixed(2),
+              daAllowance: '0',
+              hraAllowance: '0',
+              otherAllowance: '0',
+            }));
+
+            toast.success('Salary data auto-fetched from employee record and attendance');
+          }
+        }
+      } catch (error) {
+        console.error('Error auto-fetching salary data:', error);
+        toast.error('Failed to auto-fetch salary data');
+      } finally {
+        setAutoFetching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(autoFetchSalaryData, 300); // Debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.employeeId, formData.month, selectedSalary, employees]);
 
   const handleOpenDialog = (salary?: SalaryRecord) => {
     if (salary) {
@@ -317,109 +537,258 @@ export default function SalaryPage() {
           </div>
         </div>
 
-        {/* Salary Records */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="bg-white p-8 rounded-lg text-center text-gray-500">
-              Loading salary records...
-            </div>
-          ) : filteredSalaries.length === 0 ? (
-            <div className="bg-white p-8 rounded-lg text-center text-gray-500">
-              No salary records found
-            </div>
-          ) : (
-            filteredSalaries.map((salary) => (
-              <div key={salary.id} className="bg-white rounded-lg shadow p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                  <div>
-                    <h3 className="font-semibold text-lg">{getEmployeeName(salary.employeeId)}</h3>
-                    <p className="text-sm text-gray-600">{salary.month}</p>
-                  </div>
-                  <Badge className={getStatusColor(salary.status)}>
-                    {salary.status}
-                  </Badge>
-                </div>
+        {/* View Mode Toggle */}
+        <div className="flex gap-2 items-center justify-end">
+          <Button
+            size="sm"
+            onClick={() => setViewMode('table')}
+            className={viewMode === 'table' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}
+          >
+            <TableIcon className="w-4 h-4 mr-2" />
+            Table View
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setViewMode('card')}
+            className={viewMode === 'card' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}
+          >
+            <Grid3x3 className="w-4 h-4 mr-2" />
+            Card View
+          </Button>
+        </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
-                  <div>
-                    <p className="text-gray-600">Base Salary</p>
-                    <p className="font-semibold text-lg">AED {salary.baseSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Allowances</p>
-                    <p className="font-semibold text-lg">
-                      AED {Object.values(salary.allowances || {}).reduce((a, b) => a + b, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600">Deductions</p>
-                    <p className="font-semibold text-lg">
-                      AED {Object.values(salary.deductions || {}).reduce((a, b) => a + b, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="bg-indigo-50 p-3 rounded">
-                    <p className="text-gray-600 text-xs">Net Salary</p>
-                    <p className="font-bold text-lg text-indigo-600">AED {salary.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                  </div>
-                </div>
+        {/* Salary Records - Table View */}
+        {viewMode === 'table' && (
+          <div className="space-y-4">
+            {loading ? (
+              <div className="bg-white p-8 rounded-lg text-center text-gray-500">
+                Loading salary records...
+              </div>
+            ) : filteredSalaries.length === 0 ? (
+              <div className="bg-white p-8 rounded-lg text-center text-gray-500">
+                No salary records found
+              </div>
+            ) : (
+              <div className="overflow-x-auto bg-white rounded-lg shadow border border-gray-200">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+                      <th className="px-4 sm:px-6 py-4 text-left text-sm font-semibold text-gray-900">Employee</th>
+                      <th className="px-4 sm:px-6 py-4 text-left text-sm font-semibold text-gray-900">Month</th>
+                      <th className="px-4 sm:px-6 py-4 text-right text-sm font-semibold text-gray-900">Base Salary</th>
+                      <th className="hidden sm:table-cell px-4 sm:px-6 py-4 text-right text-sm font-semibold text-gray-900">Allowances</th>
+                      <th className="hidden md:table-cell px-4 sm:px-6 py-4 text-right text-sm font-semibold text-gray-900">Deductions</th>
+                      <th className="px-4 sm:px-6 py-4 text-right text-sm font-semibold text-indigo-600">Net Salary</th>
+                      <th className="px-4 sm:px-6 py-4 text-center text-sm font-semibold text-gray-900">Status</th>
+                      <th className="px-4 sm:px-6 py-4 text-center text-sm font-semibold text-gray-900">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSalaries.map((salary, index) => (
+                      <tr
+                        key={salary.id}
+                        className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                          }`}
+                      >
+                        <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-semibold text-xs">
+                              {getEmployeeName(salary.employeeId).charAt(0)}
+                            </div>
+                            <span className="hidden sm:inline">{getEmployeeName(salary.employeeId)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                          {salary.month}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
+                          AED {Number(salary.baseSalary).toFixed(2)}
+                        </td>
+                        <td className="hidden sm:table-cell px-4 sm:px-6 py-4 text-sm font-medium text-green-600 text-right whitespace-nowrap">
+                          AED {Number(Object.values(salary.allowances || {}).reduce((a, b) => a + b, 0)).toFixed(2)}
+                        </td>
+                        <td className="hidden md:table-cell px-4 sm:px-6 py-4 text-sm font-medium text-red-600 text-right whitespace-nowrap">
+                          AED {Number(Object.values(salary.deductions || {}).reduce((a, b) => a + b, 0)).toFixed(2)}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-sm font-bold text-indigo-600 text-right whitespace-nowrap bg-indigo-50">
+                          AED {Number(salary.netSalary).toFixed(2)}
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-center whitespace-nowrap">
+                          <Badge className={getStatusColor(salary.status)}>
+                            {salary.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 sm:px-6 py-4 text-center whitespace-nowrap">
+                          <div className="flex gap-1 justify-center flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              title="View Details"
+                              onClick={() => {
+                                setSelectedSalary(salary);
+                                setIsViewDialogOpen(true);
+                              }}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <PermissionGate module="salary" action="edit">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title="Edit"
+                                onClick={() => handleOpenDialog(salary)}
+                              >
+                                ✏️
+                              </Button>
+                            </PermissionGate>
+                            {salary.status === 'pending' && (
+                              <Button
+                                size="sm"
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                title="Approve"
+                                onClick={() => handleApprove(salary.id!)}
+                              >
+                                ✓
+                              </Button>
+                            )}
+                            {salary.status === 'approved' && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                title="Mark as Paid"
+                                onClick={() => handleMarkPaid(salary.id!)}
+                              >
+                                💰
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
-                <div className="flex gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedSalary(salary);
-                      setIsViewDialogOpen(true);
-                    }}
-                  >
-                    <Eye className="w-4 h-4 mr-1" />
-                    View Details
-                  </Button>
-                  <PermissionGate module="salary" action="edit">
+        {/* Salary Records - Card View */}
+        {viewMode === 'card' && (
+          <div className="space-y-3">
+            {loading ? (
+              <div className="bg-white p-8 rounded-lg text-center text-gray-500">
+                Loading salary records...
+              </div>
+            ) : filteredSalaries.length === 0 ? (
+              <div className="bg-white p-8 rounded-lg text-center text-gray-500">
+                No salary records found
+              </div>
+            ) : (
+              filteredSalaries.map((salary) => (
+                <div key={salary.id} className="bg-white rounded-lg shadow p-4 sm:p-6 hover:shadow-lg transition-shadow border border-gray-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-semibold">
+                        {getEmployeeName(salary.employeeId).charAt(0)}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg text-gray-900">{getEmployeeName(salary.employeeId)}</h3>
+                        <p className="text-sm text-gray-600">{salary.month}</p>
+                      </div>
+                    </div>
+                    <Badge className={getStatusColor(salary.status)}>
+                      {salary.status}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-gray-600 text-xs font-medium">Base Salary</p>
+                      <p className="font-semibold text-lg text-gray-900 mt-1">AED {Number(salary.baseSalary).toFixed(2)}</p>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <p className="text-gray-600 text-xs font-medium">Allowances</p>
+                      <p className="font-semibold text-lg text-green-600 mt-1">
+                        AED {Number(Object.values(salary.allowances || {}).reduce((a, b) => a + b, 0)).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="bg-red-50 p-3 rounded-lg">
+                      <p className="text-gray-600 text-xs font-medium">Deductions</p>
+                      <p className="font-semibold text-lg text-red-600 mt-1">
+                        AED {Number(Object.values(salary.deductions || {}).reduce((a, b) => a + b, 0)).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                      <p className="text-gray-600 text-xs font-medium">Net Salary</p>
+                      <p className="font-bold text-lg text-indigo-600 mt-1">AED {Number(salary.netSalary).toFixed(2)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleOpenDialog(salary)}
+                      onClick={() => {
+                        setSelectedSalary(salary);
+                        setIsViewDialogOpen(true);
+                      }}
                     >
-                      Edit
+                      <Eye className="w-4 h-4 mr-1" />
+                      View Details
                     </Button>
-                  </PermissionGate>
-                  {salary.status === 'pending' && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleApprove(salary.id!)}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      Approve
-                    </Button>
-                  )}
-                  {salary.status === 'approved' && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleMarkPaid(salary.id!)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      Mark as Paid
-                    </Button>
-                  )}
-                 
+                    <PermissionGate module="salary" action="edit">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenDialog(salary)}
+                      >
+                        Edit
+                      </Button>
+                    </PermissionGate>
+                    {salary.status === 'pending' && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleApprove(salary.id!)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        Approve
+                      </Button>
+                    )}
+                    {salary.status === 'approved' && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleMarkPaid(salary.id!)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        Mark as Paid
+                      </Button>
+                    )}
+
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              ))
+            )}
+          </div>
+        )}
 
         {/* Add/Edit Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{selectedSalary ? 'Edit Salary' : 'Add Salary Record'}</DialogTitle>
               <DialogDescription>
-                {selectedSalary ? 'Update salary information' : 'Create a new salary record'}
+                {selectedSalary ? 'Update salary information' : 'Create a new salary record. Select an employee and month to auto-fetch salary data.'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
               <div className="space-y-4 py-4">
+                {autoFetching && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                    <div className="w-4 h-4 bg-blue-600 rounded-full animate-spin"></div>
+                    <p className="text-sm text-blue-700">Fetching salary data...</p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="employeeId">Employee *</Label>
@@ -453,93 +822,204 @@ export default function SalaryPage() {
                   </div>
                 </div>
 
-                <div className="space-y-3 border-t pt-4">
-                  <h4 className="font-semibold text-sm">Earnings</h4>
-                  <div className="space-y-2">
-                    <Label htmlFor="baseSalary">Base Salary *</Label>
-                    <Input
-                      id="baseSalary"
-                      type="number"
-                      placeholder="0"
-                      value={formData.baseSalary}
-                      onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="daAllowance">DA Allowance</Label>
-                      <Input
-                        id="daAllowance"
-                        type="number"
-                        placeholder="0"
-                        value={formData.daAllowance}
-                        onChange={(e) => setFormData({ ...formData, daAllowance: e.target.value })}
-                      />
+                {/* Salary Summary - Auto-fetched from Attendance */}
+                {salarySummary && !selectedSalary && (
+                  <div className="space-y-4 border-t pt-4">
+                    {/* Attendance Stats */}
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
+                      <h4 className="font-semibold text-sm text-gray-700">Attendance Summary</h4>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        <div className="text-center p-2 bg-green-50 rounded">
+                          <p className="text-lg font-bold text-green-600">{salarySummary.presentDays}</p>
+                          <p className="text-xs text-gray-600">Present Days</p>
+                        </div>
+                        <div className="text-center p-2 bg-red-50 rounded">
+                          <p className="text-lg font-bold text-red-600">{salarySummary.absentPaidDays}</p>
+                          <p className="text-xs text-gray-600">Absent Paid</p>
+                        </div>
+                        <div className="text-center p-2 bg-orange-50 rounded">
+                          <p className="text-lg font-bold text-orange-600">{salarySummary.absentUnpaidDays}</p>
+                          <p className="text-xs text-gray-600">Absent Unpaid</p>
+                        </div>
+                        <div className="text-center p-2 bg-blue-50 rounded">
+                          <p className="text-lg font-bold text-blue-600">{salarySummary.paidLeaveDays}</p>
+                          <p className="text-xs text-gray-600">Paid Leave</p>
+                        </div>
+                        <div className="text-center p-2 bg-purple-50 rounded">
+                          <p className="text-lg font-bold text-purple-600">{salarySummary.unpaidLeaveDays}</p>
+                          <p className="text-xs text-gray-600">Unpaid Leave</p>
+                        </div>
+                        <div className="text-center p-2 bg-gray-100 rounded">
+                          <p className="text-lg font-bold text-gray-600">{salarySummary.notMarkedDays}</p>
+                          <p className="text-xs text-gray-600">Not Marked</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="hraAllowance">HRA Allowance</Label>
-                      <Input
-                        id="hraAllowance"
-                        type="number"
-                        placeholder="0"
-                        value={formData.hraAllowance}
-                        onChange={(e) => setFormData({ ...formData, hraAllowance: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="otherAllowance">Other Allowance</Label>
-                      <Input
-                        id="otherAllowance"
-                        type="number"
-                        placeholder="0"
-                        value={formData.otherAllowance}
-                        onChange={(e) => setFormData({ ...formData, otherAllowance: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                <div className="space-y-3 border-t pt-4">
-                  <h4 className="font-semibold text-sm">Deductions</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="incomeTax">Income Tax</Label>
-                      <Input
-                        id="incomeTax"
-                        type="number"
-                        placeholder="0"
-                        value={formData.incomeTax}
-                        onChange={(e) => setFormData({ ...formData, incomeTax: e.target.value })}
-                      />
+                    {/* Salary Calculations */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white p-3 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-600 font-medium">Working Days</p>
+                        <p className="text-lg font-bold text-gray-900 mt-1">{salarySummary.workingDays}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-600 font-medium">Payable Days</p>
+                        {includeHolidays && salarySummary.totalHolidays > 0 ? (
+                          <div className='flex justify-between items-center'>
+                            <p className="text-lg font-bold text-gray-900 mt-1">
+                              {Number(salarySummary.basePayableDays) + salarySummary.totalHolidays}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              [{salarySummary.payableDays} + {salarySummary.totalHolidays}]
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-lg font-bold text-gray-900 mt-1">{salarySummary.payableDays}</p>
+                        )}
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-600 font-medium">Per Day Salary</p>
+                        <p className="text-lg font-bold text-indigo-600 mt-1">AED {salarySummary.perDaySalary}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-lg border border-gray-200">
+                        <p className="text-xs text-gray-600 font-medium">Attendance Rate</p>
+                        <p className="text-lg font-bold text-indigo-600 mt-1">{salarySummary.attendanceRate}%</p>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="providentFund">Provident Fund</Label>
-                      <Input
-                        id="providentFund"
-                        type="number"
-                        placeholder="0"
-                        value={formData.providentFund}
-                        onChange={(e) => setFormData({ ...formData, providentFund: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="otherDeduction">Other Deduction</Label>
-                      <Input
-                        id="otherDeduction"
-                        type="number"
-                        placeholder="0"
-                        value={formData.otherDeduction}
-                        onChange={(e) => setFormData({ ...formData, otherDeduction: e.target.value })}
-                      />
+
+                    {/* Holiday Information */}
+                    {salarySummary.totalHolidays > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-blue-700 font-semibold">Total Holidays: {salarySummary.totalHolidays}</p>
+                            <p className="text-xs text-blue-600 mt-1">Include holidays in payable days?</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={includeHolidays}
+                            onChange={() => setIncludeHolidays(!includeHolidays)}
+                            className="w-4 h-4 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Gross, Deductions, Net */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                        <p className="text-xs text-gray-600 font-medium">Gross Salary</p>
+                        <p className="text-2xl font-bold text-green-600 mt-2">AED {salarySummary.grossSalary}</p>
+                      </div>
+                      <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border border-red-200">
+                        <p className="text-xs text-gray-600 font-medium">Deductions</p>
+                        <p className="text-2xl font-bold text-red-600 mt-2">AED {salarySummary.totalDeductions}</p>
+                        <p className="text-xs text-gray-700 mt-1">{salarySummary.deductionReason}</p>
+                      </div>
+                      <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-lg border border-indigo-200">
+                        <p className="text-xs text-gray-600 font-medium">Net Salary</p>
+                        {includeHolidays && salarySummary.totalHolidays > 0 ? (
+                          <p className="text-2xl font-bold text-indigo-600 mt-2">AED {(((Number(salarySummary.basePayableDays) + salarySummary.totalHolidays) * Number(salarySummary.perDaySalary)) - Number(salarySummary.totalDeductions)).toFixed(2)}</p>
+                        ) : (
+                          <p className="text-2xl font-bold text-indigo-600 mt-2">AED {(((Number(salarySummary.basePayableDays)) * Number(salarySummary.perDaySalary)) - Number(salarySummary.totalDeductions)).toFixed(2)}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
-                <div className="border-t pt-4 bg-indigo-50 p-4 rounded">
+                {/* Manual Entry Section - Only show if editing existing salary */}
+                {selectedSalary && (
+                  <div className="space-y-4 border-t pt-4">
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">Earnings</h4>
+                      <div className="space-y-2">
+                        <Label htmlFor="baseSalary">Base Salary *</Label>
+                        <Input
+                          id="baseSalary"
+                          type="number"
+                          placeholder="0"
+                          value={formData.baseSalary}
+                          onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="daAllowance">DA Allowance</Label>
+                          <Input
+                            id="daAllowance"
+                            type="number"
+                            placeholder="0"
+                            value={formData.daAllowance}
+                            onChange={(e) => setFormData({ ...formData, daAllowance: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="hraAllowance">HRA Allowance</Label>
+                          <Input
+                            id="hraAllowance"
+                            type="number"
+                            placeholder="0"
+                            value={formData.hraAllowance}
+                            onChange={(e) => setFormData({ ...formData, hraAllowance: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="otherAllowance">Other Allowance</Label>
+                          <Input
+                            id="otherAllowance"
+                            type="number"
+                            placeholder="0"
+                            value={formData.otherAllowance}
+                            onChange={(e) => setFormData({ ...formData, otherAllowance: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 border-t pt-4">
+                      <h4 className="font-semibold text-sm">Deductions</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="incomeTax">Income Tax</Label>
+                          <Input
+                            id="incomeTax"
+                            type="number"
+                            placeholder="0"
+                            value={formData.incomeTax}
+                            onChange={(e) => setFormData({ ...formData, incomeTax: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="providentFund">Provident Fund</Label>
+                          <Input
+                            id="providentFund"
+                            type="number"
+                            placeholder="0"
+                            value={formData.providentFund}
+                            onChange={(e) => setFormData({ ...formData, providentFund: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="otherDeduction">Other Deduction</Label>
+                          <Input
+                            id="otherDeduction"
+                            type="number"
+                            placeholder="0"
+                            value={formData.otherDeduction}
+                            onChange={(e) => setFormData({ ...formData, otherDeduction: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* <div className="border-t pt-4 bg-indigo-50 p-4 rounded">
                   <p className="text-sm text-gray-600">Net Salary</p>
-                  <p className="text-2xl font-bold text-indigo-600">AED {calculateNetSalary().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
+                  <p className="text-2xl font-bold text-indigo-600">AED {Number(calculateNetSalary()).toFixed(2)}</p>
+                </div> */}
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={handleCloseDialog}>
@@ -559,8 +1039,8 @@ export default function SalaryPage() {
             <DialogHeader>
               <DialogTitle>Salary Slip</DialogTitle>
             </DialogHeader>
-            {selectedSalary && (
-              <div className="space-y-4 py-4 max-h-[80vh] overflow-y-auto">
+            {selectedSalary ? (
+              <div className="space-y-4 py-4">
                 <div className="text-center border-b pb-4">
                   <h3 className="text-lg font-bold">{getEmployeeName(selectedSalary.employeeId)}</h3>
                   <p className="text-sm text-gray-600">{selectedSalary.month}</p>
@@ -572,54 +1052,17 @@ export default function SalaryPage() {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span>Base Salary</span>
-                        <span>AED {selectedSalary.baseSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span>AED {Number(selectedSalary.baseSalary).toFixed(2)}</span>
                       </div>
-                      {Object.entries(selectedSalary.allowances || {}).map(([key, value]) => (
-                        value > 0 && (
-                          <div key={key} className="flex justify-between">
-                            <span>{key} Allowance</span>
-                            <span>AED {value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                        )
-                      ))}
-                      <div className="border-t pt-1 flex justify-between font-semibold">
-                        <span>Total Earnings</span>
-                        <span>
-                          AED {(selectedSalary.baseSalary + Object.values(selectedSalary.allowances || {}).reduce((a, b) => a + b, 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold mb-2">Deductions</h4>
-                    <div className="space-y-1 text-sm">
-                      {Object.entries(selectedSalary.deductions || {}).map(([key, value]) => (
-                        value > 0 && (
-                          <div key={key} className="flex justify-between">
-                            <span>{key}</span>
-                            <span>AED {value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                        )
-                      ))}
-                      <div className="border-t pt-1 flex justify-between font-semibold">
-                        <span>Total Deductions</span>
-                        <span>AED {Object.values(selectedSalary.deductions || {}).reduce((a, b) => a + b, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-indigo-50 p-4 rounded">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Net Salary</span>
-                      <span className="text-2xl font-bold text-indigo-600">AED {selectedSalary.netSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
           </DialogContent>
         </Dialog>
+
+
       </div>
     </ModuleAccessComponent>
   );

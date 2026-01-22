@@ -56,7 +56,7 @@ const PRIORITY_COLORS = {
 // Helper function to parse deadline from various formats
 function parseDeadlineDate(deadline: string | { seconds: number } | Date | undefined): Date | null {
   if (!deadline) return null;
-  
+
   try {
     // If it's a Firestore Timestamp object
     if (typeof deadline === 'object' && 'seconds' in deadline) {
@@ -83,25 +83,25 @@ function parseDeadlineDate(deadline: string | { seconds: number } | Date | undef
 // Format date as DD/MM/YYYY
 function formatDateDDMMYYYY(date: Date | null): string {
   if (!date) return 'No deadline';
-  
+
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
-  
+
   return `${day}/${month}/${year}`;
 }
 
 // Format date and time as DD/MM/YYYY HH:MM:SS
 function formatDateTimeDDMMYYYY(date: Date | null): string {
   if (!date) return 'No date';
-  
+
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
-  
+
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
@@ -145,7 +145,7 @@ export default function TaskDetailPage() {
       const commentsList = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Comment))
         .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
-      
+
       // Fetch user details for comments with authorId
       const newCache = { ...userCache };
       for (const comment of commentsList) {
@@ -267,15 +267,15 @@ export default function TaskDetailPage() {
 
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{task.title}</h1>
           <h3 className="text-lg font-bold text-gray-900 break-words">
-                     
-                        {task.jobCardNo && task.companyId && (
-                          <>
-                            {": "}
-                            {task.jobCardNo}
-                            <span className="p-2 bg-blue-500 rounded-full text-xs text-white ml-2">B2B Service</span>
-                          </>
-                        )}
-                      </h3>
+
+            {task.jobCardNo && task.companyId && (
+              <>
+                {": "}
+                {task.jobCardNo}
+                <span className="p-2 bg-blue-500 rounded-full text-xs text-white ml-2">B2B Service</span>
+              </>
+            )}
+          </h3>
         </div>
 
         {/* Task Details */}
@@ -298,8 +298,8 @@ export default function TaskDetailPage() {
                     {task.serviceBookingId && (
                       task.companyId ? (
                         // B2B Booking link
-                        <Link 
-                          href={`/admin/b2b-booking/companies/${task.companyId}/services/${task.serviceBookingId}/vehicles/${task.vehicleId}`} 
+                        <Link
+                          href={`/admin/b2b-booking/companies/${task.companyId}/services/${task.serviceBookingId}/vehicles/${task.vehicleId}`}
                           target="_blank"
                         >
                           <span className="inline-block text-xs font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap">
@@ -309,9 +309,12 @@ export default function TaskDetailPage() {
                       ) : (
                         // Booking Service link
                         <Link href={`/admin/book-service/${task.serviceBookingId}`} target="_blank">
-                          <span className="inline-block text-xs font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap">
-                            {task.jobCardNo}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block text-xs font-semibold text-blue-600 hover:text-blue-800  whitespace-nowrap">
+                              <span className='py-2 px-3 mr-2 bg-blue-500 text-white rounded decoration-white'>View Job</span>
+                              {task.jobCardNo}
+                            </span>
+                          </div>
                         </Link>
                       )
                     )}
@@ -335,14 +338,32 @@ export default function TaskDetailPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">Assigned To</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {task.assignedToNames.map((name, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                        {name}
-                      </span>
-                    ))}
+                <div className='grid grid-cols-2 gap-4'>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Assigned To</label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {task.assignedToNames.map((name, idx) => (
+                        <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Task Status</label>
+                    <div className="mt-2">
+                      {task.status === 'completed' || task.status === 'verified' ? (
+                        <span className="px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-800">    
+                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                        </span>
+                      ) : (     
+                        <span className="px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-800">    
+                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -397,7 +418,7 @@ export default function TaskDetailPage() {
                     const userData = comment.authorId ? userCache[comment.authorId] : null;
                     const displayName = userData?.displayName || comment.author || 'Unknown User';
                     const displayRole = userData?.role || 'User';
-                    
+
                     return (
                       <div key={comment.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div className="flex items-start justify-between">
@@ -429,8 +450,8 @@ export default function TaskDetailPage() {
                     onClick={() => handleStatusChange(statusOption.key)}
                     disabled={(!isAuthorized && task.status !== statusOption.key) || task.status === 'verified'}
                     className={`w-full px-4 py-3 rounded-lg text-sm font-medium transition-all border-2 flex items-center gap-2 ${task.status === statusOption.key
-                        ? `${statusOption.color} border-current`
-                        : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                      ? `${statusOption.color} border-current`
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
                       } ${(!isAuthorized && task.status !== statusOption.key) || task.status === 'verified' ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {statusOption.key === 'inProgress' && <Clock className="w-4 h-4" />}

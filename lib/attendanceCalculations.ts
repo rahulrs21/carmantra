@@ -47,20 +47,23 @@ export const isWorkingDay = (date: Date, holidays?: Date[]): boolean => {
 };
 
 /**
- * Get number of working days in a month
+ * Get number of working days in a month based on custom working days
  */
-export const getWorkingDaysInMonth = (year: number, month: number, holidays: Date[] = []): number => {
-  let workingDays = 0;
+export const getWorkingDaysInMonth = (year: number, month: number, holidays: Date[] = [], workingDays: number[] = [1, 2, 3, 4, 5]): number => {
+  let workingDaysCount = 0;
   const lastDay = new Date(year, month, 0).getDate();
   
   for (let day = 1; day <= lastDay; day++) {
     const date = new Date(year, month - 1, day);
-    if (isWorkingDay(date, holidays)) {
-      workingDays++;
+    const dayOfWeek = date.getDay();
+    
+    // Check if this day is in the working days array and not a holiday
+    if (workingDays.includes(dayOfWeek) && !holidays.some(h => isSameDay(h, date))) {
+      workingDaysCount++;
     }
   }
   
-  return workingDays;
+  return workingDaysCount;
 };
 
 /**
@@ -100,11 +103,116 @@ export const getDaysInMonth = (year: number, month: number): Date[] => {
 };
 
 // ============================================================================
+// EMPLOYEE DETAIL STATISTICS (for daily view - matching calendar calculation)
+// ============================================================================
+
+/**
+ * Calculate employee statistics from daily attendance records
+ * This matches the logic in the daily attendance calendar view
+ */
+export const calculateEmployeeDetailStats = (
+  dailyAttendanceRecords: DailyAttendance[],
+  targetMonth?: { year: number; month: number }
+): {
+  present: number;
+  presentCalculated: number;
+  absent: number;
+  paidLeave: number;
+  unpaidLeave: number;
+  notMarked: number;
+  dailyDetails: Record<string, any>;
+} => {
+  const dailyDetails: Record<string, any> = {};
+  
+  let monthStr = '';
+  if (targetMonth) {
+    monthStr = `${targetMonth.year}-${String(targetMonth.month).padStart(2, '0')}`;
+  }
+
+  // Process all attendance records
+  dailyAttendanceRecords.forEach(record => {
+    const dateStr = typeof record.date === 'string' 
+      ? record.date 
+      : record.date instanceof Timestamp 
+        ? `${record.date.toDate().getFullYear()}-${String(record.date.toDate().getMonth() + 1).padStart(2, '0')}-${String(record.date.toDate().getDate()).padStart(2, '0')}`
+        : '';
+
+    // Filter by month if specified
+    if (monthStr && !dateStr.startsWith(monthStr)) {
+      return;
+    }
+
+    // Skip 'not-marked' status
+    if (record.status === 'not-marked') {
+      return;
+    }
+
+    if (record.status === 'present') {
+      const type = record.presentDayType || 'full';
+      
+      dailyDetails[dateStr] = {
+        status: 'present',
+        type: type,
+        display: type === 'full' ? 'Full' : type === 'half' ? 'Half' : 'Quarter',
+        multiplier: type === 'full' ? 1 : type === 'half' ? 0.5 : 0.25
+      };
+    } else if (record.status === 'absent') {
+      dailyDetails[dateStr] = {
+        status: 'absent',
+        absenceReason: record.absenceReason,
+        absenceType: record.absenceReason ? 'unpaid' : 'paid'
+      };
+    } else if (record.status === 'leave') {
+      dailyDetails[dateStr] = {
+        status: 'leave',
+        leaveType: record.leaveType || 'paid',
+        leaveReason: record.leaveReason
+      };
+    }
+  });
+
+  // Count by status
+  const presentDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'present').length;
+  const absentDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'absent').length;
+  const paidLeaveDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'leave' && d.leaveType === 'paid').length;
+  const unpaidLeaveDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'leave' && d.leaveType === 'unpaid').length;
+
+  // Calculate total present days (with multipliers)
+  let totalPresentDays = 0;
+  Object.values(dailyDetails).forEach((d: any) => {
+    if (d.status === 'present') {
+      const mult = d.multiplier || 1;
+      totalPresentDays += mult;
+    }
+  });
+  totalPresentDays = Math.round(totalPresentDays * 100) / 100;
+
+  return {
+    present: presentDaysCount,
+    presentCalculated: totalPresentDays,
+    absent: absentDaysCount,
+    paidLeave: paidLeaveDaysCount,
+    unpaidLeave: unpaidLeaveDaysCount,
+    notMarked: 0, // Not needed for this calculation
+    dailyDetails: dailyDetails
+  };
+};
+
+// ============================================================================
 // MONTHLY ATTENDANCE CALCULATION
 // ============================================================================
 
 /**
  * Calculate monthly attendance summary from daily records
+ * 
+ * This matches the logic from calculateEmployeeStats in the daily attendance view
+ * 
+ * Calculation logic (NO filtering by holidays or working days):
+ * - Present Days = Sum of full (1) + half (0.5) + quarter (0.25) day contributions
+ * - Absent Days = Count of all absent records
+ * - Paid Leave = Count of leave records with leaveType = 'paid'
+ * - Unpaid Leave = Count of leave records with leaveType = 'unpaid'
+ * - Not Marked Days = Count of working days with no records
  */
 export const calculateMonthlyAttendanceSummary = (
   employeeId: string,
@@ -112,56 +220,117 @@ export const calculateMonthlyAttendanceSummary = (
   month: number,
   dailyAttendanceRecords: DailyAttendance[],
   holidays: Date[] = [],
-  calculatedBy: string = 'system'
+  calculatedBy: string = 'system',
+  workingDays: number[] = [1, 2, 3, 4, 5]
 ): MonthlyAttendanceSummary => {
-  const workingDaysInMonth = getWorkingDaysInMonth(year, month, holidays);
+  const workingDaysInMonth = getWorkingDaysInMonth(year, month, holidays, workingDays);
   const daysInMonth = getDaysInMonth(year, month);
   
   let totalPresentDays = 0;
   let totalAbsentDays = 0;
+  let totalAbsentPaidDays = 0;
+  let totalAbsentUnpaidDays = 0;
   let totalPaidLeaveDays = 0;
   let totalUnpaidLeaveDays = 0;
   let totalNotMarkedDays = 0;
   
-  // Process each day in the month
+  const dailyDetails: Record<string, any> = {};
+  
+  // Process all marked records (ignore holidays, ignore working day status)
+  dailyAttendanceRecords.forEach(record => {
+    if (record.status === 'not-marked') {
+      return;
+    }
+    
+    const dateStr = typeof record.date === 'string'
+      ? record.date
+      : record.date instanceof Timestamp
+        ? `${record.date.toDate().getFullYear()}-${String(record.date.toDate().getMonth() + 1).padStart(2, '0')}-${String(record.date.toDate().getDate()).padStart(2, '0')}`
+        : '';
+
+    if (record.status === 'present') {
+      const type = record.presentDayType || 'full';
+      dailyDetails[dateStr] = {
+        status: 'present',
+        type: type,
+        multiplier: type === 'full' ? 1 : type === 'half' ? 0.5 : type === 'quarter' ? 0.25 : 1
+      };
+    } else if (record.status === 'absent') {
+      const absenceType = record.absenceType || 'unpaid';
+      dailyDetails[dateStr] = {
+        status: 'absent',
+        absenceType: absenceType
+      };
+    } else if (record.status === 'leave') {
+      dailyDetails[dateStr] = {
+        status: 'leave',
+        leaveType: record.leaveType || 'paid'
+      };
+    }
+  });
+
+  // Count records by status
+  const presentRecords = Object.values(dailyDetails).filter((d: any) => d.status === 'present');
+  const absentRecords = Object.values(dailyDetails).filter((d: any) => d.status === 'absent');
+  const leaveRecordsMap = Object.entries(dailyDetails).filter((entry: any) => entry[1].status === 'leave');
+  
+  totalAbsentDays = absentRecords.length;
+  
+  // Separate absent by type
+  absentRecords.forEach((absent: any) => {
+    if (absent.absenceType === 'paid') {
+      totalAbsentPaidDays++;
+    } else {
+      totalAbsentUnpaidDays++;
+    }
+  });
+  
+  // Separate leave by type - EXCLUDING auto-marked week-offs (non-working days)
+  leaveRecordsMap.forEach((entry: any) => {
+    const dateStr = entry[0];
+    const leave = entry[1];
+    
+    // Parse the date string to check if it's a working day
+    const [dateYear, dateMonth, dateDay] = dateStr.split('-').map(Number);
+    const leaveDate = new Date(dateYear, dateMonth - 1, dateDay);
+    const dayOfWeek = leaveDate.getDay();
+    const isWorkingDay = workingDays.includes(dayOfWeek);
+    const isHoliday = holidays.some(h => isSameDay(h, leaveDate));
+    
+    // Only count as paid/unpaid leave if it's on a working day (not auto-marked week-off)
+    if (isWorkingDay && !isHoliday) {
+      if (leave.leaveType === 'paid') {
+        totalPaidLeaveDays++;
+      } else {
+        totalUnpaidLeaveDays++;
+      }
+    }
+  });
+  
+  // Calculate present days with multipliers
+  presentRecords.forEach((present: any) => {
+    totalPresentDays += present.multiplier || 1;
+  });
+  totalPresentDays = Math.round(totalPresentDays * 100) / 100;
+  
+  // Calculate not-marked days for working days only
   daysInMonth.forEach(date => {
-    // Skip non-working days
-    if (!isWorkingDay(date, holidays)) {
-      return;
+    const dayOfWeek = date.getDay();
+    const isWorkingDay = workingDays.includes(dayOfWeek) && !holidays.some(h => isSameDay(h, date));
+    
+    if (!isWorkingDay) {
+      return; // Skip non-working days/weekends/holidays
     }
     
-    // Find attendance record for this day
-    const record = dailyAttendanceRecords.find(r => 
-      isSameDay(timestampToDate(r.date), date)
-    );
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     
-    if (!record) {
+    // Check if there's a record for this day
+    if (!dailyDetails[dateStr]) {
       totalNotMarkedDays++;
-      return;
-    }
-    
-    switch (record.status) {
-      case 'present':
-        totalPresentDays += getDayContribution(record.presentDayType || 'full');
-        break;
-      case 'absent':
-        totalAbsentDays++;
-        break;
-      case 'leave':
-        if (record.leaveType === 'paid') {
-          totalPaidLeaveDays++;
-        } else {
-          totalUnpaidLeaveDays++;
-        }
-        break;
-      case 'not-marked':
-        totalNotMarkedDays++;
-        break;
     }
   });
   
   // Calculate payable days
-  // Formula: workingDays - unpaidLeave - absent (but counting present + paidLeave)
   const totalPayableDays = totalPresentDays + totalPaidLeaveDays;
   const attendancePercentage = workingDaysInMonth > 0 
     ? (totalPresentDays / workingDaysInMonth) * 100 
@@ -175,6 +344,8 @@ export const calculateMonthlyAttendanceSummary = (
     totalWorkingDays: workingDaysInMonth,
     totalPresentDays,
     totalAbsentDays,
+    totalAbsentPaidDays,
+    totalAbsentUnpaidDays,
     totalPaidLeaveDays,
     totalUnpaidLeaveDays,
     totalNotMarkedDays,
@@ -202,18 +373,23 @@ export const calculateSalaryBreakdown = (
   calculatedBy: string = 'system'
 ): SalaryBreakdown => {
   const workingDaysInMonth = monthlyAttendanceSummary.totalWorkingDays;
-  const perDaySalary = workingDaysInMonth > 0 ? grossSalary / workingDaysInMonth : 0;
+  
+  // Calculate per day salary based on total days in the month, not working days
+  const totalDaysInMonth = getDaysInMonth(year, month).length;
+  const perDaySalary = totalDaysInMonth > 0 ? grossSalary / totalDaysInMonth : 0;
   
   // Get payable and deductible days
   const presentDays = monthlyAttendanceSummary.totalPresentDays;
   const paidLeaveDays = monthlyAttendanceSummary.totalPaidLeaveDays;
+  const absentPaidDays = monthlyAttendanceSummary.totalAbsentPaidDays;
   const absentDays = monthlyAttendanceSummary.totalAbsentDays;
   const unpaidLeaveDays = monthlyAttendanceSummary.totalUnpaidLeaveDays;
   
-  const totalPayableDays = presentDays + paidLeaveDays;
+  // Payable days include: Present + Paid Leave + Absent Paid
+  const totalPayableDays = presentDays + paidLeaveDays + absentPaidDays;
   
-  // Calculate deductions
-  const totalDeductionDays = absentDays + unpaidLeaveDays;
+  // Calculate deductions based on unpaid absences and unpaid leaves only
+  const totalDeductionDays = (absentDays - absentPaidDays) + unpaidLeaveDays;
   const totalDeductions = totalDeductionDays * perDaySalary;
   
   // Net salary
@@ -448,4 +624,49 @@ export const calculateAttendanceStreak = (dailyRecords: DailyAttendance[]): numb
   }
   
   return streak;
+};
+
+/**
+ * Generate attendance records for week-off days (paid leave)
+ * This function returns records that should be created for week-off days
+ */
+export const generateWeekOffPaidLeaveRecords = (
+  employeeIds: string[],
+  newWorkingDays: number[],
+  monthsToProcess: Array<{ year: number; month: number }>
+): Partial<DailyAttendance>[] => {
+  const records: Partial<DailyAttendance>[] = [];
+  const allDaysOfWeek = [0, 1, 2, 3, 4, 5, 6]; // Sun-Sat
+  const weekOffDays = allDaysOfWeek.filter(day => !newWorkingDays.includes(day));
+  
+  if (weekOffDays.length === 0) return records;
+
+  for (const targetMonth of monthsToProcess) {
+    const targetYear = targetMonth.year;
+    const targetMonthNum = targetMonth.month;
+    const targetDaysInMonth = new Date(targetYear, targetMonthNum, 0).getDate();
+
+    for (let day = 1; day <= targetDaysInMonth; day++) {
+      const date = new Date(targetYear, targetMonthNum - 1, day);
+      const dayOfWeek = date.getDay();
+
+      if (!weekOffDays.includes(dayOfWeek)) continue;
+
+      const dateStr = `${targetYear}-${String(targetMonthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      for (const empId of employeeIds) {
+        records.push({
+          employeeId: empId,
+          date: dateStr as any, // Stored as YYYY-MM-DD string
+          status: 'leave' as AttendanceStatus,
+          leaveType: 'paid',
+          leaveReason: 'Company Week-off',
+          markedAt: Timestamp.now(),
+          markedBy: 'system',
+        });
+      }
+    }
+  }
+
+  return records;
 };

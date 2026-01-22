@@ -37,6 +37,7 @@ export interface DailyAttendance {
   
   // For Absent status
   absenceReason?: AbsenceReason;
+  absenceType?: 'paid' | 'unpaid'; // Type of absence (paid or unpaid)
   absenceNote?: string; // Optional additional text
   
   // For Leave status
@@ -68,7 +69,9 @@ export interface MonthlyAttendanceSummary {
   // Day counts
   totalWorkingDays: number; // Excluding weekends & holidays
   totalPresentDays: number; // Sum of day contributions (1.0, 0.5, 0.25)
-  totalAbsentDays: number; // Count of absence entries
+  totalAbsentDays: number; // Count of absence entries (total)
+  totalAbsentPaidDays: number; // Paid absent days
+  totalAbsentUnpaidDays: number; // Unpaid absent days
   totalPaidLeaveDays: number;
   totalUnpaidLeaveDays: number;
   totalNotMarkedDays: number;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, writeBatch, doc, Timestamp, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, writeBatch, doc, Timestamp, addDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Employee } from '@/lib/types';
 import { DailyAttendance, AttendanceStatus, PresentDayType, AbsenceReason, AttendanceSettings } from '@/lib/attendanceTypes';
 import { useUser } from '@/lib/userContext';
@@ -25,6 +25,7 @@ import {
   Trash2,
   CheckCircle2,
   Settings,
+  Trash,
 } from 'lucide-react';
 import { 
   getAttendanceColor, 
@@ -73,10 +74,11 @@ export default function AttendancePage() {
   const [showReasonDialog, setShowReasonDialog] = useState(false);
   const [reasonDialogEmployee, setReasonDialogEmployee] = useState('');
   const [absenceReason, setAbsenceReason] = useState('');
+  const [absenceType, setAbsenceType] = useState<'paid' | 'unpaid'>('unpaid');
   const [showLeaveReasonDialog, setShowLeaveReasonDialog] = useState(false);
   const [leaveReasonEmployee, setLeaveReasonEmployee] = useState('');
   const [leaveReason, setLeaveReason] = useState('');
-  const [leaveType, setLeaveType] = useState<'paid' | 'unpaid'>('paid');
+  const [leaveType, setLeaveType] = useState<'paid' | 'unpaid'>('unpaid');
   const [showHolidayForm, setShowHolidayForm] = useState(false);
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayName, setNewHolidayName] = useState('');
@@ -92,6 +94,8 @@ export default function AttendancePage() {
   const [attendanceTypeEmployee, setAttendanceTypeEmployee] = useState('');
   const [selectedAttendanceType, setSelectedAttendanceType] = useState<PresentDayType>('full');
   const [employeeStats, setEmployeeStats] = useState<Record<string, any>>({});
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [clearDialogEmployee, setClearDialogEmployee] = useState<string>('');
   
   // Settings state
   const [attendanceSettings, setAttendanceSettings] = useState<AttendanceSettings>({
@@ -135,23 +139,27 @@ export default function AttendancePage() {
     fetchEmployees();
   }, []);
 
-  // Fetch attendance settings
+  // Fetch attendance settings with real-time listener
   useEffect(() => {
-    const fetchAttendanceSettings = async () => {
-      try {
-        const q = query(collection(db, 'attendanceSettings'));
-        const snapshot = await getDocs(q);
+    const q = query(collection(db, 'attendanceSettings'));
+    
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
         if (snapshot.docs.length > 0) {
           const settingsDoc = snapshot.docs[0].data() as AttendanceSettings;
           setAttendanceSettings(settingsDoc);
           setTempWorkingDays(settingsDoc.workingDays || [1, 2, 3, 4, 5]);
           setTempHolidays((settingsDoc.holidays || []).map(h => ({ ...h, type: h.type || 'government' })));
         }
-      } catch (error) {
-        console.error('Error fetching attendance settings:', error);
+      },
+      (error) => {
+        console.error('Error listening to attendance settings:', error);
       }
-    };
-    fetchAttendanceSettings();
+    );
+
+    // Cleanup: unsubscribe from the listener when component unmounts
+    return () => unsubscribe();
   }, []);
 
   // Fetch attendance for selected date
@@ -166,9 +174,15 @@ export default function AttendancePage() {
         const snapshot = await getDocs(q);
         const records: Record<string, DailyAttendance> = {};
 
+        // If there are multiple records for the same employee, keep the most recently marked one
         snapshot.docs.forEach(doc => {
           const data = doc.data() as DailyAttendance;
-          records[data.employeeId] = data;
+          const existing = records[data.employeeId];
+          
+          // Compare timestamps and keep the most recent
+          if (!existing || (data.markedAt && existing.markedAt && data.markedAt > existing.markedAt)) {
+            records[data.employeeId] = { ...data, id: doc.id };
+          }
         });
 
         setAttendance(records);
@@ -186,6 +200,21 @@ export default function AttendancePage() {
       calculateEmployeeStats(selectedEmployeeDetail.id, detailViewMonth);
     }
   }, [showEmployeeDetail, selectedEmployeeDetail?.id, detailViewMonth]);
+
+  // Fetch holidays
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        const q = query(collection(db, 'holidays'));
+        const snapshot = await getDocs(q);
+        const holidayList = snapshot.docs.map(doc => doc.data()) as Array<{ date: string; name: string }>;
+        setHolidays(holidayList);
+      } catch (error) {
+        console.error('Error fetching holidays:', error);
+      }
+    };
+    fetchHolidays();
+  }, []);
 
   const getDateStr = (date: Date) => {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -212,10 +241,16 @@ export default function AttendancePage() {
   // Save attendance settings
   const saveAttendanceSettings = async () => {
     try {
+      // Calculate weekend days based on working days
+      const allDaysOfWeek = [0, 1, 2, 3, 4, 5, 6]; // Sun-Sat
+      const weekendDaysNumbers = allDaysOfWeek.filter(day => !tempWorkingDays.includes(day));
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const weekendDaysNames = weekendDaysNumbers.map(day => dayNames[day]);
+
       const settingsData = {
         workingDays: tempWorkingDays,
         holidays: tempHolidays,
-        weekendDays: attendanceSettings.weekendDays,
+        weekendDays: weekendDaysNames,
         updatedAt: Timestamp.now(),
       };
 
@@ -232,6 +267,10 @@ export default function AttendancePage() {
 
       setAttendanceSettings(settingsData);
       setShowSettings(false);
+      
+      // Clear attendance records for newly changed week-off days
+      await clearWeekOffDaysAttendance(tempWorkingDays);
+      
       toast.success('Attendance settings saved successfully');
     } catch (error) {
       console.error('Error saving attendance settings:', error);
@@ -239,8 +278,213 @@ export default function AttendancePage() {
     }
   };
 
+  // Clear attendance record for an employee on selected date
+  const clearAttendanceForDate = async (empId: string) => {
+    try {
+      const dateStr = getDateStr(selectedDate);
+      const q = query(
+        collection(db, 'dailyAttendance'),
+        where('employeeId', '==', empId),
+        where('date', '==', dateStr)
+      );
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+        
+        // Update local state immediately
+        const key = `${empId}-${dateStr}`;
+        const newAttendance = { ...attendance };
+        delete newAttendance[key];
+        setAttendance(newAttendance);
+        
+        // Refetch attendance for the selected date to ensure UI is in sync
+        await refetchAttendanceForSelectedDate();
+        
+        toast.success('Attendance cleared for this date');
+      } else {
+        toast.info('No attendance record found for this date');
+      }
+    } catch (error) {
+      console.error('Error clearing attendance:', error);
+      toast.error('Failed to clear attendance');
+    } finally {
+      setShowClearDialog(false);
+      setClearDialogEmployee('');
+    }
+  };
+
+  // Clear attendance for newly changed week-off days (mark as not-marked)
+  const clearWeekOffDaysAttendance = async (newWorkingDays: number[]) => {
+    try {
+      const allDaysOfWeek = [0, 1, 2, 3, 4, 5, 6]; // Sun-Sat
+      const weekOffDays = allDaysOfWeek.filter(day => !newWorkingDays.includes(day));
+      
+      if (weekOffDays.length === 0) return; // No week-off days
+
+      // Get current month's date range
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const daysInMonth = new Date(year, month, 0).getDate();
+
+      // Get all employees
+      const empQuery = query(collection(db, 'employees'), where('status', '==', 'active'));
+      const empSnapshot = await getDocs(empQuery);
+      const employeeIds = empSnapshot.docs.map(doc => doc.id);
+
+      const batch = writeBatch(db);
+
+      // For each week-off day in current and next month, mark as not-marked
+      const monthsToProcess = [
+        { year, month },
+        { year: month === 12 ? year + 1 : year, month: month === 12 ? 1 : month + 1 }
+      ];
+
+      for (const targetMonth of monthsToProcess) {
+        const targetYear = targetMonth.year;
+        const targetMonthNum = targetMonth.month;
+        const targetDaysInMonth = new Date(targetYear, targetMonthNum, 0).getDate();
+
+        for (let day = 1; day <= targetDaysInMonth; day++) {
+          const date = new Date(targetYear, targetMonthNum - 1, day);
+          const dayOfWeek = date.getDay();
+
+          if (!weekOffDays.includes(dayOfWeek)) continue;
+
+          const dateStr = `${targetYear}-${String(targetMonthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+          // Clear attendance for each employee on this week-off day
+          for (const empId of employeeIds) {
+            const q = query(
+              collection(db, 'dailyAttendance'),
+              where('employeeId', '==', empId),
+              where('date', '==', dateStr)
+            );
+            const snapshot = await getDocs(q);
+            
+            if (!snapshot.empty) {
+              snapshot.docs.forEach(doc => {
+                batch.update(doc.ref, { status: 'not-marked', markedAt: Timestamp.now() });
+              });
+            }
+          }
+        }
+      }
+
+      await batch.commit();
+      console.log('Cleared attendance for newly changed week-off days');
+    } catch (error) {
+      console.error('Error clearing week-off days attendance:', error);
+    }
+  };
+
+  // Auto-mark non-working days as paid leave (DEPRECATED - no longer used)
+  const autoMarkWeekOffDays = async (newWorkingDays: number[]) => {
+    try {
+      const allDaysOfWeek = [0, 1, 2, 3, 4, 5, 6]; // Sun-Sat
+      const weekOffDays = allDaysOfWeek.filter(day => !newWorkingDays.includes(day));
+      
+      if (weekOffDays.length === 0) return; // No week-off days
+
+      // Get current month's date range
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+      // Get all employees
+      const empQuery = query(collection(db, 'employees'), where('status', '==', 'active'));
+      const empSnapshot = await getDocs(empQuery);
+      const employeeIds = empSnapshot.docs.map(doc => doc.id);
+
+      // For each week-off day in current and next month, mark as paid leave if not already marked
+      const monthsToProcess = [
+        { year, month },
+        { year: month === 12 ? year + 1 : year, month: month === 12 ? 1 : month + 1 }
+      ];
+
+      for (const targetMonth of monthsToProcess) {
+        const targetYear = targetMonth.year;
+        const targetMonthNum = targetMonth.month;
+        const targetDaysInMonth = new Date(targetYear, targetMonthNum, 0).getDate();
+
+        for (let day = 1; day <= targetDaysInMonth; day++) {
+          const date = new Date(targetYear, targetMonthNum - 1, day);
+          const dayOfWeek = date.getDay();
+
+          if (!weekOffDays.includes(dayOfWeek)) continue;
+
+          const dateStr = `${targetYear}-${String(targetMonthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+          // Check and mark for each employee
+          for (const empId of employeeIds) {
+            const existingQuery = query(
+              collection(db, 'dailyAttendance'),
+              where('employeeId', '==', empId),
+              where('date', '==', dateStr)
+            );
+            
+            const existingSnapshot = await getDocs(existingQuery);
+            
+            // Only mark if not already marked
+            if (existingSnapshot.empty) {
+              await addDoc(collection(db, 'dailyAttendance'), {
+                employeeId: empId,
+                date: dateStr,
+                status: 'leave',
+                leaveType: 'paid',
+                leaveReason: 'Company Week-off',
+                markedAt: Timestamp.now(),
+                markedBy: 'system',
+              });
+            }
+          }
+        }
+      }
+
+      // Refetch attendance for the current date to reflect changes
+      await refetchAttendanceForSelectedDate();
+    } catch (error) {
+      console.error('Error auto-marking week-off days:', error);
+    }
+  };
+
+  // Refetch attendance for the selected date
+  const refetchAttendanceForSelectedDate = async () => {
+    try {
+      const dateStr = getDateStr(selectedDate);
+      const q = query(
+        collection(db, 'dailyAttendance'),
+        where('date', '==', dateStr)
+      );
+      const snapshot = await getDocs(q);
+      const records: Record<string, DailyAttendance> = {};
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data() as DailyAttendance;
+        const existing = records[data.employeeId];
+        
+        if (!existing || (data.markedAt && existing.markedAt && data.markedAt > existing.markedAt)) {
+          records[data.employeeId] = { ...data, id: doc.id };
+        }
+      }); 
+
+      setAttendance(records);
+    } catch (error) {
+      console.error('Error refetching attendance:', error);
+    }
+  };
+
   // Mark attendance
-  const handleMarkAttendance = async (empId: string, status: AttendanceStatus, reason = '', presentDayType: PresentDayType = 'full', leaveTypeParam: 'paid' | 'unpaid' = 'paid') => {
+  const handleMarkAttendance = async (empId: string, status: AttendanceStatus, reason = '', presentDayType: PresentDayType = 'full', leaveTypeParam: 'paid' | 'unpaid' = 'paid', absenceTypeParam: 'paid' | 'unpaid' = 'unpaid') => {
     if (!isAuthorized) {
       toast.error('You do not have permission to mark attendance');
       return;
@@ -262,13 +506,22 @@ export default function AttendancePage() {
       } else {
         // Set new status
         if (existing && existing.id) {
-          await updateDoc(doc(db, 'dailyAttendance', existing.id), {
+          const updateData: any = {
             status,
-            absenceReason: status === 'absent' ? reason : undefined,
-            leaveReason: status === 'leave' ? reason : undefined,
-            presentDayType: status === 'present' ? presentDayType : undefined,
             markedAt: Timestamp.now(),
-          });
+          };
+          
+          if (status === 'absent') {
+            if (reason) updateData.absenceReason = reason;
+            updateData.absenceType = absenceTypeParam;
+          } else if (status === 'present') {
+            updateData.presentDayType = presentDayType;
+          } else if (status === 'leave') {
+            updateData.leaveType = leaveTypeParam;
+            if (reason) updateData.leaveReason = reason;
+          }
+          
+          await updateDoc(doc(db, 'dailyAttendance', existing.id), updateData);
         } else {
           const docData: any = {
             employeeId: empId,
@@ -279,6 +532,7 @@ export default function AttendancePage() {
           };
           if (status === 'absent') {
             if (reason) docData.absenceReason = reason;
+            docData.absenceType = absenceTypeParam;
           }
           if (status === 'present') docData.presentDayType = presentDayType;
           if (status === 'leave') {
@@ -296,6 +550,7 @@ export default function AttendancePage() {
             date: dateStr,
             status,
             absenceReason: status === 'absent' ? reason : undefined,
+            absenceType: status === 'absent' ? absenceTypeParam : undefined,
             leaveReason: status === 'leave' ? reason : undefined,
             leaveType: status === 'leave' ? leaveTypeParam : undefined,
             presentDayType: status === 'present' ? presentDayType : undefined,
@@ -306,6 +561,14 @@ export default function AttendancePage() {
 
         const typeLabel = presentDayType === 'full' ? '(Full)' : presentDayType === 'half' ? '(Half)' : '(Quarter)';
         toast.success(`Marked as ${status} ${status === 'present' ? typeLabel : ''}`);
+        
+        // Refetch attendance for selected date to ensure data is up-to-date
+        await refetchAttendanceForSelectedDate();
+        
+        // Recalculate stats if employee detail modal is open
+        if (showEmployeeDetail && selectedEmployeeDetail?.id === empId) {
+          await calculateEmployeeStats(empId, detailViewMonth);
+        }
       }
     } catch (error) {
       console.error('Error marking attendance:', error);
@@ -679,77 +942,81 @@ export default function AttendancePage() {
       const targetMonth = month || detailViewMonth;
       const monthStr = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}`;
       
-      let presentDays = 0;
-      let absentDays = 0;
-      let leaveDays = 0;
       const dailyDetails: Record<string, any> = {};
 
-      // Count present days with type multiplier
-      const presentQuery = query(
+      // Fetch all attendance records for the employee for the entire month
+      const allQuery = query(
         collection(db, 'dailyAttendance'),
-        where('employeeId', '==', employeeId),
-        where('status', '==', 'present')
+        where('employeeId', '==', employeeId)
       );
-      const presentSnapshot = await getDocs(presentQuery);
-      presentSnapshot.docs.forEach(doc => {
+      const allSnapshot = await getDocs(allQuery);
+
+      allSnapshot.docs.forEach(doc => {
         const data = doc.data() as any;
         const dateStr = data.date as string;
+
         // Filter by month
-        if (dateStr && dateStr.startsWith(monthStr)) {
+        if (!dateStr || !dateStr.startsWith(monthStr)) {
+          return;
+        }
+
+        const status = data.status;
+
+        // Only process marked records (not 'not-marked')
+        if (status === 'not-marked') {
+          return;
+        }
+
+        if (status === 'present') {
           const type = data.presentDayType || 'full';
-          const multiplier = type === 'full' ? 1 : type === 'half' ? 0.5 : 0.25;
-          presentDays += multiplier;
+          
           dailyDetails[dateStr] = {
             status: 'present',
             type: type,
-            display: type === 'full' ? 'Full' : type === 'half' ? 'Half' : 'Quarter'
+            display: type === 'full' ? 'Full' : type === 'half' ? 'Half' : 'Quarter',
+            multiplier: type === 'full' ? 1 : type === 'half' ? 0.5 : 0.25
           };
-        }
-      });
-
-      // Count absent days
-      const absentQuery = query(
-        collection(db, 'dailyAttendance'),
-        where('employeeId', '==', employeeId),
-        where('status', '==', 'absent')
-      );
-      const absentSnapshot = await getDocs(absentQuery);
-      absentSnapshot.docs.forEach(doc => {
-        const data = doc.data() as any;
-        const dateStr = data.date as string;
-        if (dateStr && dateStr.startsWith(monthStr)) {
-          absentDays++;
+        } else if (status === 'absent') {
           dailyDetails[dateStr] = {
             status: 'absent',
-            reason: data.absenceReason || 'N/A'
+            absenceReason: data.absenceReason || undefined,
+            absenceType: data.absenceType || 'unpaid'
+          };
+        } else if (status === 'leave') {
+          dailyDetails[dateStr] = {
+            status: 'leave',
+            leaveType: data.leaveType || 'paid',
+            leaveReason: data.leaveReason || undefined
           };
         }
       });
 
-      // Count leave days
-      const leaveQuery = query(
-        collection(db, 'dailyAttendance'),
-        where('employeeId', '==', employeeId),
-        where('status', '==', 'leave')
-      );
-      const leaveSnapshot = await getDocs(leaveQuery);
-      leaveSnapshot.docs.forEach(doc => {
-        const data = doc.data() as any;
-        const dateStr = data.date as string;
-        if (dateStr && dateStr.startsWith(monthStr)) {
-          leaveDays++;
-          dailyDetails[dateStr] = {
-            status: 'leave'
-          };
+      // Count actual dates with each status
+      const presentDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'present').length;
+      const absentDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'absent').length;
+      const leaveDaysCount = Object.values(dailyDetails).filter((d: any) => d.status === 'leave').length;
+
+      // Calculate total days worked (with multipliers for full/half/quarter)
+      let totalPresentDays = 0;
+      Object.values(dailyDetails).forEach((d: any) => {
+        if (d.status === 'present') {
+          const mult = d.multiplier || 1;
+          totalPresentDays += mult;
         }
       });
+      totalPresentDays = Math.round(totalPresentDays * 100) / 100;
 
       setEmployeeStats(prev => ({
         ...prev,
         [employeeId]: {
-          present: Math.round(presentDays * 100) / 100,
-          absent: absentDays,
-          leave: leaveDays,
+          present: presentDaysCount,
+          presentCalculated: totalPresentDays,
+          absent: absentDaysCount,
+          leave: leaveDaysCount,
+          summary: {
+            totalPresentDays: totalPresentDays,
+            actualPresentDays: presentDaysCount
+          },
           dailyDetails: dailyDetails
         }
       }));
@@ -770,23 +1037,6 @@ export default function AttendancePage() {
   }
 
   const stats = getTodayStats();
-
-
-  // Fetch holidays
-  useEffect(() => {
-    const fetchHolidays = async () => {
-      try {
-        const q = query(collection(db, 'holidays'));
-        const snapshot = await getDocs(q);
-        const holidayList = snapshot.docs.map(doc => doc.data()) as Array<{ date: string; name: string }>;
-        setHolidays(holidayList);
-      } catch (error) {
-        console.error('Error fetching holidays:', error);
-      }
-    };
-    fetchHolidays();
-  }, []);
-
 
 
   return (
@@ -853,6 +1103,12 @@ export default function AttendancePage() {
                 onClick={() => setSelectedDate(new Date())}
               >
                 Today
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="sm"> 
+                Week Day: {selectedDate.toLocaleDateString('en-US', { weekday: 'long' })} 
               </Button>
             </div>
 
@@ -997,55 +1253,93 @@ export default function AttendancePage() {
                         </td>
                         <td className="px-4 py-3 text-gray-600">{emp.department}</td>
                         <td className="px-4 py-3 text-center">
-                          <div className="flex gap-1 justify-center">
-                            <Button
-                              onClick={() => {
-                                setAttendanceTypeEmployee(emp.id!);
-                                setSelectedAttendanceType('full');
-                                setShowAttendanceTypeDialog(true);
-                              }}
-                              size="sm"
-                              title="Present"
-                              className={`${status === 'present' ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
-                            >
-                              <Check className="w-4 h-4" />
-                            </Button>
+                          {!isWorkingDay(selectedDate) ? (
+                            <div className="text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-2 rounded-lg inline-block">
+                              📅 Week Off
+                            </div>
+                          ) : (
+                            <div className="flex gap-1 justify-center">
+                              <Button
+                                onClick={() => {
+                                  setAttendanceTypeEmployee(emp.id!);
+                                  // Load current attendance type if already marked as present
+                                  const currentAtt = attendance[emp.id!];
+                                  if (currentAtt?.status === 'present' && currentAtt?.presentDayType) {
+                                    setSelectedAttendanceType(currentAtt.presentDayType as PresentDayType);
+                                  } else {
+                                    setSelectedAttendanceType('full');
+                                  }
+                                  setShowAttendanceTypeDialog(true);
+                                }}
+                                size="sm"
+                                title="Present"
+                                className={`${status === 'present' ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
 
-                            <Button
-                              onClick={() => {
-                                setReasonDialogEmployee(emp.id!);
-                                setAbsenceReason(att?.absenceReason || '');
-                                setShowReasonDialog(true);
-                              }}
-                              size="sm"
-                              title="Absent"
-                              className={`${status === 'absent' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
+                              <Button
+                                onClick={() => {
+                                  setReasonDialogEmployee(emp.id!);
+                                  setAbsenceReason(att?.absenceReason || '');
+                                  setAbsenceType((att?.absenceType as 'paid' | 'unpaid') || 'unpaid');
+                                  setShowReasonDialog(true);
+                                }}
+                                size="sm"
+                                title="Absent"
+                                className={`${status === 'absent' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </Button>
 
-                            <Button
-                              onClick={() => {
-                                setLeaveReasonEmployee(emp.id!);
-                                setLeaveReason(att?.leaveReason || '');
-                                setShowLeaveReasonDialog(true);
-                              }}
-                              size="sm"
-                              title="Leave"
-                              className={`${status === 'leave' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
-                            >
-                              <AlertCircle className="w-4 h-4" />
-                            </Button>
-                          </div>
+                              <Button
+                                onClick={() => {
+                                  setLeaveReasonEmployee(emp.id!);
+                                  setLeaveReason(att?.leaveReason || '');
+                                  setLeaveType((att?.leaveType as 'paid' | 'unpaid') || 'unpaid');
+                                  setShowLeaveReasonDialog(true);
+                                }}
+                                size="sm"
+                                title="Leave"
+                                className={`${status === 'leave' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-200 hover:bg-gray-300'} text-white`}
+                              >
+                                <AlertCircle className="w-4 h-4" />
+                              </Button>
+
+                              <Button
+                                onClick={() => {
+                                  setClearDialogEmployee(emp.id!);
+                                  setShowClearDialog(true);
+                                }}
+                                size="sm"
+                                title="Clear Attendance"
+                                className="bg-gray-400 hover:bg-gray-500 text-white"
+                              >
+                                <Trash className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
-                          {att?.absenceReason ? (
+                          {att?.status === 'present' ? (
+                            <span className="text-xs bg-green-50 text-green-800 px-2 py-1 rounded-full">
+                              Present - {att.presentDayType === 'full' ? 'Full Day' : att.presentDayType === 'half' ? 'Half Day' : 'Quarter Day'}
+                            </span>
+                          ) : att?.absenceReason ? (
                             <span className="text-xs bg-yellow-50 text-yellow-800 px-2 py-1 rounded-full">
-                              {att.absenceReason}
+                              Absent [{att.absenceType === 'paid' ? 'Paid' : 'Unpaid'}] ({att.absenceReason})
                             </span>
                           ) : att?.leaveReason ? (
                             <span className="text-xs bg-blue-50 text-blue-800 px-2 py-1 rounded-full">
-                              {att.leaveReason}
+                              Leave - {att.leaveType === 'paid' ? 'Paid' : 'Unpaid'} ({att.leaveReason})
+                            </span>
+                          ) : att?.status === 'absent' ? (
+                            <span className="text-xs bg-yellow-50 text-yellow-800 px-2 py-1 rounded-full">
+                              Absent [{att.absenceType === 'paid' ? 'Paid' : 'Unpaid'}]
+                            </span>
+                          ) : att?.status === 'leave' ? (
+                            <span className="text-xs bg-blue-50 text-blue-800 px-2 py-1 rounded-full">
+                              Leave - {att.leaveType === 'paid' ? 'Paid' : 'Unpaid'}
                             </span>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
@@ -1055,6 +1349,7 @@ export default function AttendancePage() {
                           <Button
                             onClick={() => {
                               setSelectedEmployeeDetail(emp);
+                              setDetailViewMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
                               setShowEmployeeDetail(true);
                             }}
                             size="sm"
@@ -1265,20 +1560,32 @@ export default function AttendancePage() {
                 <XIcon className="w-4 sm:w-5 h-4 sm:h-5" />
               </button>
             </div>
+            <div className="space-y-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700">Absence Type</label>
+              <select
+                value={absenceType}
+                onChange={(e) => setAbsenceType(e.target.value as 'paid' | 'unpaid')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              >
+                <option value="paid">Paid Absence</option>
+                <option value="unpaid">Unpaid Absence</option>
+              </select>
+            </div>
             <p className="text-xs sm:text-sm text-gray-600">Reason (optional)</p>
             <textarea
               value={absenceReason}
               onChange={(e) => setAbsenceReason(e.target.value)}
-              placeholder="e.g., Sick leave, Personal emergency..."
+              placeholder="e.g., Sick leave, Personal..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
               rows={3}
             />
             <div className="flex gap-2">
               <Button
                 onClick={() => {
-                  handleMarkAttendance(reasonDialogEmployee, 'absent', absenceReason);
+                  handleMarkAttendance(reasonDialogEmployee, 'absent', absenceReason, 'full', 'paid', absenceType);
                   setShowReasonDialog(false);
                   setAbsenceReason('');
+                  setAbsenceType('unpaid');
                 }}
                 className="bg-red-600 hover:bg-red-700 flex-1 text-xs sm:text-sm"
               >
@@ -1288,6 +1595,7 @@ export default function AttendancePage() {
                 onClick={() => {
                   setShowReasonDialog(false);
                   setAbsenceReason('');
+                  setAbsenceType('unpaid');
                 }}
                 variant="outline"
                 className="flex-1 text-xs sm:text-sm"
@@ -1334,7 +1642,7 @@ export default function AttendancePage() {
                   handleMarkAttendance(leaveReasonEmployee, 'leave', leaveReason, 'full', leaveType);
                   setShowLeaveReasonDialog(false);
                   setLeaveReason('');
-                  setLeaveType('paid');
+                  setLeaveType('unpaid');
                 }}
                 className="bg-yellow-600 hover:bg-yellow-700 flex-1 text-xs sm:text-sm"
               >
@@ -1344,7 +1652,7 @@ export default function AttendancePage() {
                 onClick={() => {
                   setShowLeaveReasonDialog(false);
                   setLeaveReason('');
-                  setLeaveType('paid');
+                  setLeaveType('unpaid');
                 }}
                 variant="outline"
                 className="flex-1 text-xs sm:text-sm"
@@ -1409,8 +1717,8 @@ export default function AttendancePage() {
       {/* Employee Detail Dialog */}
       {showEmployeeDetail && selectedEmployeeDetail && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto max-w-sm sm:max-w-4xl p-3 sm:p-5 space-y-3 sm:space-y-4">
-            <div className="flex items-start justify-between gap-2 sticky top-0 bg-white pb-2">
+          <div className="bg-white relative rounded-lg shadow-lg w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto max-w-sm sm:max-w-4xl p-3 sm:p-5 space-y-3 sm:space-y-4">
+            <div className="flex items-start justify-between gap-2 sticky -top-5 bg-white py-2">
               <div className="min-w-0 flex-1">
                 <h3 className="font-bold text-lg sm:text-xl text-gray-800 line-clamp-2">{selectedEmployeeDetail.name}</h3>
                 <p className="text-xs sm:text-sm text-gray-500 line-clamp-1">{selectedEmployeeDetail.position}</p>
@@ -1446,7 +1754,7 @@ export default function AttendancePage() {
             {/* Stats Cards */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <div className="text-center px-2 sm:px-3 py-2 sm:py-3 rounded-lg bg-green-50 border border-green-200">
-                <p className="text-green-600 font-bold text-sm sm:text-base">{employeeStats[selectedEmployeeDetail.id!]?.present || 0}</p>
+                <p className="text-green-600 font-bold text-sm sm:text-base">{employeeStats[selectedEmployeeDetail.id!]?.summary?.actualPresentDays || 0}</p>
                 <p className="text-xs text-green-700">Days Present</p>
               </div>
               <div className="text-center px-2 sm:px-3 py-2 sm:py-3 rounded-lg bg-red-50 border border-red-200">
@@ -1461,7 +1769,7 @@ export default function AttendancePage() {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 space-y-1">
               <p className="text-xs sm:text-sm text-gray-700">
-                <span className="font-semibold">Total Days Worked:</span> {employeeStats[selectedEmployeeDetail.id!]?.present || 0} days
+                <span className="font-semibold">Total Days Worked:</span> {employeeStats[selectedEmployeeDetail.id!]?.summary?.totalPresentDays || 0} days
               </p>
               <p className="text-xs text-gray-600">
                 Full day = 1, Half day = 0.5, Quarter day = 0.25
@@ -1522,71 +1830,28 @@ export default function AttendancePage() {
                       if (dayStatus.status === 'present') {
                         bgColor = 'bg-green-50';
                         textColor = 'text-green-700';
-                        statusLabel = dayStatus.display || 'Present';
+                        const presentType = dayStatus.display || 'Full';
+                        statusLabel = `PRESENT\n${presentType.toUpperCase()} DAY`;
                         statusIcon = '✓';
                       } else if (dayStatus.status === 'absent') {
                         bgColor = 'bg-red-50';
                         textColor = 'text-red-700';
-                        statusLabel = 'Absent';
+                        statusLabel = `ABSENT\n${dayStatus.absenceType === 'paid' ? 'PAID' : 'UNPAID'}`;
                         statusIcon = '✗';
                       } else if (dayStatus.status === 'leave') {
                         bgColor = 'bg-yellow-50';
                         textColor = 'text-yellow-700';
-                        statusLabel = 'Leave';
+                        const leaveTypeLabel = dayStatus.leaveType === 'paid' ? 'PAID' : 'UNPAID';
+                        statusLabel = `LEAVE\n${leaveTypeLabel}`;
                         statusIcon = '📋';
                       }
                     }
 
                     days.push(
-                      <div key={day} className={`border border-gray-300 ${bgColor} p-1 sm:p-1.5 aspect-square flex flex-col items-center justify-center hover:shadow-md transition cursor-pointer text-center group relative`}>
+                      <div key={day} className={`border border-gray-300 ${bgColor} p-1 sm:p-1.5 aspect-square flex flex-col items-center justify-center hover:shadow-md transition cursor-pointer text-center`}>
                         <span className={`font-bold text-xs sm:text-sm ${textColor}`}>{day}</span>
                         <span className={`text-lg sm:text-xl leading-tight ${textColor}`}>{statusIcon}</span>
-                        <span className={`text-xs leading-tight line-clamp-1 ${textColor}`}>{statusLabel}</span>
-                        
-                        {/* Hover Buttons - Show on hover for working days */}
-                        {!isNonWorkingDay && !holiday && (
-                          <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-0.5 rounded">
-                            <Button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMarkAttendance(selectedEmployeeDetail.id!, 'present', '', 'full');
-                                calculateEmployeeStats(selectedEmployeeDetail.id!, detailViewMonth);
-                              }}
-                              size="sm"
-                              className="h-6 w-6 p-0 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
-                              title="Mark Present"
-                            >
-                              ✓
-                            </Button>
-                            <Button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReasonDialogEmployee(selectedEmployeeDetail.id!);
-                                setAbsenceReason('');
-                                setShowReasonDialog(true);
-                              }}
-                              size="sm"
-                              className="h-6 w-6 p-0 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
-                              title="Mark Absent"
-                            >
-                              ✗
-                            </Button>
-                            <Button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLeaveReasonEmployee(selectedEmployeeDetail.id!);
-                                setLeaveReason('');
-                                setLeaveType('paid');
-                                setShowLeaveReasonDialog(true);
-                              }}
-                              size="sm"
-                              className="h-6 w-6 p-0 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded"
-                              title="Mark Leave"
-                            >
-                              📋
-                            </Button>
-                          </div>
-                        )}
+                        <span className={`hidden sm:inline-block text-xs leading-tight ${textColor} whitespace-pre-line`}>{statusLabel}</span>
                       </div>
                     );
                   }
@@ -1640,6 +1905,39 @@ export default function AttendancePage() {
         </div>
       )}
 
+      {/* Clear Attendance Confirmation Dialog */}
+      {showClearDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xs sm:max-w-sm p-4 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-base sm:text-lg text-gray-800">Clear Attendance</h3>
+              <button onClick={() => setShowClearDialog(false)} className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <XIcon className="w-4 sm:w-5 h-4 sm:h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600">
+              Are you sure you want to clear the attendance record for <strong>{getDateStr(selectedDate)}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => clearAttendanceForDate(clearDialogEmployee)}
+                className="bg-red-600 hover:bg-red-700 flex-1 text-xs sm:text-sm"
+              >
+                <Trash className="w-4 h-4 mr-2" />
+                Clear
+              </Button>
+              <Button
+                onClick={() => setShowClearDialog(false)}
+                variant="outline"
+                className="flex-1 text-xs sm:text-sm"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Attendance Type Selection Dialog */}
       {showAttendanceTypeDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
@@ -1653,7 +1951,7 @@ export default function AttendancePage() {
             <p className="text-xs sm:text-sm text-gray-600">Select attendance type</p>
             
             <div className="space-y-2">
-              <label className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+              <label className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border rounded-lg cursor-pointer transition ${selectedAttendanceType === 'full' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-blue-50'}`}>
                 <input
                   type="radio"
                   name="attendance-type"
@@ -1668,7 +1966,7 @@ export default function AttendancePage() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+              <label className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border rounded-lg cursor-pointer transition ${selectedAttendanceType === 'half' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-blue-50'}`}>
                 <input
                   type="radio"
                   name="attendance-type"
@@ -1683,7 +1981,7 @@ export default function AttendancePage() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+              <label className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 border rounded-lg cursor-pointer transition ${selectedAttendanceType === 'quarter' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-blue-50'}`}>
                 <input
                   type="radio"
                   name="attendance-type"
