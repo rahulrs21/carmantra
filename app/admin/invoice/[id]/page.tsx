@@ -18,6 +18,23 @@ export default function InvoiceDetails() {
   const [status, setStatus] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [jobCardNo, setJobCardNo] = useState<string | null>(null);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
+  useEffect(() => {
+    fetchInvoice();
+    loadCompanySettings();
+  }, [id]);
+
+  async function loadCompanySettings() {
+    try {
+      const settingsDoc = await getDoc(doc(db, 'settings', 'company'));
+      if (settingsDoc.exists()) {
+        setCompanySettings(settingsDoc.data());
+      }
+    } catch (err) {
+      safeConsoleError('Load company settings error', err);
+    }
+  }
 
   async function fetchInvoice() {
     if (!id) return;
@@ -64,7 +81,8 @@ export default function InvoiceDetails() {
 
     // Header - Logo Image
     try {
-      const response = await fetch('/images/Carmantra_Invoice.png');
+      const logoUrl = companySettings?.logoUrl || '/images/Carmantra_Invoice.png';
+      const response = await fetch(logoUrl);
       const blob = await response.blob();
       const imgData = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -116,13 +134,13 @@ export default function InvoiceDetails() {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(0, 0, 0);
-    doc.text('Car Mantra LLC', 16, startY + 13);
+    doc.text(companySettings?.name || 'Car Mantra LLC', 16, startY + 13);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(75, 85, 99);
-    doc.text('info@carmantra.com', 16, startY + 19);
-    doc.text('+971 50 123 4567', 16, startY + 25);
+    doc.text(companySettings?.email || 'info@carmantra.com', 16, startY + 19);
+    doc.text(companySettings?.phone || '+971 50 123 4567', 16, startY + 25);
 
     // Bill To Box
     doc.setFillColor(249, 250, 251);
@@ -527,13 +545,13 @@ export default function InvoiceDetails() {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text('Car Mantra LLC', 16, startY + 13);
+      doc.text(companySettings?.name || 'Car Mantra LLC', 16, startY + 13);
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(75, 85, 99);
-      doc.text('info@carmantra.com', 16, startY + 19);
-      doc.text('+971 50 123 4567', 16, startY + 25);
+      doc.text(companySettings?.email || 'info@carmantra.com', 16, startY + 19);
+      doc.text(companySettings?.phone || '+971 50 123 4567', 16, startY + 25);
 
       // Bill To Box
       doc.setFillColor(249, 250, 251);
@@ -971,9 +989,9 @@ export default function InvoiceDetails() {
           <div>
             <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Bill From</h3>
             <div className="space-y-1">
-              <p className="font-semibold text-lg dark:text-black">Car Mantra LLC</p>
-              <p className="text-gray-600">info@carmantra.com</p>
-              <p className="text-gray-600">+971 50 123 4567</p>
+              <p className="font-semibold text-lg dark:text-black">{companySettings?.name || 'Car Mantra LLC'}</p>
+              <p className="text-gray-600">{companySettings?.email || 'info@carmantra.com'}</p>
+              <p className="text-gray-600">{companySettings?.phone || '+971 50 123 4567'}</p>
             </div>
           </div>
 

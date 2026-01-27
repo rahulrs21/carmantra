@@ -1055,10 +1055,10 @@ export default function AdminDashboard() {
                       {lead.email && <span className="break-all">{lead.email}</span>}
                     </div>
                     <div className="flex gap-2">
-                      {lead.email ? (
+                      {/* {lead.email ? (
                         <a href={`mailto:${lead.email}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">Email</a>
-                      ) : null}
-                      <a href={`/admin/leads/${lead.id}`} className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100">View</a>
+                      ) : null} */}
+                      <a href={`/admin/leads/${lead.id}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">View</a>
                     </div>
                   </div>
                 ))}
@@ -1097,10 +1097,10 @@ export default function AdminDashboard() {
                         <td className="px-3 sm:px-4 py-2 sm:py-3 align-top text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime12(lead.createdAt)}</td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3 align-top">
                           <div className="flex gap-2 flex-wrap">
-                            {lead.email ? (
+                            {/* {lead.email ? (
                               <a href={`mailto:${lead.email}`} className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">Email</a>
-                            ) : null}
-                            <a href={`/admin/leads/${lead.id}`} className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 whitespace-nowrap">View</a>
+                            ) : null} */}
+                            <a href={`/admin/leads/${lead.id}`} className="text-xs sm:text-sm text-blue-600 hover:underline hover:text-blue-600 dark:text-gray-400  dark:hover:text-gray-200 whitespace-nowrap">View</a>
                           </div>
                         </td>
                       </tr>

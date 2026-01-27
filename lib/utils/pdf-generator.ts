@@ -12,6 +12,8 @@ export interface QuotationPDFData {
     city?: string;
     state?: string;
     zipCode?: string;
+    logoUrl?: string;
+    stampUrl?: string;
   };
   serviceTitle: string;
   vehicles: Array<{
@@ -47,6 +49,8 @@ export interface InvoicePDFData {
     city?: string;
     state?: string;
     zipCode?: string;
+    logoUrl?: string;
+    stampUrl?: string;
   };
   serviceTitle: string;
   vehicles: Array<{
@@ -481,13 +485,13 @@ export const generateQuotationPDF = async (data: QuotationPDFData) => {
             
             <div class="logo-section">
               <div class="logo-box">
-                <img src="/images/Carmantra_Invoice.png" alt="Carmantra Logo" />
+                <img src="${data.company.logoUrl || '/images/Carmantra_Invoice.png'}" alt="Company Logo" />
               </div>
 
                 <div class="company-details">
-                  <h2>Car Mantra</h2>
+                  <h2>${data.company.name || 'Car Mantra'}</h2>
                   <p>Premium Auto Care Services</p>
-                  <p>Email: info@carmantra.com | Phone: +971 50 123 4567</p>
+                  <p>${data.company.email ? `Email: ${data.company.email}` : 'Email: info@carmantra.com'} | ${data.company.phone ? `Phone: ${data.company.phone}` : 'Phone: +971 50 123 4567'}</p>
                 </div>
             </div>
             <div class="customer-info-header">
@@ -955,13 +959,13 @@ export const generateQuotationPDFBlob = async (data: QuotationPDFData): Promise<
           <div class="header">
             <div class="logo-section">
               <div class="logo-box">
-                <img src="/images/Carmantra_Invoice.png" alt="Carmantra Logo" />
+                <img src="${data.company.logoUrl || '/images/Carmantra_Invoice.png'}" alt="Company Logo" />
               </div>
               <div class="company-details">
-                <h2>Car Mantra</h2>
+                <h2>${data.company.name || 'Car Mantra'}</h2>
                 <p>Premium Auto Care Services</p>
-                <p>Email: info@carmantra.com </p>
-                <p>Phone: +971 50 123 4567</p>
+                <p>${data.company.email ? `Email: ${data.company.email}` : 'Email: info@carmantra.com'} </p>
+                <p>${data.company.phone ? `Phone: ${data.company.phone}` : 'Phone: +971 50 123 4567'}</p>
               </div>
             </div>
            
@@ -1451,13 +1455,13 @@ export const generateInvoicePDFBlob = async (data: InvoicePDFData): Promise<stri
           <div class="header">
             <div class="logo-section">
               <div class="logo-box">
-                <img src="/images/Carmantra_Invoice.png" alt="Carmantra Logo" />
+                <img src="${data.company.logoUrl || '/images/Carmantra_Invoice.png'}" alt="Company Logo" />
               </div>
               <div class="company-details">
-                <h2>Car Mantra</h2>
+                <h2>${data.company.name || 'Car Mantra'}</h2>
                 <p>Premium Auto Care Services</p>
-                <p>Email: info@carmantra.com </p>
-                <p>Phone: +971 50 123 4567</p>
+                <p>${data.company.email ? `Email: ${data.company.email}` : 'Email: info@carmantra.com'} </p>
+                <p>${data.company.phone ? `Phone: ${data.company.phone}` : 'Phone: +971 50 123 4567'}</p>
               </div>
             </div>
            
@@ -1938,13 +1942,13 @@ export const generateInvoicePDF = async (data: InvoicePDFData) => {
           <div class="header">
             <div class="logo-section">
               <div class="logo-box">
-                <img src="/images/Carmantra_Invoice.png" alt="Carmantra Logo" />
+                <img src="${data.company.logoUrl || '/images/Carmantra_Invoice.png'}" alt="Company Logo" />
               </div>
               <div class="company-details">
-                <h2>Car Mantra</h2>
+                <h2>${data.company.name || 'Car Mantra'}</h2>
                 <p>Premium Auto Care Services</p>
-                <p>Email: info@carmantra.com </p>
-                <p>Phone: +971 50 123 4567</p>
+                <p>${data.company.email ? `Email: ${data.company.email}` : 'Email: info@carmantra.com'} </p>
+                <p>${data.company.phone ? `Phone: ${data.company.phone}` : 'Phone: +971 50 123 4567'}</p>
               </div>
             </div>
            

@@ -22,10 +22,23 @@ export default function QuotationDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [companySettings, setCompanySettings] = useState<any>(null);
 
   useEffect(() => {
     loadQuotation();
+    loadCompanySettings();
   }, [quotationId]);
+
+  async function loadCompanySettings() {
+    try {
+      const settingsDoc = await getDoc(doc(db, 'settings', 'company'));
+      if (settingsDoc.exists()) {
+        setCompanySettings(settingsDoc.data());
+      }
+    } catch (err) {
+      safeConsoleError('Load company settings error', err);
+    }
+  }
 
   async function loadQuotation() {
     if (!quotationId) return;
@@ -120,7 +133,8 @@ export default function QuotationDetailPage() {
 
     // Header - Logo Image
     try {
-      const response = await fetch('/images/Carmantra_Invoice.png');
+      const logoUrl = companySettings?.logoUrl || '/images/Carmantra_Invoice.png';
+      const response = await fetch(logoUrl);
       const blob = await response.blob();
       const imgData = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -160,10 +174,11 @@ export default function QuotationDetailPage() {
     yPos += 5;
     pdf.setFontSize(9);
     pdf.setTextColor(80, 80, 80);
-    pdf.text('Car Mantra LLC', leftMargin, yPos);
+    pdf.text(companySettings?.name || 'Car Mantra LLC', leftMargin, yPos);
 
     yPos += 4;
-    pdf.text('Email: info@carmantra.com | Phone: +971 50 123 4567', leftMargin, yPos);
+    const emailPhone = `${companySettings?.email || 'info@carmantra.com'} | ${companySettings?.phone || '+971 50 123 4567'}`;
+    pdf.text(`Email: ${emailPhone}`, leftMargin, yPos);
 
     // Quotation Title
     yPos += 11;

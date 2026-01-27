@@ -33,6 +33,18 @@ export default function AccountPage() {
   const [currentPasswordVerified, setCurrentPasswordVerified] = useState(false);
   const [verifyingPassword, setVerifyingPassword] = useState(false);
 
+  // Company Settings States
+  const [companyName, setCompanyName] = useState("Car Mantra");
+  const [companyTRN, setCompanyTRN] = useState("");
+  const [companyEmail, setCompanyEmail] = useState("");
+  const [companyPhone, setCompanyPhone] = useState("");
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("");
+  const [companyStampUrl, setCompanyStampUrl] = useState("");
+  const [companySaving, setCompanySaving] = useState(false);
+  const [companyStatus, setCompanyStatus] = useState<string | null>(null);
+  const [companyLogoUploading, setCompanyLogoUploading] = useState(false);
+  const [companyStampUploading, setCompanyStampUploading] = useState(false);
+
   useEffect(() => {
     setName(displayName || "");
     setAvatarPreview(photoURL || null);
@@ -45,6 +57,29 @@ export default function AccountPage() {
         const data = snap.data() as { name?: string; logoUrl?: string };
         setBrandName(data.name || "CarMantra CRM");
         setBrandLogoUrl(data.logoUrl || "");
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const companyRef = doc(db, "settings", "company");
+    const unsub = onSnapshot(companyRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as {
+          name?: string;
+          trn?: string;
+          email?: string;
+          phone?: string;
+          logoUrl?: string;
+          stampUrl?: string;
+        };
+        setCompanyName(data.name || "Car Mantra");
+        setCompanyTRN(data.trn || "");
+        setCompanyEmail(data.email || "");
+        setCompanyPhone(data.phone || "");
+        setCompanyLogoUrl(data.logoUrl || "");
+        setCompanyStampUrl(data.stampUrl || "");
       }
     });
     return () => unsub();
@@ -117,6 +152,70 @@ export default function AccountPage() {
       setBrandStatus("Could not save branding. Try again.");
     } finally {
       setBrandSaving(false);
+    }
+  }
+
+  async function saveCompanySettings() {
+    if (role !== "admin") return;
+    setCompanySaving(true);
+    setCompanyStatus(null);
+    try {
+      await setDoc(
+        doc(db, "settings", "company"),
+        {
+          name: companyName || "Car Mantra",
+          trn: companyTRN || "",
+          email: companyEmail || "",
+          phone: companyPhone || "",
+          logoUrl: companyLogoUrl || "",
+          stampUrl: companyStampUrl || "",
+        },
+        { merge: true }
+      );
+      setCompanyStatus("Company settings saved.");
+      setTimeout(() => setCompanyStatus(null), 3000);
+    } catch (error) {
+      setCompanyStatus("Could not save company settings. Try again.");
+    } finally {
+      setCompanySaving(false);
+    }
+  }
+
+  async function handleCompanyLogoUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || role !== "admin") return;
+    setCompanyLogoUploading(true);
+    setCompanyStatus(null);
+    try {
+      const storageRef = ref(storage, "company/logo");
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+      setCompanyLogoUrl(downloadUrl);
+      setCompanyStatus("Company logo uploaded successfully.");
+    } catch (error) {
+      setCompanyStatus("Could not upload company logo. Try again.");
+    } finally {
+      setCompanyLogoUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleCompanyStampUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || role !== "admin") return;
+    setCompanyStampUploading(true);
+    setCompanyStatus(null);
+    try {
+      const storageRef = ref(storage, "company/stamp");
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+      setCompanyStampUrl(downloadUrl);
+      setCompanyStatus("Company stamp uploaded successfully.");
+    } catch (error) {
+      setCompanyStatus("Could not upload company stamp. Try again.");
+    } finally {
+      setCompanyStampUploading(false);
+      e.target.value = "";
     }
   }
 
@@ -513,6 +612,7 @@ export default function AccountPage() {
       </div>
 
       {role === "admin" ? (
+        <>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -559,7 +659,128 @@ export default function AccountPage() {
             {brandStatus && <p className="text-sm text-gray-600 dark:text-gray-400">{brandStatus}</p>}
           </div>
         </div>
+
+        {/* Company Settings Section - Admin Only */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Company Settings</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Upload company logo, stamp, and details for quotations and invoices. These will be used in all PDF documents.</p>
+          </div>
+
+          {companyStatus && (
+            <div className={`p-3 rounded-lg ${companyStatus.includes('successfully') ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'}`}>
+              <p className={`text-sm font-medium ${companyStatus.includes('successfully') ? 'text-green-700 dark:text-green-400' : 'text-blue-700 dark:text-blue-400'}`}>{companyStatus}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Company Name */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Company Name</label>
+              <input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="e.g., Car Mantra"
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Company TRN */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">TRN (Tax Registration Number)</label>
+              <input
+                value={companyTRN}
+                onChange={(e) => setCompanyTRN(e.target.value)}
+                placeholder="e.g., 123456789012345"
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Company Email */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Company Email</label>
+              <input
+                type="email"
+                value={companyEmail}
+                onChange={(e) => setCompanyEmail(e.target.value)}
+                placeholder="e.g., info@carmantra.com"
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+
+            {/* Company Phone */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Company Phone</label>
+              <input
+                value={companyPhone}
+                onChange={(e) => setCompanyPhone(e.target.value)}
+                placeholder="e.g., +971 50 123 4567"
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+          </div>
+
+          {/* Company Logo Upload */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Company Logo</label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                {companyLogoUrl ? (
+                  <img src={companyLogoUrl} alt="Company Logo" className="w-16 h-16 rounded border object-cover dark:border-gray-700" />
+                ) : (
+                  <div className="w-16 h-16 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <input type="file" accept="image/*" className="hidden" onChange={handleCompanyLogoUpload} />
+                {companyLogoUploading ? "Uploading..." : "Choose file"}
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, or SVG. Recommended: 200x200px</p>
+          </div>
+
+          {/* Company Stamp Upload */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Company Stamp/Seal</label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                {companyStampUrl ? (
+                  <img src={companyStampUrl} alt="Company Stamp" className="w-16 h-16 rounded border object-cover dark:border-gray-700" />
+                ) : (
+                  <div className="w-16 h-16 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <input type="file" accept="image/*" className="hidden" onChange={handleCompanyStampUpload} />
+                {companyStampUploading ? "Uploading..." : "Choose file"}
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">PNG with transparent background recommended. Will appear on quotations and invoices.</p>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={saveCompanySettings}
+              disabled={companySaving}
+              className="px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-60 text-sm font-medium"
+            >
+              {companySaving ? "Saving..." : "Save Company Settings"}
+            </button>
+            <p className="text-xs text-gray-500 dark:text-gray-400">All changes are automatically saved to company settings.</p>
+          </div>
+        </div>
+        </>
       ) : (
+        <>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-3">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Branding</h2>
           <div className="flex items-center gap-3">
@@ -577,6 +798,25 @@ export default function AccountPage() {
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400">Only admins can change branding.</p>
         </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-3">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Company Settings</h2>
+          <div className="flex items-center gap-3">
+            {companyLogoUrl ? (
+              <img src={companyLogoUrl} alt="Company Logo" className="w-10 h-10 rounded border object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded bg-orange-600 text-white flex items-center justify-center font-bold">
+                {companyName?.[0]?.toUpperCase() || "C"}
+              </div>
+            )}
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Company</p>
+              <p className="text-base font-semibold text-gray-900 dark:text-white">{companyName}</p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Only admins can modify company settings.</p>
+        </div>
+        </>
       )}
     </div>
   );

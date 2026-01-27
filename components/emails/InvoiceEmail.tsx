@@ -24,6 +24,10 @@ interface InvoiceEmailProps {
   paymentStatus?: string;
   companyName?: string;
   contactName?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+  companyCity?: string;
 }
 
 const baseUrl = process.env.VERCEL_URL
@@ -38,6 +42,10 @@ export const InvoiceEmail = ({
   paymentStatus = 'unpaid',
   companyName,
   contactName,
+  companyEmail,
+  companyPhone,
+  companyAddress,
+  companyCity,
 }: InvoiceEmailProps) => {
   const displayName = companyName || contactName || customerName;
   const isPaid = paymentStatus === 'paid';
@@ -54,7 +62,7 @@ export const InvoiceEmail = ({
           <Section style={headerSection}>
             <Row style={headerRow}>
               <Column>
-                <Heading style={headerHeading}>Car Mantra</Heading>
+                <Heading style={headerHeading}>{companyName || 'Car Mantra'}</Heading>
                 <Text style={headerSubtext}>Premium Auto Care Services</Text>
               </Column>
             </Row>
@@ -158,10 +166,10 @@ export const InvoiceEmail = ({
                 For pickup details or any questions about your invoice:
               </Text>
               <Text style={contactInfo}>
-                📞 Phone: <Link href="tel:+971123456">+971 (0) 4 XXX XXXX</Link>
+                📞 Phone: <Link href={`tel:${companyPhone || '+971123456'}`}>{companyPhone || '+971 (0) 4 XXX XXXX'}</Link>
               </Text>
               <Text style={contactInfo}>
-                📧 Email: <Link href="mailto:support@carmantra.ae">support@carmantra.ae</Link>
+                📧 Email: <Link href={`mailto:${companyEmail || 'support@carmantra.ae'}`}>{companyEmail || 'support@carmantra.ae'}</Link>
               </Text>
             </Section>
 
@@ -189,8 +197,8 @@ export const InvoiceEmail = ({
 
             {/* Footer Message */}
             <Text style={footerMessage}>
-              Thank you for choosing Car Mantra!<br />
-              <strong>Car Mantra Team</strong>
+              Thank you for choosing {companyName || 'Car Mantra'}!<br />
+              <strong>{companyName || 'Car Mantra'} Team</strong>
             </Text>
           </Section>
 
@@ -198,10 +206,10 @@ export const InvoiceEmail = ({
           <Section style={footer}>
             <Hr style={footerDivider} />
             <Text style={footerText}>
-              © {new Date().getFullYear()} Car Mantra. All rights reserved.
+              © {new Date().getFullYear()} {companyName || 'Car Mantra'}. All rights reserved.
             </Text>
             <Text style={footerSubtext}>
-              info@carmantra.ae | +971 (0) 4 XXX XXXX
+              {companyEmail || 'info@carmantra.ae'} | {companyPhone || '+971 (0) 4 XXX XXXX'}
             </Text>
           </Section>
         </Container>

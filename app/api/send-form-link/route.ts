@@ -78,7 +78,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Send email with form link
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const formLink = `${appUrl}/customer/book-service/${token}`;
 
@@ -100,6 +99,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch company settings from Firestore
+    let companyName = 'Car Mantra';
+    let companyEmail = 'support@carmantra.ae';
+    let companyPhone = '+971 (0) 4 XXX XXXX';
+
+    try {
+      const settingsDoc = await db.collection('settings').doc('company').get();
+      if (settingsDoc.exists) {
+        const settings = settingsDoc.data();
+        companyName = settings?.name || 'Car Mantra';
+        companyEmail = settings?.email || 'support@carmantra.ae';
+        companyPhone = settings?.phone || '+971 (0) 4 XXX XXXX';
+        console.log('✓ Loaded company settings from Firestore');
+      }
+    } catch (settingsErr: any) {
+      console.warn('Warning: Could not load company settings:', settingsErr.message);
+    }
+
     try {
       const result = await resend.emails.send({
         from: 'CarMantra <noreply@rahuldxb.com>',
@@ -108,7 +125,7 @@ export async function POST(request: NextRequest) {
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #f97316 0%, #3b82f6 100%); padding: 20px; color: white; border-radius: 8px; text-align: center;">
-              <h1 style="margin: 0; font-size: 28px;">CarMantra</h1>
+              <h1 style="margin: 0; font-size: 28px;">${companyName}</h1>
               <p style="margin: 5px 0 0 0; font-size: 14px;">Service Booking Form</p>
             </div>
 
@@ -139,13 +156,14 @@ export async function POST(request: NextRequest) {
               </div>
 
               <p style="color: #666; font-size: 14px; margin-top: 20px;">
-                If you didn't request this form or have any questions, please contact us at support@carmantra.com
+                If you didn't request this form or have any questions, please contact us at ${companyEmail}
               </p>
             </div>
 
             <div style="background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #666;">
-              <p style="margin: 0;">CarMantra - Professional Car Care Services</p>
-              <p style="margin: 5px 0 0 0;">© 2024 CarMantra. All rights reserved.</p>
+              <p style="margin: 0;">${companyName} - Professional Car Care Services</p>
+              <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+              <p style="margin: 5px 0 0 0;">${companyEmail} | ${companyPhone}</p>
             </div>
           </div>
         `,

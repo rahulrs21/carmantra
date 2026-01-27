@@ -266,10 +266,29 @@ export interface SalaryRecord {
   allowances?: Record<string, number>; // { DA: 5000, HRA: 3000 }
   deductions?: Record<string, number>; // { tax: 5000, loan: 1000 }
   netSalary: number;
+  otherAllowanceReason?: string;
+  otherAllowanceAmount?: number;
+  otherDeductionsReason?: string;
+  otherDeductionsAmount?: number;
+  payableDays?: string | number;
+  perDaySalary?: string | number;
+  workingDays?: string | number;
+  attendanceRate?: string | number;
+  includeHolidays?: boolean;
+  totalHolidays?: number;
+  basePayableDays?: number;
+  // Attendance summary fields
+  presentDays?: number;
+  absentPaidDays?: number;
+  absentUnpaidDays?: number;
+  paidLeaveDays?: number;
+  unpaidLeaveDays?: number;
+  notMarkedDays?: number;
   status: 'pending' | 'approved' | 'paid';
   paidDate?: any;
   remarks?: string;
   createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface SalarySettings {

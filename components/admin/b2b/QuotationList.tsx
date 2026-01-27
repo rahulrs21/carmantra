@@ -335,6 +335,8 @@ export function QuotationList({
     try {
       // Fetch company data to get TRN and address
       let companyData: any = {};
+      let companySettings: any = {};
+      
       if (companyId) {
         try {
           const companyDoc = await getDoc(doc(db, 'companies', companyId));
@@ -345,6 +347,16 @@ export function QuotationList({
           console.warn('Could not fetch company data:', err);
         }
       }
+      
+      // Fetch company settings (branding, logo, stamp) from settings/company
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'company'));
+        if (settingsDoc.exists()) {
+          companySettings = settingsDoc.data();
+        }
+      } catch (err) {
+        console.warn('Could not fetch company settings:', err);
+      }
 
       const pdfDataUrl = await generateQuotationPDFBlob({
         quotationNumber: quotation.quotationNumber,
@@ -352,14 +364,16 @@ export function QuotationList({
           ? quotation.quotationDate
           : (quotation.quotationDate as any).toDate?.() || new Date(),
         company: {
-          name: quotation.companyName || companyData.name || 'N/A',
-          phone: quotation.phone || quotation.companyPhone || companyData.phone,
-          email: quotation.email || quotation.companyEmail || companyData.email,
-          trn: quotation.companyTRN || companyData.trn,
-          address: quotation.companyAddress || companyData.address,
-          city: quotation.companyCity || companyData.city,
-          state: quotation.companyState || companyData.state,
-          zipCode: quotation.companyZipCode || companyData.zipCode,
+          name: quotation.companyName || companyData.name || companySettings.name || 'N/A',
+          phone: quotation.phone || quotation.companyPhone || companyData.phone || companySettings.phone,
+          email: quotation.email || quotation.companyEmail || companyData.email || companySettings.email,
+          trn: quotation.companyTRN || companyData.trn || companySettings.trn,
+          address: quotation.companyAddress || companyData.address || companySettings.address,
+          city: quotation.companyCity || companyData.city || companySettings.city,
+          state: quotation.companyState || companyData.state || companySettings.state,
+          zipCode: quotation.companyZipCode || companyData.zipCode || companySettings.zipCode,
+          logoUrl: companySettings.logoUrl,
+          stampUrl: companySettings.stampUrl,
         },
         serviceTitle: quotation.serviceTitle || 'Service',
         vehicles: quotation.vehicles?.map((v: any) => {
@@ -417,6 +431,8 @@ export function QuotationList({
 
       // Fetch company data to get email and details
       let companyData: any = {};
+      let companySettings: any = {};
+      
       if (companyId) {
         try {
           const companyDoc = await getDoc(doc(db, 'companies', companyId));
@@ -427,12 +443,22 @@ export function QuotationList({
           console.warn('Could not fetch company data:', err);
         }
       }
+      
+      // Fetch company settings (branding, logo, stamp) from settings/company
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'company'));
+        if (settingsDoc.exists()) {
+          companySettings = settingsDoc.data();
+        }
+      } catch (err) {
+        console.warn('Could not fetch company settings:', err);
+      }
 
-      const companyEmail = quotation.email || quotation.companyEmail || companyData.email;
-      const companyPhone = quotation.phone || quotation.companyPhone || companyData.phone;
-      const companyName = quotation.companyName || companyData.name;
-      const companyAddress = quotation.companyAddress || companyData.address;
-      const companyCity = quotation.companyCity || companyData.city;
+      const companyEmail = quotation.email || quotation.companyEmail || companyData.email || companySettings.email;
+      const companyPhone = quotation.phone || quotation.companyPhone || companyData.phone || companySettings.phone;
+      const companyName = quotation.companyName || companyData.name || companySettings.name;
+      const companyAddress = quotation.companyAddress || companyData.address || companySettings.address;
+      const companyCity = quotation.companyCity || companyData.city || companySettings.city;
 
       if (!companyEmail) {
         toast({
@@ -453,14 +479,16 @@ export function QuotationList({
             ? quotation.quotationDate
             : (quotation.quotationDate as any).toDate?.() || new Date(),
           company: {
-            name: quotation.companyName || companyData.name || 'N/A',
-            phone: quotation.phone || quotation.companyPhone || companyData.phone,
-            email: quotation.email || quotation.companyEmail || companyData.email,
-            trn: quotation.companyTRN || companyData.trn,
-            address: quotation.companyAddress || companyData.address,
-            city: quotation.companyCity || companyData.city,
-            state: quotation.companyState || companyData.state,
-            zipCode: quotation.companyZipCode || companyData.zipCode,
+            name: quotation.companyName || companyData.name || companySettings.name || 'N/A',
+            phone: quotation.phone || quotation.companyPhone || companyData.phone || companySettings.phone,
+            email: quotation.email || quotation.companyEmail || companyData.email || companySettings.email,
+            trn: quotation.companyTRN || companyData.trn || companySettings.trn,
+            address: quotation.companyAddress || companyData.address || companySettings.address,
+            city: quotation.companyCity || companyData.city || companySettings.city,
+            state: quotation.companyState || companyData.state || companySettings.state,
+            zipCode: quotation.companyZipCode || companyData.zipCode || companySettings.zipCode,
+            logoUrl: companySettings.logoUrl,
+            stampUrl: companySettings.stampUrl,
           },
           serviceTitle: quotation.serviceTitle || 'Service',
           vehicles: quotation.vehicles?.map((v: any) => {

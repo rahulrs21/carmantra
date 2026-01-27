@@ -1201,7 +1201,7 @@ export default function AttendancePage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                    {/* <th className="px-4 py-3 text-left font-semibold text-gray-700">
                       <input
                         type="checkbox"
                         checked={selectedEmployees.size === filteredEmployees.length && filteredEmployees.length > 0}
@@ -1214,7 +1214,7 @@ export default function AttendancePage() {
                         }}
                         className="w-4 h-4 rounded border-gray-300 cursor-pointer"
                       />
-                    </th>
+                    </th> */}
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Employee</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Department</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
@@ -1229,7 +1229,7 @@ export default function AttendancePage() {
 
                     return (
                       <tr key={emp.id} className={`border-b border-gray-200 hover:bg-gray-50 transition ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                        <td className="px-4 py-3">
+                        {/* <td className="px-4 py-3">
                           <input
                             type="checkbox"
                             checked={selectedEmployees.has(emp.id || '')}
@@ -1244,7 +1244,7 @@ export default function AttendancePage() {
                             }}
                             className="w-4 h-4 rounded border-gray-300 cursor-pointer"
                           />
-                        </td>
+                        </td> */}
                         <td className="px-4 py-3">
                           <div>
                             <p className="font-medium text-gray-900">{emp.name}</p>

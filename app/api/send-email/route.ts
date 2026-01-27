@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         // Route to different email templates based on emailType
         if (emailType === 'booking-confirmation') {
             // Booking Confirmation Email Template using react-email
-            const { jobCardNo, scheduledDate, vehicleDetails, companyName, contactName } = data;
+            const { jobCardNo, scheduledDate, vehicleDetails, companyName, contactName, companyEmail, companyPhone } = data;
             const customerName = companyName || name || contactName;
 
             console.log('✅ Sending booking confirmation to:', email);
@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
                         vehicleModel: vehicleDetails?.modelName || 'N/A',
                         vehiclePlate: vehicleDetails?.numberPlate || 'N/A',
                         phone: phone || 'N/A',
+                        companyName,
+                        companyEmail,
+                        companyPhone,
                     })
                 );
 
@@ -119,7 +122,7 @@ export async function POST(req: NextRequest) {
             }
         } else if (emailType === 'job-completion') {
             // Job Completion (Invoice) Email Template using react-email
-            const { jobCardNo, invoiceNumber, total, paymentStatus, companyName, contactName } = data;
+            const { jobCardNo, invoiceNumber, total, paymentStatus, companyName, contactName, companyEmail, companyPhone } = data;
             const customerName = companyName || name || contactName;
 
             console.log('✅ Sending job completion email to:', email);
@@ -134,6 +137,8 @@ export async function POST(req: NextRequest) {
                         paymentStatus: paymentStatus || 'unpaid',
                         companyName,
                         contactName,
+                        companyEmail,
+                        companyPhone,
                     })
                 );
 

@@ -700,7 +700,7 @@ export default function MonthlyAttendancePage() {
                           <div className='flex justify-start items-center'>
 
                               {
-                                includeHolidays ? (
+                                includeHolidays && Number(data.salaryBreakdown.totalPayableDays) > 7 ? (
 
                                   <>
                                   <p className="text-lg font-bold text-gray-900 mr-2">{Number(data.salaryBreakdown.totalPayableDays) + Number(calculateHolidayBreakdown(selectedDate.getFullYear(), selectedDate.getMonth() + 1).total)}</p>
@@ -708,7 +708,9 @@ export default function MonthlyAttendancePage() {
                                   <p className='text-xs whitespace-nowrap'> [{data.salaryBreakdown.totalPayableDays} + {calculateHolidayBreakdown(selectedDate.getFullYear(), selectedDate.getMonth() + 1).total} Holidays]</p>
                                   </>
                                 ) : (
+                                  <div className='flex justify-between items-center space-x-2'  >
                                   <p className="text-lg font-bold text-gray-900">{data.salaryBreakdown.totalPayableDays}</p>
+                                  </div>
                                 )
                               }
                           </div>
@@ -747,14 +749,23 @@ export default function MonthlyAttendancePage() {
 
                           <div className="text-xl font-bold text-blue-600">
 
-                            {includeHolidays ? (
-                              formatCurrency(
-                                ((data.salaryBreakdown.totalPayableDays + calculateHolidayBreakdown(selectedDate.getFullYear(), selectedDate.getMonth() + 1).total) * data.salaryBreakdown.perDaySalary) - data.salaryBreakdown.totalDeductions 
-                              )
+                            {includeHolidays && Number(data.salaryBreakdown.totalPayableDays) > 7 ? (
+                              <div>
+                                  {formatCurrency(
+                                    ((data.salaryBreakdown.totalPayableDays + calculateHolidayBreakdown(selectedDate.getFullYear(), selectedDate.getMonth() + 1).total) * data.salaryBreakdown.perDaySalary) - data.salaryBreakdown.totalDeductions 
+                                  )}
+                                  
+                              </div>
                             ) : (
-                              formatCurrency(
-                                (data.salaryBreakdown.totalPayableDays * data.salaryBreakdown.perDaySalary) - data.salaryBreakdown.totalDeductions
-                              )
+                              <div>
+                                {formatCurrency(
+                                    (data.salaryBreakdown.totalPayableDays * data.salaryBreakdown.perDaySalary) - data.salaryBreakdown.totalDeductions
+                                )}
+
+                                <p className='text-xs text-black font-normal'>{`Holidays are not Included. 
+                                ${Number(data.salaryBreakdown.totalPayableDays) > 7 ? '' : 'You should be Present atleast 7 days.'}
+                                 `}</p>
+                              </div>
                             )}
                             
                             {/* {formatCurrency(
@@ -807,7 +818,7 @@ export default function MonthlyAttendancePage() {
                         <div className="font-semibold flex justify-center items-center">
                           Total Holidays
                           <input type="checkbox"
-                            className="ml-3 mr-1 cursor-pointer"
+                            className="ml-3 mr-1 cursor-pointer" 
                             checked={includeHolidays}
                             onChange={() => setIncludeHolidays(!includeHolidays)}
                           />
