@@ -317,7 +317,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       return true;
     }
     // Hide Leads and Customers from employees (but allow Send Form)
-    if (role === 'employee' && item.href !== '/admin/send-form' && (item.module === 'leads' || item.module === 'customers' || item.module === 'quotations' || item.module === 'invoices')) {
+    if (role === 'employee' && item.href !== '/admin/send-form' && (item.module === 'leads' || item.module === 'customers' || item.module === 'quotations' || item.module === 'invoices' || item.module === 'tasks')) {
       return false;
     }
     // Hide My Leaves from Admin and Manager roles (they manage staff, not their own leaves)

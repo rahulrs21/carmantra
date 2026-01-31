@@ -118,7 +118,7 @@ function formatDateTimeDDMMYYYY(date: Date | null): string {
 }
 
 export default function EmployeeTasksPage() {
-  const { role } = useUser();
+  const { role, user } = useUser();
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
@@ -189,17 +189,34 @@ export default function EmployeeTasksPage() {
     return { startDate, endDate };
   };
 
-  // Get current employee ID (would come from auth context in real app)
+  // Get current employee ID from logged-in user
   useEffect(() => {
-    // For demo, we'll fetch first employee
-    const getEmployeeId = async () => {
-      const snapshot = await getDocs(collection(db, 'employees'));
-      if (snapshot.docs.length > 0) {
-        setEmployeeId(snapshot.docs[0].id);
+    if (!user?.uid) return;
+
+    const getEmployeeIdFromUser = async () => {
+      try {
+        // Find employee record by user UID or email
+        const employeesSnapshot = await getDocs(
+          query(
+            collection(db, 'employees'),
+            where('email', '==', user.email?.toLowerCase() || '')
+          )
+        );
+
+        if (employeesSnapshot.docs.length > 0) {
+          setEmployeeId(employeesSnapshot.docs[0].id);
+        } else {
+          console.warn('No employee record found for user:', user.email);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error fetching employee ID:', error);
+        setLoading(false);
       }
     };
-    getEmployeeId();
-  }, []);
+
+    getEmployeeIdFromUser();
+  }, [user?.uid, user?.email]);
 
   // Fetch assigned tasks
   useEffect(() => {
@@ -244,9 +261,21 @@ export default function EmployeeTasksPage() {
       );
     }
 
-    // Date filter
+    // Date filter - Filter by deadline for active tasks, by completedAt for finished tasks
     const { startDate, endDate } = getDateRangeForFilter(filterDateRange);
     filtered = filtered.filter(task => {
+      // For completed or verified tasks, check completedAt date
+      if (task.status === 'completed' || task.status === 'verified') {
+        if (task.completedAt) {
+          const completedDate = new Date(task.completedAt.seconds * 1000);
+          return completedDate >= startDate && completedDate <= endDate;
+        }
+        // If no completedAt, use createdAt as fallback
+        const createdDate = new Date(task.createdAt.seconds * 1000);
+        return createdDate >= startDate && createdDate <= endDate;
+      }
+      
+      // For active tasks, check deadline
       const taskDate = new Date(task.createdAt.seconds * 1000);
       return taskDate >= startDate && taskDate <= endDate;
     });
@@ -590,16 +619,17 @@ export default function EmployeeTasksPage() {
                           <Link
                             href={`/admin/b2b-booking/companies/${task.companyId}/services/${task.serviceBookingId}/vehicles/${task.vehicleId}`}
                             target="_blank"
+                            className='bg-blue-400 p-1 rounded-full px-2 text-xs'
                           >
-                            <span className="inline-block text-xs font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap">
-                              {task.jobCardNo}
+                            <span className="inline-block text-xs font-semibold text-white hover:text-blue-800 whitespace-nowrap ">
+                             View Task ({task.jobCardNo})
                             </span>
                           </Link>
                         ) : (
                           // Booking Service link
-                          <Link href={`/admin/book-service/${task.serviceBookingId}`} target="_blank">
-                            <span className="inline-block text-xs font-semibold text-blue-600 hover:text-blue-800 underline whitespace-nowrap">
-                              {task.jobCardNo}
+                          <Link href={`/admin/book-service/${task.serviceBookingId}`} target="_blank" className='bg-blue-400 p-1 rounded-full px-2 text-xs'>
+                            <span className="inline-block text-xs font-semibold text-white hover:text-blue-800 whitespace-nowrap">
+                              View Task ({task.jobCardNo})
                             </span>
                           </Link>
                         )
@@ -717,15 +747,32 @@ export default function EmployeeTasksPage() {
                       {TASK_STATUSES.map(statusOption => {
                         const isCurrentStatus = task.status === statusOption.key;
                         const isVerified = task.status === 'verified';
+                        const deadlineDate = parseDeadlineDate(task.deadline);
+                        const isDeadlinePassed = deadlineDate ? deadlineDate < new Date() : false;
+                        
+                        // Determine if button should be disabled
+                        let isDisabled = isVerified;
+                        
+                        if (isDeadlinePassed) {
+                          // If status is 'notStarted' and deadline passed, disable all buttons except 'notStarted'
+                          if (task.status === 'notStarted' && statusOption.key !== 'notStarted') {
+                            isDisabled = true;
+                          }
+                          // If status is 'inProgress' and deadline passed, disable 'completed' and 'verified'
+                          if (task.status === 'inProgress' && (statusOption.key === 'completed' || statusOption.key === 'verified')) {
+                            isDisabled = true;
+                          }
+                        }
+                        
                         return (
                           <button
                             key={statusOption.key}
                             onClick={() => handleStatusChange(task.id, statusOption.key)}
-                            disabled={isVerified}
+                            disabled={isDisabled}
                             className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-all ${isCurrentStatus
                                 ? `${statusOption.color} ring-2 ring-offset-1 ring-current`
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              } ${isVerified ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             {statusOption.icon} {statusOption.label}
                           </button>

@@ -19,11 +19,12 @@ import { saveContactPerson, listCustomers } from '@/lib/firestore/customers';
 import { ReferralList } from '@/components/shared/ReferralList';
 import { ReferralForm } from '@/components/shared/ReferralForm';
 import { useReferrals } from '@/hooks/useReferrals';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function BookServiceDetails() {
-    const [paymentStatus, setPaymentStatus] = React.useState('full');
-    const [partialPaidAmount, setPartialPaidAmount] = React.useState('');
-      const [partialPaymentNotes, setPartialPaymentNotes] = React.useState('');
+  const [paymentStatus, setPaymentStatus] = React.useState('full');
+  const [partialPaidAmount, setPartialPaidAmount] = React.useState('');
+  const [partialPaymentNotes, setPartialPaymentNotes] = React.useState('');
   const params = useParams();
   const id = params?.id as string | undefined;
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function BookServiceDetails() {
   const [editing, setEditing] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
   const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
-  
+
   // Referrals
   const { referrals, isLoading: referralsLoading, deleteReferral } = useReferrals(id);
   const [showReferralList, setShowReferralList] = useState(false);
@@ -67,7 +68,7 @@ export default function BookServiceDetails() {
         if (typeof state.partialPaidAmount === 'string') setPartialPaidAmount(state.partialPaidAmount);
         if (typeof state.paymentTermsOther === 'string') setPaymentTermsOther(state.paymentTermsOther);
         if (typeof state.partialPaymentNotes === 'string') setPartialPaymentNotes(state.partialPaymentNotes);
-      } catch {}
+      } catch { }
     }
   }, [service?.id]);
 
@@ -103,12 +104,24 @@ export default function BookServiceDetails() {
   const [mulkiyaFiles, setMulkiyaFiles] = useState<File[]>([]);
   const [mulkiyaPreview, setMulkiyaPreview] = useState<string[]>([]);
   const [mulkiyaUploading, setMulkiyaUploading] = useState(false);
-  
+
   // Task Management State
   const [tasks, setTasks] = useState<any[]>([]);
-  const [employees, setEmployees] = useState<{id: string, name: string, email: string}[]>([]);
-  const [observerUsers, setObserverUsers] = useState<{id: string, name: string, role: string}[]>([]);
+  const [employees, setEmployees] = useState<{ id: string, name: string, email: string }[]>([]);
+  const [observerUsers, setObserverUsers] = useState<{ id: string, name: string, role: string }[]>([]);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [showAddEmployeeForm, setShowAddEmployeeForm] = useState(false);
+  const [newEmployeeData, setNewEmployeeData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    department: '',
+    position: '',
+    jobStatus: 'Full Time',
+    joiningDate: new Date().toISOString().split('T')[0],
+    salary: '',
+  });
+  const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [newTaskData, setNewTaskData] = useState({
     assignedTo: [] as string[],
     observedByUserId: '' as string,
@@ -119,7 +132,7 @@ export default function BookServiceDetails() {
     description: '' as string,
     deadline: '',
   });
-  
+
   type EditFormType = {
     companyName: string;
     contactName: string;
@@ -188,9 +201,9 @@ export default function BookServiceDetails() {
   });
 
   // Expense state variables
-  const EXPENSE_CATEGORIES = ['Car Parts & Accessories', 'Ceramic Coating Materials',  
-  'Cleaning Supplies', 'Maintenance Supplies', 'Car Wash Materials', 'Polishing Materials',
-  'Paints & Coatings', 'PPF Wrapping Materials', 'Tyres & Rims', 'Inspection Tools & Equipment', 
+  const EXPENSE_CATEGORIES = ['Car Parts & Accessories', 'Ceramic Coating Materials',
+    'Cleaning Supplies', 'Maintenance Supplies', 'Car Wash Materials', 'Polishing Materials',
+    'Paints & Coatings', 'PPF Wrapping Materials', 'Tyres & Rims', 'Inspection Tools & Equipment',
     'Fluids', 'Other'];
   const [expenses, setExpenses] = useState<any[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -687,14 +700,14 @@ export default function BookServiceDetails() {
       };
 
       await addDoc(collection(db, 'tasks'), taskData);
-      
+
       // Log activity for task assignment
       const assignedList = assignedNames.join(', ');
       await logActivity(
         'Assigned Tasks',
         `Tasks assigned to: ${assignedList} | Priority: ${newTaskData.priority} | Category: ${newTaskData.category}`
       );
-      
+
       setStatus('✓ Task created successfully');
       setShowAddTaskModal(false);
       setNewTaskData({
@@ -711,6 +724,80 @@ export default function BookServiceDetails() {
     } catch (err: any) {
       safeConsoleError('Task creation error', err);
       setStatus('Failed to create task');
+    }
+  }
+
+  // Handle Add New Employee
+  async function handleAddNewEmployee() {
+    if (!newEmployeeData.name.trim() || !newEmployeeData.email.trim() || !newEmployeeData.position.trim()) {
+      setStatus('Please enter employee name, email, and position');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmployeeData.email)) {
+      setStatus('Please enter a valid email address');
+      return;
+    }
+
+    // Check if employee already exists
+    if (employees.some(emp => emp.email.toLowerCase() === newEmployeeData.email.toLowerCase())) {
+      setStatus('Employee with this email already exists');
+      return;
+    }
+
+    try {
+      setCreatingEmployee(true);
+      setStatus('Creating employee...');
+
+      const employeeDoc = await addDoc(collection(db, 'employees'), {
+        name: newEmployeeData.name.trim(),
+        email: newEmployeeData.email.trim().toLowerCase(),
+        phone: newEmployeeData.phone.trim(),
+        department: newEmployeeData.department.trim(),
+        position: newEmployeeData.position.trim(),
+        jobStatus: newEmployeeData.jobStatus,
+        joiningDate: newEmployeeData.joiningDate,
+        salary: newEmployeeData.salary ? parseFloat(newEmployeeData.salary) : 0,
+        role: 'employee',
+        status: 'active',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      // Add to local employees list immediately
+      const newEmp = {
+        id: employeeDoc.id,
+        name: newEmployeeData.name.trim(),
+        email: newEmployeeData.email.trim().toLowerCase(),
+      };
+      setEmployees(prev => [...prev, newEmp].sort((a, b) => a.name.localeCompare(b.name)));
+
+      // Auto-select the new employee
+      setNewTaskData(prev => ({
+        ...prev,
+        assignedTo: [...prev.assignedTo, employeeDoc.id],
+      }));
+
+      setStatus('✓ Employee created and selected successfully');
+      setShowAddEmployeeForm(false);
+      setNewEmployeeData({
+        name: '',
+        email: '',
+        phone: '',
+        department: '',
+        position: '',
+        jobStatus: 'Full Time',
+        joiningDate: new Date().toISOString().split('T')[0],
+        salary: '',
+      });
+      setTimeout(() => setStatus(null), 3000);
+    } catch (err: any) {
+      safeConsoleError('Employee creation error', err);
+      setStatus('Failed to create employee: ' + err.message);
+    } finally {
+      setCreatingEmployee(false);
     }
   }
 
@@ -828,7 +915,7 @@ export default function BookServiceDetails() {
     setBillingItems(quotedItems);
     setLaborCharges(Number(quotation.laborCharges) || 0);
     setDiscount(Number(quotation.discount) || 0);
-    
+
     // Load payment terms from existing invoice if available
     if (Array.isArray(service.invoices) && service.invoices.length > 0) {
       const lastInvoice = service.invoices[service.invoices.length - 1];
@@ -845,7 +932,7 @@ export default function BookServiceDetails() {
       setPaymentStatus('full');
       setPartialPaidAmount('');
     }
-    
+
     setShowBilling(true);
   }
 
@@ -1066,8 +1153,8 @@ export default function BookServiceDetails() {
 
       // Send job completion email
       try {
-        const customerEmail = service.customerType?.toLowerCase() === 'b2b' 
-          ? service.contactEmail 
+        const customerEmail = service.customerType?.toLowerCase() === 'b2b'
+          ? service.contactEmail
           : service.email;
         const customerName = service.customerType?.toLowerCase() === 'b2b'
           ? service.contactName
@@ -1081,8 +1168,8 @@ export default function BookServiceDetails() {
               emailType: 'job-completion',
               name: customerName,
               email: customerEmail,
-              phone: service.customerType?.toLowerCase() === 'b2b' 
-                ? service.contactPhone 
+              phone: service.customerType?.toLowerCase() === 'b2b'
+                ? service.contactPhone
                 : service.mobileNo,
               service: service.category || 'Service',
               jobCardNo: service.jobCardNo,
@@ -1249,17 +1336,17 @@ export default function BookServiceDetails() {
       const payload = isB2b ? { ...b2bFields, ...commonFields } : { ...b2cFields, ...commonFields };
 
       await updateDoc(doc(db, 'bookedServices', id!), payload);
-      
+
       // For B2B bookings, save/update the contact person in the company customer's sub-collection
       if (isB2b && editForm.companyName && editForm.contactName) {
         try {
           // Find the company customer
           const customers = await listCustomers();
-          const companyCustomer = customers.find((c: any) => 
+          const companyCustomer = customers.find((c: any) =>
             c.companyName?.toLowerCase() === editForm.companyName.toLowerCase() &&
             c.customerType === 'b2b'
           );
-          
+
           if (companyCustomer?.id) {
             // Save the contact person under the company customer
             await saveContactPerson(companyCustomer.id, {
@@ -1274,7 +1361,7 @@ export default function BookServiceDetails() {
           // Don't fail the whole operation, just log it
         }
       }
-      
+
       setService((prev: any) => prev ? { ...prev, ...payload } : prev);
       setStatus('✓ Details updated successfully');
       setEditing(false);
@@ -1394,7 +1481,7 @@ export default function BookServiceDetails() {
       poRef: service.poRef || '',
       companyVat: service.companyVat || '',
       servicesHistory: service.servicesHistory || '',
-      
+
       firstName: service.firstName || '',
       lastName: service.lastName || '',
       mobileNo: service.mobileNo || '',
@@ -1730,7 +1817,7 @@ export default function BookServiceDetails() {
       timestamp: activity.createdAt?.seconds ? activity.createdAt.seconds * 1000 : new Date(activity.createdAt).getTime(),
     })),
   ].filter((item) => item && item.time) as Array<{ label: string; user: string; userName?: string; time: string; detail?: string; timestamp: number }>;
-  
+
   // Sort history items by timestamp in ascending order (oldest first)
   historyItems.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -1823,18 +1910,18 @@ export default function BookServiceDetails() {
               </div>
               {service.subCategory && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Sub-Category:</span>  
+                  <span className="text-gray-600">Sub-Category:</span>
                   <span className="font-medium">{service.subCategory}</span>
                 </div>
               )}
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Service Mode:</span>
                 <span className="font-medium">
                   {service.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
-                   service.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
-                   service.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
-                   service.mode || '—'}
+                    service.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
+                      service.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
+                        service.mode || '—'}
                 </span>
               </div>
 
@@ -2646,7 +2733,7 @@ export default function BookServiceDetails() {
                         ))}
                       </div>
                     ) : null}
-                    
+
                   </>
                 )
               )}
@@ -2681,16 +2768,15 @@ export default function BookServiceDetails() {
                         <p className="font-semibold text-sm sm:text-base text-gray-900 break-words">{task.title}</p>
                         <p className="text-xs text-gray-600 mt-1">{task.jobCardNo}</p>
                       </div>
-                      <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${
-                        task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-                        task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                          task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                            task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                        }`}>
                         {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
                       </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs mb-2">
                       <div>
                         <span className="text-gray-600">Assigned To:</span>
@@ -2702,16 +2788,15 @@ export default function BookServiceDetails() {
                       </div>
                       <div>
                         <span className="text-gray-600">Status:</span>
-                        <p className={`font-medium ${
-                          task.status === 'notStarted' ? 'text-red-800 bg-red-200 mx-2 px-2 py-1 rounded inline-block' :
-                          task.status === 'completed' ? 'text-yellow-800 bg-yellow-200 mx-2 px-2 py-1 rounded inline-block' :
-                          task.status === 'inProgress' ? 'text-blue-800 bg-blue-200 mx-2 px-2 py-1 rounded inline-block' :
-                          'text-green-800 bg-green-300 mx-2 px-2 py-1 rounded inline-block'
-                        }`}>
+                        <p className={`font-medium ${task.status === 'notStarted' ? 'text-red-800 bg-red-200 mx-2 px-2 py-1 rounded inline-block' :
+                            task.status === 'completed' ? 'text-yellow-800 bg-yellow-200 mx-2 px-2 py-1 rounded inline-block' :
+                              task.status === 'inProgress' ? 'text-blue-800 bg-blue-200 mx-2 px-2 py-1 rounded inline-block' :
+                                'text-green-800 bg-green-300 mx-2 px-2 py-1 rounded inline-block'
+                          }`}>
                           {task.status === 'notStarted' ? 'Not Started' :
-                           task.status === 'inProgress' ? 'In Progress' :
-                           task.status === 'completed' ? 'Completed' :
-                           'Verified'}
+                            task.status === 'inProgress' ? 'In Progress' :
+                              task.status === 'completed' ? 'Completed' :
+                                'Verified'}
                         </p>
                       </div>
                       <div>
@@ -2750,7 +2835,159 @@ export default function BookServiceDetails() {
                 <div className="space-y-4">
                   {/* Employees */}
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-semibold text-gray-700">Assign To</label>
+                      <Button
+                        type="button"
+                        onClick={() => setShowAddEmployeeForm(!showAddEmployeeForm)}
+                        className="text-xs bg-blue-500 hover:bg-blue-600 h-auto py-1 px-2"
+                      >
+                        {showAddEmployeeForm ? '- Hide Employee Form' : '+ Add Employee'}
+                      </Button>
+                    </div>
+
+                    {/* Add Employee Form */}
+                    {showAddEmployeeForm && (
+                      <div className="mb-4 p-3 border-2 border-blue-200 bg-blue-50 rounded-lg space-y-3">
+                        {/* Name */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Employee Name *</label>
+                          <Input
+                            type="text"
+                            placeholder="Enter full name"
+                            value={newEmployeeData.name}
+                            onChange={(e) => setNewEmployeeData(prev => ({ ...prev, name: e.target.value }))}
+                            className="border-2 border-gray-300 focus:border-blue-500"
+                          />
+                        </div>
+
+                        {/* Email & Phone */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Email *</label>
+                            <Input
+                              type="email"
+                              placeholder="email@example.com"
+                              value={newEmployeeData.email}
+                              onChange={(e) => setNewEmployeeData(prev => ({ ...prev, email: e.target.value }))}
+                              className="border-2 border-gray-300 focus:border-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Phone</label>
+                            <Input
+                              type="text"
+                              placeholder="+971 50 454 1234"
+                              value={newEmployeeData.phone}
+                              onChange={(e) => setNewEmployeeData(prev => ({ ...prev, phone: e.target.value }))}
+                              className="border-2 border-gray-300 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Department & Position */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Department *</label>
+
+                            <Select value={newEmployeeData.department} onValueChange={(value) => setNewEmployeeData(prev => ({ ...prev, department: value }))} >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select department" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Sales">Sales</SelectItem>
+                                <SelectItem value="Service">Service</SelectItem>
+                                <SelectItem value="Support">Support</SelectItem>
+                                <SelectItem value="Finance">Finance</SelectItem>
+                                <SelectItem value="HR">HR</SelectItem>
+                                <SelectItem value="Management">Management</SelectItem>
+                                <SelectItem value="Administration">Administration</SelectItem>
+                              </SelectContent>
+                            </Select>
+                           
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Position *</label>
+                            <Input
+                              type="text"
+                              placeholder="e.g., Sales Executive, Service Manager"
+                              value={newEmployeeData.position}
+                              onChange={(e) => setNewEmployeeData(prev => ({ ...prev, position: e.target.value }))}
+                              className="border-2 border-gray-300 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Job Status & Joining Date */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Job Status</label>
+                            <select
+                              value={newEmployeeData.jobStatus}
+                              onChange={(e) => setNewEmployeeData(prev => ({ ...prev, jobStatus: e.target.value }))}
+                              className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-xs focus:border-blue-500"
+                            >
+                              <option value="Full Time">Full Time</option>
+                              <option value="Part Time">Part Time</option>
+                              <option value="Contract">Freelance</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Joining Date</label>
+                            <Input
+                              type="date"
+                              value={newEmployeeData.joiningDate}
+                              onChange={(e) => setNewEmployeeData(prev => ({ ...prev, joiningDate: e.target.value }))}
+                              className="border-2 border-gray-300 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Salary */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Salary (Monthly)</label>
+                          <Input
+                            type="number"
+                            placeholder="50000"
+                            value={newEmployeeData.salary}
+                            onChange={(e) => setNewEmployeeData(prev => ({ ...prev, salary: e.target.value }))}
+                            className="border-2 border-gray-300 focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            type="button"
+                            onClick={handleAddNewEmployee}
+                            disabled={creatingEmployee}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-xs h-auto py-2"
+                          >
+                            {creatingEmployee ? 'Creating...' : 'Create & Assign'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setShowAddEmployeeForm(false);
+                              setNewEmployeeData({
+                                name: '',
+                                email: '',
+                                phone: '',
+                                department: '',
+                                position: '',
+                                jobStatus: 'Full Time',
+                                joiningDate: new Date().toISOString().split('T')[0],
+                                salary: '',
+                              });
+                            }}
+                            className="flex-1 text-xs h-auto py-2"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
                       {employees.length === 0 ? (
                         <p className="text-sm text-gray-500 col-span-2">No employees found</p>
@@ -3263,275 +3500,275 @@ export default function BookServiceDetails() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Expenses</h3>
                 {service.status !== 'completed' && service.status !== 'cancelled' && (
-                <Button
-                  size="sm"
-                  variant={showExpenseForm ? 'default' : 'outline'}
-                  onClick={() => {
-                    if (editingExpenseId) {
-                      cancelExpenseForm();
-                    } else {
-                      setShowExpenseForm(!showExpenseForm);
-                    }
-                  }}
-                  className="text-xs"
-                >
-                  {showExpenseForm ? 'Close' : '+ Add Expense'}
-                </Button>
-              )}
-            </div>
+                  <Button
+                    size="sm"
+                    variant={showExpenseForm ? 'default' : 'outline'}
+                    onClick={() => {
+                      if (editingExpenseId) {
+                        cancelExpenseForm();
+                      } else {
+                        setShowExpenseForm(!showExpenseForm);
+                      }
+                    }}
+                    className="text-xs"
+                  >
+                    {showExpenseForm ? 'Close' : '+ Add Expense'}
+                  </Button>
+                )}
+              </div>
 
-            {/* Expense Form */}
-            {showExpenseForm && service.status !== 'completed' && service.status !== 'cancelled' && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
-                  {/* Modal Header */}
-                  <div className="sticky top-0 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 p-6 border-b border-blue-500/20">
-                    <div>
-                      <h3 className="text-xl font-bold text-white">
-                        {editingExpenseId ? '✏️ Edit Expense' : '➕ Add New Expense'}
-                      </h3>
-                      <p className="text-blue-100 text-sm mt-1">
-                        {editingExpenseId ? 'Update expense details' : 'Record a new expense for this service'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={cancelExpenseForm}
-                      className="text-white hover:bg-blue-500/20 p-2 rounded-lg transition-colors duration-200"
-                      title="Close"
-                    >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* Modal Body */}
-                  <form className="p-6 space-y-6">
-                    {/* Category Row */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                        📁 Category <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={expenseFormData.category}
-                        onChange={(e) => setExpenseFormData({ ...expenseFormData, category: e.target.value })}
-                        className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-sm dark:bg-gray-800 dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+              {/* Expense Form */}
+              {showExpenseForm && service.status !== 'completed' && service.status !== 'cancelled' && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+                  <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+                    {/* Modal Header */}
+                    <div className="sticky top-0 flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 p-6 border-b border-blue-500/20">
+                      <div>
+                        <h3 className="text-xl font-bold text-white">
+                          {editingExpenseId ? '✏️ Edit Expense' : '➕ Add New Expense'}
+                        </h3>
+                        <p className="text-blue-100 text-sm mt-1">
+                          {editingExpenseId ? 'Update expense details' : 'Record a new expense for this service'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={cancelExpenseForm}
+                        className="text-white hover:bg-blue-500/20 p-2 rounded-lg transition-colors duration-200"
+                        title="Close"
                       >
-                        <option value="">Select a category</option>
-                        {EXPENSE_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </select>
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
 
-                    {/* Description */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                        📝 Description
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="e.g. Engine oil, brake pads, etc."
-                        value={expenseFormData.description}
-                        onChange={(e) => setExpenseFormData({ ...expenseFormData, description: e.target.value })}
-                        className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
-                      />
-                    </div>
-
-                    {/* Amount & Quantity Row */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Modal Body */}
+                    <form className="p-6 space-y-6">
+                      {/* Category Row */}
                       <div className="space-y-2">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          📦 Quantity
+                          📁 Category <span className="text-red-500">*</span>
                         </label>
-                        <Input
-                          type="number"
-                          placeholder="e.g. 2"
-                          value={expenseFormData.quantity}
-                          onChange={(e) => setExpenseFormData({ ...expenseFormData, quantity: e.target.value })}
-                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
-                        />
+                        <select
+                          value={expenseFormData.category}
+                          onChange={(e) => setExpenseFormData({ ...expenseFormData, category: e.target.value })}
+                          className="w-full border-2 border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-sm dark:bg-gray-800 dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                        >
+                          <option value="">Select a category</option>
+                          {EXPENSE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
+                      {/* Description */}
                       <div className="space-y-2">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          💰 Amount (AED) <span className="text-red-500">*</span>
-                        </label>
-                        <Input
-                          type="number"
-                          placeholder="e.g. 250.00"
-                          value={expenseFormData.amount}
-                          onChange={(e) => setExpenseFormData({ ...expenseFormData, amount: e.target.value })}
-                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
-                        />
-                      </div>
-                    </div>
-
-                    
-
-                    {/* Vendor & Date Row */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          🏪 Vendor/Supplier
+                          📝 Description
                         </label>
                         <Input
                           type="text"
-                          placeholder="Supplier name (optional)"
-                          value={expenseFormData.vendor}
-                          onChange={(e) => setExpenseFormData({ ...expenseFormData, vendor: e.target.value })}
+                          placeholder="e.g. Engine oil, brake pads, etc."
+                          value={expenseFormData.description}
+                          onChange={(e) => setExpenseFormData({ ...expenseFormData, description: e.target.value })}
                           className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          📅 Date <span className="text-red-500">*</span>
-                        </label>
-                        <Input
-                          type="date"
-                          value={expenseFormData.date}
-                          onChange={(e) => setExpenseFormData({ ...expenseFormData, date: e.target.value })}
-                          className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
-                        />
+                      {/* Amount & Quantity Row */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            📦 Quantity
+                          </label>
+                          <Input
+                            type="number"
+                            placeholder="e.g. 2"
+                            value={expenseFormData.quantity}
+                            onChange={(e) => setExpenseFormData({ ...expenseFormData, quantity: e.target.value })}
+                            className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            💰 Amount (AED) <span className="text-red-500">*</span>
+                          </label>
+                          <Input
+                            type="number"
+                            placeholder="e.g. 250.00"
+                            value={expenseFormData.amount}
+                            onChange={(e) => setExpenseFormData({ ...expenseFormData, amount: e.target.value })}
+                            className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Info Box */}
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-lg p-4">
-                      <p className="text-sm text-blue-800 dark:text-blue-300">
-                        <span className="font-semibold">💡 Tip:</span> This expense will be automatically added to your expense report and reflected in the financial summaries.
-                      </p>
-                    </div>
-                  </form>
 
-                  {/* Modal Footer */}
-                  <div className="sticky bottom-0 flex gap-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
-                    <Button
-                      type="button"
-                      onClick={cancelExpenseForm}
-                      variant="outline"
-                      className="flex-1 h-12 border-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleSaveExpense}
-                      className="flex-1 h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
-                    >
-                      {editingExpenseId ? '💾 Update Expense' : '💾 Save Expense'}
-                    </Button>
+
+                      {/* Vendor & Date Row */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            🏪 Vendor/Supplier
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Supplier name (optional)"
+                            value={expenseFormData.vendor}
+                            onChange={(e) => setExpenseFormData({ ...expenseFormData, vendor: e.target.value })}
+                            className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            📅 Date <span className="text-red-500">*</span>
+                          </label>
+                          <Input
+                            type="date"
+                            value={expenseFormData.date}
+                            onChange={(e) => setExpenseFormData({ ...expenseFormData, date: e.target.value })}
+                            className="border-2 border-gray-300 dark:border-gray-600 h-12 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors duration-200"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Info Box */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-lg p-4">
+                        <p className="text-sm text-blue-800 dark:text-blue-300">
+                          <span className="font-semibold">💡 Tip:</span> This expense will be automatically added to your expense report and reflected in the financial summaries.
+                        </p>
+                      </div>
+                    </form>
+
+                    {/* Modal Footer */}
+                    <div className="sticky bottom-0 flex gap-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
+                      <Button
+                        type="button"
+                        onClick={cancelExpenseForm}
+                        variant="outline"
+                        className="flex-1 h-12 border-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleSaveExpense}
+                        className="flex-1 h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+                      >
+                        {editingExpenseId ? '💾 Update Expense' : '💾 Save Expense'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Expenses Table */}
-            {expenses.length > 0 ? (
-              <div className="overflow-x-auto -mx-6 sm:mx-0">
-                <table className="w-full text-xs sm:text-sm">
-                  <thead className="border-b bg-gray-50 dark:bg-gray-800 sticky top-0">
-                    <tr>
-                      <th className="text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Job Card</th>
-                      <th className="hidden sm:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Category</th>
-                      <th className="hidden md:table-cell text-center py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Qty</th>
-                      <th className="text-right py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Amount</th>
-                      <th className="hidden lg:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Description</th>
-                      <th className="hidden md:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Date</th>
-                      {service.status !== 'completed' && service.status !== 'cancelled' && (
-                        <th className="text-center py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Action</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expenses
-                      .filter((exp: any) => !exp.deletedAt)
-                      .sort((a: any, b: any) => {
-                        const dateA = a.date?.seconds ? a.date.seconds * 1000 : new Date(a.date).getTime();
-                        const dateB = b.date?.seconds ? b.date.seconds * 1000 : new Date(b.date).getTime();
-                        return dateB - dateA; // Descending order (newest first)
-                      })
-                      .map((expense: any, idx: number) => (
-                        <tr key={expense.id || idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                          <td className="py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300">
-                            <span className="font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-1 rounded text-xs">
-                              {expense.jobCardNo || '-'}
-                            </span>
-                          </td>
-                          <td className="hidden sm:table-cell py-3 px-2 sm:px-3">
-                            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium whitespace-nowrap"> 
-                              {expense.category}
-                            </span>
-                          </td>
-                          <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-center text-gray-700 dark:text-gray-300 text-xs">
-                            {expense.quantity || 1}
-                          </td>
-                          <td className="py-3 px-2 sm:px-3 text-right font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">
-                            AED {(expense.amount || 0).toFixed(2)}
-                          </td>
-                          <td className="hidden lg:table-cell py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300 truncate max-w-xs" title={expense.description}>
-                            {expense.description || '-'}
-                          </td>
-                          <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">
-                            {expense.date
-                              ? new Date(
+              {/* Expenses Table */}
+              {expenses.length > 0 ? (
+                <div className="overflow-x-auto -mx-6 sm:mx-0">
+                  <table className="w-full text-xs sm:text-sm">
+                    <thead className="border-b bg-gray-50 dark:bg-gray-800 sticky top-0">
+                      <tr>
+                        <th className="text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Job Card</th>
+                        <th className="hidden sm:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Category</th>
+                        <th className="hidden md:table-cell text-center py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Qty</th>
+                        <th className="text-right py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Amount</th>
+                        <th className="hidden lg:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Description</th>
+                        <th className="hidden md:table-cell text-left py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Date</th>
+                        {service.status !== 'completed' && service.status !== 'cancelled' && (
+                          <th className="text-center py-2 px-2 sm:px-3 font-semibold text-gray-600 dark:text-gray-300">Action</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenses
+                        .filter((exp: any) => !exp.deletedAt)
+                        .sort((a: any, b: any) => {
+                          const dateA = a.date?.seconds ? a.date.seconds * 1000 : new Date(a.date).getTime();
+                          const dateB = b.date?.seconds ? b.date.seconds * 1000 : new Date(b.date).getTime();
+                          return dateB - dateA; // Descending order (newest first)
+                        })
+                        .map((expense: any, idx: number) => (
+                          <tr key={expense.id || idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <td className="py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300">
+                              <span className="font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-2 py-1 rounded text-xs">
+                                {expense.jobCardNo || '-'}
+                              </span>
+                            </td>
+                            <td className="hidden sm:table-cell py-3 px-2 sm:px-3">
+                              <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs font-medium whitespace-nowrap">
+                                {expense.category}
+                              </span>
+                            </td>
+                            <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-center text-gray-700 dark:text-gray-300 text-xs">
+                              {expense.quantity || 1}
+                            </td>
+                            <td className="py-3 px-2 sm:px-3 text-right font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">
+                              AED {(expense.amount || 0).toFixed(2)}
+                            </td>
+                            <td className="hidden lg:table-cell py-3 px-2 sm:px-3 text-gray-700 dark:text-gray-300 truncate max-w-xs" title={expense.description}>
+                              {expense.description || '-'}
+                            </td>
+                            <td className="hidden md:table-cell py-3 px-2 sm:px-3 text-gray-600 dark:text-gray-400 text-xs whitespace-nowrap">
+                              {expense.date
+                                ? new Date(
                                   expense.date.seconds ? expense.date.seconds * 1000 : expense.date
                                 ).toLocaleDateString('en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                 })
-                              : '-'}
-                          </td>
-                          {service.status !== 'completed' && service.status !== 'cancelled' && (
-                            <td className="py-3 px-2 sm:px-3 text-center">
-                              <div className="flex gap-1 justify-center">
-                                <button
-                                  onClick={() => handleEditExpense(expense)}
-                                  className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors text-sm sm:text-xs"
-                                  title="Edit"
-                                >
-                                  ✏️
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteExpense(expense.id)}
-                                  className="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors text-sm sm:text-xs"
-                                  title="Delete"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
+                                : '-'}
                             </td>
-                          )}
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
-                {showExpenseForm ? 'No expenses yet. Add one below.' : 'No expenses added yet.'}
-              </div>
-            )}
-
-            {/* Total Expenses */}
-            {expenses.length > 0 && (
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-gray-700">Total Expenses:</span>
-                  <span className="text-lg font-bold text-red-600">
-                    AED{' '}
-                    {expenses
-                      .filter((exp: any) => !exp.deletedAt)
-                      .reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0)
-                      .toFixed(2)}
-                  </span>
+                            {service.status !== 'completed' && service.status !== 'cancelled' && (
+                              <td className="py-3 px-2 sm:px-3 text-center">
+                                <div className="flex gap-1 justify-center">
+                                  <button
+                                    onClick={() => handleEditExpense(expense)}
+                                    className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors text-sm sm:text-xs"
+                                    title="Edit"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteExpense(expense.id)}
+                                    className="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors text-sm sm:text-xs"
+                                    title="Delete"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            )}
-          </Card>
+              ) : (
+                <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
+                  {showExpenseForm ? 'No expenses yet. Add one below.' : 'No expenses added yet.'}
+                </div>
+              )}
+
+              {/* Total Expenses */}
+              {expenses.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-700">Total Expenses:</span>
+                    <span className="text-lg font-bold text-red-600">
+                      AED{' '}
+                      {expenses
+                        .filter((exp: any) => !exp.deletedAt)
+                        .reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0)
+                        .toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </Card>
           )}
 
           {/* Referral Section */}
@@ -3979,37 +4216,37 @@ export default function BookServiceDetails() {
 
       {/* Quotation Modal */}
       {showQuotationModal && service && (<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowQuotationModal(false)} />
-          <div className="bg-white rounded-lg shadow-2xl max-w-7xl w-full z-10 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">{quotation ? 'Update Quotation' : 'Create Quotation'}</h2>
-              <button
-                className="text-gray-500 hover:text-gray-700"
-                onClick={() => setShowQuotationModal(false)}
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-2 md:p-6">
-              <QuotationForm
-                quotation={quotation || quotationSeed}
-                serviceBookingId={service.id}
-                jobCardNo={service.jobCardNo}
-                vehiclesList={service?.customerType === 'b2b' ? (Array.isArray(service.vehicles) ? service.vehicles : []) : undefined}
-                onCreated={(quoteId, meta) => {
-                  setShowQuotationModal(false);
-                  setStatus('Quotation saved');
-                  if (meta?.status) {
-                    setQuotation((prev: any) => ({ ...(prev || { id: quoteId }), id: quoteId, status: meta.status }));
-                  }
-                }}
-                onCancel={() => setShowQuotationModal(false)}
-              />
-            </div>
+        <div className="fixed inset-0 bg-black/50" onClick={() => setShowQuotationModal(false)} />
+        <div className="bg-white rounded-lg shadow-2xl max-w-7xl w-full z-10 max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">{quotation ? 'Update Quotation' : 'Create Quotation'}</h2>
+            <button
+              className="text-gray-500 hover:text-gray-700"
+              onClick={() => setShowQuotationModal(false)}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-2 md:p-6">
+            <QuotationForm
+              quotation={quotation || quotationSeed}
+              serviceBookingId={service.id}
+              jobCardNo={service.jobCardNo}
+              vehiclesList={service?.customerType === 'b2b' ? (Array.isArray(service.vehicles) ? service.vehicles : []) : undefined}
+              onCreated={(quoteId, meta) => {
+                setShowQuotationModal(false);
+                setStatus('Quotation saved');
+                if (meta?.status) {
+                  setQuotation((prev: any) => ({ ...(prev || { id: quoteId }), id: quoteId, status: meta.status }));
+                }
+              }}
+              onCancel={() => setShowQuotationModal(false)}
+            />
           </div>
         </div>
+      </div>
       )}
 
       {/* Billing Modal */}
@@ -4173,13 +4410,13 @@ export default function BookServiceDetails() {
                   <input
                     type="number"
                     placeholder="Enter labor charges"
-                    min="0" 
+                    min="0"
                     value={laborCharges === 0 ? '' : laborCharges}
-                    step="1" 
+                    step="1"
                     onChange={e => {
                       const val = e.target.value;
                       setLaborCharges(val === '' ? 0 : parseFloat(val));
-                    }} 
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded"
                   />
                 </div>
@@ -4278,7 +4515,7 @@ export default function BookServiceDetails() {
                         <span className="text-orange-700 font-semibold">Remaining balance to be paid: AED {(calculateBillingTotal().grandTotal - parseFloat(partialPaidAmount)).toFixed(2)}</span>
                       </div>
                     )}
-                    
+
                   </div>
                 )}
 
@@ -4355,8 +4592,8 @@ export default function BookServiceDetails() {
 
                 {status && (
                   <div className={`p-3 rounded text-sm ${status.includes('Failed') || status.includes('Please')
-                      ? 'bg-red-50 text-red-700 border border-red-200'
-                      : 'bg-green-50 text-green-700 border border-green-200'
+                    ? 'bg-red-50 text-red-700 border border-red-200'
+                    : 'bg-green-50 text-green-700 border border-green-200'
                     }`}>
                     {status}
                   </div>
