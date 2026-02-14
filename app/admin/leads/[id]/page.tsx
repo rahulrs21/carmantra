@@ -13,6 +13,7 @@ import { formatDateTime } from '@/lib/utils';
 import { PermissionGate } from '@/components/PermissionGate';
 import { useUser } from '@/lib/userContext';
 import { hasPermission } from '@/lib/permissions';
+import { color } from 'framer-motion';
 
 interface Lead {
   id: string;
@@ -32,6 +33,7 @@ interface CustomerFormSubmission {
   vehicleBrand: string;
   modelName: string;
   numberPlate: string;
+  color: string;
   fuelType: string;
   vinNumber: string;
   country: string;
@@ -346,10 +348,10 @@ export default function LeadDetailsPage() {
           key={day}
           onClick={() => !disabled && setSelectedDate(date)}
           className={`p-2 min-h-[96px] border text-left transition-colors focus:outline-none ${disabled
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : isSelected
-                ? 'bg-orange-100 border-orange-500 shadow-inner'
-                : 'hover:bg-orange-50'
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            : isSelected
+              ? 'bg-orange-100 border-orange-500 shadow-inner'
+              : 'hover:bg-orange-50'
             } ${isPastDate(date) ? 'opacity-80' : ''}`}
         >
           <div className="flex items-start justify-between gap-2">
@@ -365,10 +367,10 @@ export default function LeadDetailsPage() {
               <div
                 key={idx}
                 className={`px-1 py-0.5 rounded text-white truncate ${service.status === 'completed'
-                    ? 'bg-green-500'
-                    : service.status === 'cancelled'
-                      ? 'bg-red-500'
-                      : 'bg-blue-500'
+                  ? 'bg-green-500'
+                  : service.status === 'cancelled'
+                    ? 'bg-red-500'
+                    : 'bg-blue-500'
                   }`}
               >
                 {service.firstName || 'Booking'}
@@ -525,6 +527,7 @@ export default function LeadDetailsPage() {
         city: bookingForm.city,
         address: bookingForm.address,
         vehicleType: bookingForm.vehicleType,
+        color: bookingForm.color,
         vehicleBrand: bookingForm.vehicleBrand,
         modelName: bookingForm.modelName,
         numberPlate: bookingForm.numberPlate,
@@ -636,8 +639,20 @@ export default function LeadDetailsPage() {
   }
 
 
+
+
   const serviceCategory = bookingForm.category;
   const [mainSubCategory, mainCategory] = serviceCategory.split(' - ');
+
+  function getLastSegment(text?: string | null): string {
+    if (!text) return "";
+
+    const parts = text.split(/\s*[-–]\s*/);
+    return parts[parts.length - 1]?.trim() ?? "";
+  }
+
+  console.log('Service Cate', bookingForm)
+
 
   return (
     <div className="p-1 sm:p-6 max-w-7xl w-full mx-auto space-y-6 overflow-x-hidden">
@@ -667,10 +682,10 @@ export default function LeadDetailsPage() {
                       <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-600">Loading...</span>
                     ) : relatedBookings.length > 0 ? (
                       <span className={`px-2 py-1 rounded text-xs font-medium ${relatedBookings[0].status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : relatedBookings[0].status === 'cancelled'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-blue-100 text-blue-800'
+                        ? 'bg-green-100 text-green-800'
+                        : relatedBookings[0].status === 'cancelled'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-blue-100 text-blue-800'
                         }`}>
                         {relatedBookings[0].status || 'pending'}
                       </span>
@@ -851,10 +866,10 @@ export default function LeadDetailsPage() {
                                   disabled={isTimeDisabled(time)}
                                   onClick={() => setSelectedTime(time)}
                                   className={`p-2 text-sm rounded border transition-colors ${isTimeDisabled(time)
-                                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
-                                      : selectedTime === time
-                                        ? 'bg-orange-500 text-white border-orange-500'
-                                        : 'border-gray-300 hover:bg-orange-50'
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200'
+                                    : selectedTime === time
+                                      ? 'bg-orange-500 text-white border-orange-500'
+                                      : 'border-gray-300 hover:bg-orange-50'
                                     }`}
                                 >
                                   {formatTimeLabel(time)}
@@ -872,15 +887,15 @@ export default function LeadDetailsPage() {
                         <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
 
                           <div>
-                            <label className="block text-xs text-gray-600 mb-1">Service Category111 *</label>
+                            <label className="block text-xs text-gray-600 mb-1">Service Category *</label>
                             <select
                               required
-                              value={mainCategory}
+                              value={!bookingForm.subCategory ? getLastSegment(bookingForm.category) : bookingForm.category}
                               onChange={(e) => setBookingForm({ ...bookingForm, category: e.target.value })}
                               className="w-full border rounded px-3 py-2 text-sm"
                             >
                               <option value="">Select Service</option>
-                              <option value="Paint Protection Film & Wrapping">Paint Protection Film & Wrapping</option>
+                              <option value="PPF & Wrapping">PPF & Wrapping</option>
                               <option value="Ceramic Coating">Ceramic Coating</option>
                               <option value="Car Tinting">Car Tinting</option>
                               <option value="Car Wash">Car Wash</option>
@@ -897,7 +912,7 @@ export default function LeadDetailsPage() {
                             <label className="block text-xs text-gray-600 mb-1">Select Sub Category</label>
                             <input
                               type="text"
-                              value={mainSubCategory}
+                              value={!mainCategory ? bookingForm.subCategory : mainSubCategory}
                               onChange={(e) => setBookingForm({ ...bookingForm, subCategory: e.target.value })}
                               className="w-full border rounded px-3 py-2 text-sm"
                               placeholder="e.g., Full Body, Door Panels"
@@ -905,15 +920,20 @@ export default function LeadDetailsPage() {
                           </div>
 
                           <div className="flex flex-col gap-1  flex-wrap">
-                            <span className="text-xs text-gray-600">Service Mode:</span>
-                            <span className="text-xs break-words max-w-full border border-gray-300 rounded px-3 py-2">
-                              {lead.mode ? (
-                                lead.mode === 'drive-to-garage' ? 'Drive to Garage (Free)' :
-                                  lead.mode === 'pick-up-service' ? 'Pick-up Service (+AED 150.00)' :
-                                    lead.mode === 'home-service' ? 'Home Service (+AED 100.00)' :
-                                      lead.mode
-                              ) : '—'}
-                            </span>
+                            <span className="text-xs text-gray-600">Service Mode:</span>                            
+
+                            <select
+                              required
+                              value={bookingForm.mode}
+                              onChange={(e) => setBookingForm({ ...bookingForm, mode: e.target.value })}
+                              className="w-full border rounded px-3 py-2 text-sm mt-1"
+                            >
+                              <option value="">Select Mode</option> 
+                              <option value="drive-to-garage">Drive to Garage (Free)</option>
+                              <option value="pick-up-service">Pick-up Service (+AED 150.00)</option>
+                              <option value="home-service">Home Service (+AED 100.00)</option>
+                            </select>
+                            
                           </div>
 
 
@@ -1040,7 +1060,7 @@ export default function LeadDetailsPage() {
                                 </div>
                               )}
 
-                              {bookingForm.mulkiyaUrl && (
+                              {!mulkiyaPreview && bookingForm.mulkiyaUrl && (
                                 <div className="flex items-center gap-3 text-xs text-gray-700 mt-2">
                                   <span className="font-semibold">Current:</span>
                                   <a
@@ -1279,7 +1299,7 @@ export default function LeadDetailsPage() {
                       </Button>
                     </>
                   )}
-                  {!showBookService && relatedBookings.length > 0 && (
+                  {/* {!showBookService && relatedBookings.length > 0 && (
                     <Button
                       className="w-full bg-orange-600 hover:bg-orange-700"
                       onClick={() => {
@@ -1298,7 +1318,7 @@ export default function LeadDetailsPage() {
                     >
                       📅 Add Another Service
                     </Button>
-                  )}
+                  )} */}
                 </PermissionGate>
                 <Button
                   variant="outline"
@@ -1311,6 +1331,7 @@ export default function LeadDetailsPage() {
             </Card>
 
             {/* Customer Form Submissions */}
+            
             <Card className="p-6 w-full">
               <h2 className="text-xl font-semibold mb-4">Customer Form Submissions</h2>
               {customerFormSubmissions.length > 0 ? (
@@ -1325,6 +1346,7 @@ export default function LeadDetailsPage() {
                           <div className="space-y-2 text-sm">
                             <div><span className="font-medium text-gray-700">Service:</span> <span className="text-gray-600">{submission.category || 'N/A'}</span></div>
                             <div><span className="font-medium text-gray-700">Vehicle:</span> <span className="text-gray-600">{submission.vehicleBrand} {submission.modelName} ({submission.vehicleType})</span></div>
+                            <div><span className="font-medium text-gray-700">Vehicle Color:</span> <span className="text-gray-600">{submission.color}</span></div>
                             <div><span className="font-medium text-gray-700">Number Plate:</span> <span className="text-gray-600">{submission.numberPlate}</span></div>
                             <div><span className="font-medium text-gray-700">Location:</span> <span className="text-gray-600">{submission.city}, {submission.state}, {submission.country}</span></div>
                             <div><span className="font-medium text-gray-700">Address:</span> <span className="text-gray-600">{submission.address}</span></div>
@@ -1349,7 +1371,7 @@ export default function LeadDetailsPage() {
                                   scheduledDate: '',
                                   category: submission.category || '',
                                   subCategory: submission.subCategory || '',
-                                  mode: '',
+                                  mode: lead.mode || '',
                                   vehicleType: submission.vehicleType || '',
                                   vehicleBrand: submission.vehicleBrand || '',
                                   modelName: submission.modelName || '',
@@ -1364,9 +1386,14 @@ export default function LeadDetailsPage() {
                                   address: submission.address || '',
                                 });
                                 setMulkiyaPreview(submission.mulkiyaUrls || []);
+                                // Set default date and time to show vehicle details
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                setSelectedDate(tomorrow);
+                                setSelectedTime('09:00');
                                 setShowBookService(true);
                               }}
-                              className="px-3 py-4  w-full bg-orange-600 hover:bg-orange-700 text-white text-xs rounded transition-colors font-medium"
+                              className="px-3 py-4  w-full bg-orange-600 hover:bg-orange-700 animate-pulse-fast text-white text-xs rounded transition-colors font-medium"
                             >
                               Auto fill service
                             </button>
@@ -1476,8 +1503,8 @@ export default function LeadDetailsPage() {
                   <button
                     onClick={handleCopyLink}
                     className={`px-3 py-2 rounded text-xs font-medium flex-shrink-0 transition-colors ${copySuccess
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
                       }`}
                   >
                     {copySuccess ? '✓ Copied' : 'Copy'}

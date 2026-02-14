@@ -3499,7 +3499,7 @@ export default function BookServiceDetails() {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Expenses</h3>
-                {service.status !== 'completed' && service.status !== 'cancelled' && (
+                {service.status !== 'cancelled' && (
                   <Button
                     size="sm"
                     variant={showExpenseForm ? 'default' : 'outline'}
@@ -3518,7 +3518,7 @@ export default function BookServiceDetails() {
               </div>
 
               {/* Expense Form */}
-              {showExpenseForm && service.status !== 'completed' && service.status !== 'cancelled' && (
+              {showExpenseForm && service.status !== 'cancelled' && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
                   <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
                     {/* Modal Header */}
@@ -3803,7 +3803,7 @@ export default function BookServiceDetails() {
                       <Button
                         size="sm"
                         className="bg-purple-600 hover:bg-purple-700 text-white text-xs"
-                        disabled={service?.status === 'completed' || service?.status === 'cancelled'}
+                        disabled={service?.status === 'cancelled'}
                       >
                         + Add Referral
                       </Button>

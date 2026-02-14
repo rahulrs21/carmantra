@@ -23,12 +23,14 @@ export default function CustomerBookingFormPage() {
   const router = useRouter();
   const token = params?.token as string;
 
+  const [displayCategory, setDisplayCategory] = useState('');
+
   const [leadData, setLeadData] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string | null>(null);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);    
 
   const [formData, setFormData] = useState({
     category: '',
@@ -263,8 +265,14 @@ export default function CustomerBookingFormPage() {
   const serviceCategory = formData.category;
   const [mainSubCategory, mainCategory] = serviceCategory.split(' - ');
 
-  console.log('The Main Category = ', mainCategory);
-  console.log('The Sub Category = ', mainSubCategory)
+  // Debug logs
+  if (!formData.subCategory) {
+    console.log('The Main Category= ', mainCategory);
+    console.log('The Sub Category= ', mainSubCategory);
+  } else {
+    console.log('The Main Category= ', mainSubCategory);
+    console.log('The Sub Category= ', formData.subCategory);
+  }
 
   return (
     <div className="min-h-screen relative bg-gradient-to-br from-orange-50 to-blue-50 py-8 pt-14 px-4">
@@ -328,31 +336,21 @@ export default function CustomerBookingFormPage() {
                 <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
                       <div>
                   <label className="block text-sm   text-gray-700 mb-1">Service Category *</label>
-                  <select
-                    required
-                    value={mainCategory}
+                  <input
+                    type="text"
+                    value={!formData.subCategory ? mainCategory : mainSubCategory}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    placeholder="e.g., Full Body, Door Panels"
                     className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     disabled={!!leadData.service}
-                  >
-                    <option value="">Select Service</option>
-                    <option value="Paint Protection Film & Wrapping">Paint Protection Film & Wrapping</option>
-                    <option value="Ceramic Coating">Ceramic Coating</option>
-                    <option value="Car Tinting">Car Tinting</option>
-                    <option value="Car Wash">Car Wash</option>
-                    <option value="Car Polishing">Car Polishing</option>
-                    <option value="Car Insurance">Car Insurance</option>
-                    <option value="Car Passing">Car Passing</option>
-                    <option value="Pre-Purchase Inspection">Pre-Purchase Inspection</option>
-                    <option value="Instant Help">Instant Help</option>
-                  </select>
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm  text-gray-700 mb-1 text-right">Sub Category *</label>
                   <input
                     type="text"
-                    value={mainSubCategory}
+                    value={!formData.subCategory ? mainSubCategory : formData.subCategory}
                     onChange={(e) => setFormData({ ...formData, subCategory: e.target.value })}
                     placeholder="e.g., Full Body, Door Panels"
                     className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -450,11 +448,15 @@ export default function CustomerBookingFormPage() {
                     <label className="block text-sm text-gray-600 mb-2">Vehicle Color</label>
                     <input
                       type="text"
-                      value={formData.color}
-                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      value={formData.color || ''}
+                      onChange={(e) => {
+                        console.log('Color changed to:', e.target.value);
+                        setFormData({ ...formData, color: e.target.value });
+                      }}
                       placeholder="e.g., Black, White, Silver"
                       className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
+                    {formData.color && <p className="text-xs text-green-600 mt-1">✓ Color: {formData.color}</p>}
                   </div>
                   <div>
                     <label className="block text-sm text-gray-600 mb-2">Fuel Type *</label>
